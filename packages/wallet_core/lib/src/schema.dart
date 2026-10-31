@@ -83,6 +83,8 @@ const Map<String, EntityDef> entitySchema = {
     // v3: the importer's TxKind name, written once by importBatch; the other side of an own transfer.
     ColumnDef('kind_hint', nullable: true),
     ColumnDef('transfer_to', nullable: true),
+    // v19 (D2 Unlink): a hand-added entry's bank rows the owner unlinked it from, a JSON list (`matchOffIds`).
+    ColumnDef('match_off', nullable: true),
   ], indexes: {
     'tx_date': 'date',
     'tx_amount': 'amount'

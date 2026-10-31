@@ -79,16 +79,42 @@ class SeenBank {
   }
 }
 
+/// Most bank row ids one entry's `match_off` keeps (the newest); an entry the owner unlinks this often is rare.
+const maxMatchOff = 20;
+
+/// The bank row ids in a `match_off` value (D2 Unlink, schema 19): a JSON list of ids, in the order they were
+/// unlinked. The owner said this entry is not that payment, so [planMatches] never pairs them again. Null, empty or
+/// damaged: none (a damaged value is logged; every device reads it the same).
+Set<String> matchOffIds(String? value) {
+  if (value == null || value.isEmpty) return const {};
+  try {
+    return {for (final s in jsonDecode(value) as List) s as String};
+  } catch (e, st) {
+    logError(_log, 'match.off.invalid', e, st, level: Level.FINE);
+    return const {};
+  }
+}
+
+/// The `match_off` value for [ids] (in unlink order, the newest [maxMatchOff] kept), or null when there is none.
+String? encodeMatchOff(Iterable<String> ids) {
+  final l = [
+    ...{...ids}
+  ];
+  if (l.isEmpty) return null;
+  return jsonEncode(l.length > maxMatchOff ? l.sublist(l.length - maxMatchOff) : l);
+}
+
 /// The manual entries [planMatches] will try to match: unmatched ones, ones whose bank row is in [gone] (deleted, not
-/// a bank row, or one side of an own transfer), and every entry but the smallest id on a bank row shared by several. [taken]: the bank rows that
+/// a bank row, or one side of an own transfer) or in their own [matchOff] (an older build re-made a match the owner
+/// unlinked), and every entry but the smallest id on a bank row shared by several. [taken]: the bank rows that
 /// keep their entry. A bank row that is not in the wallet yet (its sync file has not arrived, or is damaged) keeps its
 /// entry: reopening it there would undo, on every sync, the match that devices holding the row write again.
-({List<Tx> open, Set<String> taken}) _split(List<Tx> manual, Set<String> gone) {
+({List<Tx> open, Set<String> taken}) _split(List<Tx> manual, Set<String> gone, Map<String, Set<String>> matchOff) {
   final taken = <String>{};
   final open = <Tx>[];
   for (final m in [...manual]..sort((a, b) => a.id.compareTo(b.id))) {
     final to = m.matchedTo;
-    if (to == null || gone.contains(to) || !taken.add(to)) open.add(m);
+    if (to == null || gone.contains(to) || (matchOff[m.id]?.contains(to) ?? false) || !taken.add(to)) open.add(m);
   }
   return (open: open, taken: taken);
 }
@@ -97,8 +123,9 @@ class SeenBank {
 /// deleted, are not bank rows, or are one side of an own transfer ([Tx.transferTo]; a row not in the wallet at all is
 /// not gone). Callers then load only the bank rows
 /// that could replace one of them (same amount, within [matchDays], written after it). Empty when every entry keeps
-/// its match.
-List<Tx> openEntries(List<Tx> manual, Set<String> gone) => _split(manual, gone).open;
+/// its match. [matchOff]: as in [planMatches].
+List<Tx> openEntries(List<Tx> manual, Set<String> gone, {Map<String, Set<String>> matchOff = const {}}) =>
+    _split(manual, gone, matchOff).open;
 
 /// Matches hand-added expenses to the bank rows that replace them: same amount, at most [matchDays] days apart,
 /// one-to-one.
@@ -128,14 +155,21 @@ List<Tx> openEntries(List<Tx> manual, Set<String> gone) => _split(manual, gone).
 /// [eligible] says which bank rows may replace a manual entry (expenses whose built-in kind is flex or fixed).
 /// [written]: the HLC of each row's first write (the clock of its `amount`, written only when the row is created); a
 /// row without one is never matched. [seenBank]: each manual entry's `seen_bank` field, where it has one.
+/// [matchOff]: per manual entry, the bank rows the owner unlinked it from (its `match_off`, [matchOffIds]). Such a row
+/// never replaces that entry (other entries may take it, and the entry may take other rows), and a match onto one of
+/// them (made by an older build that ignores the field) is reopened. This is how the owner undoes the one exception to
+/// "never on amount alone" (D2), pair by pair.
 MatchPlan planMatches(List<Tx> manual, List<Tx> bank, bool Function(Tx) eligible, Map<String, String> written,
-    {Map<String, String> seenBank = const {}}) {
+    {Map<String, String> seenBank = const {}, Map<String, Set<String>> matchOff = const {}}) {
   final matchedTo = <String, String?>{};
   final bankCategory = <String, String>{};
-  final (:open, :taken) = _split(manual, {
-    for (final b in bank)
-      if (b.manual || b.deleted || b.transferTo != null) b.id
-  });
+  final (:open, :taken) = _split(
+      manual,
+      {
+        for (final b in bank)
+          if (b.manual || b.deleted || b.transferTo != null) b.id
+      },
+      matchOff);
   for (final m in open) {
     if (m.matchedTo != null) matchedTo[m.id] = null; // its bank row was deleted (or is not one), or taken by another entry
   }
@@ -156,10 +190,11 @@ MatchPlan planMatches(List<Tx> manual, List<Tx> bank, bool Function(Tx) eligible
     final since = written[m.id];
     if (pool == null || since == null || !isIsoDate(m.date)) continue;
     final seen = SeenBank.of(since, seenBank[m.id]);
+    final off = matchOff[m.id] ?? const <String>{};
     Tx? best;
     var bestDays = 0;
     for (final b in pool) {
-      if (taken.contains(b.id)) continue;
+      if (taken.contains(b.id) || off.contains(b.id)) continue; // taken, or the owner unlinked this pair
       final days = daysBetween(m.date, b.date).abs();
       if (days > matchDays) continue;
       final at = written[b.id];

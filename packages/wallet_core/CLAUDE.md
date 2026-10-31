@@ -343,6 +343,18 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   (`ImportSummary.transfers`/`matched` are then 0). A pair or match made against rows still on their way would never be
   re-planned. A delete still undoes the links to the deleted row at once (cash entry `matched_to`, partner
   `transfer_to` cleared through `_write`), so the entry it replaced counts again immediately; only new ones wait.
+- `repo_match.dart` — D2 Unlink (schema 19; `WalletRepoMatch`): `unlinkMatch(entryId)` = one owner write on the entry:
+  `matched_to` null + the bank row id appended to `tx.match_off` (JSON list in unlink order, newest `maxMatchOff` 20 kept;
+  `matchOffIds`/`encodeMatchOff` in `matching.dart`), then `_reconcileLocal` (the entry may take ANOTHER row at once).
+  `planMatches(matchOff:)` / `openEntries(matchOff:)` never pair an entry with a row in its `match_off` (other entries
+  may take that row) and reopen such a match made by an older build. The bank row keeps what matching copied (category
+  when it had none, the entry's extra tags) and the attachments `_moveMatchedAttachments` gave it; it stops reading the
+  entry's split (read through `matched_to`). `relinkMatch(entryId, bankId)` = the Undo: bankId must be in the entry's
+  `match_off` (`ArgumentError`), live, not a transfer and held by no other live entry (`StateError`); writes
+  `matched_to` + the remaining `match_off` (null when empty) + the tag copy, then `_reconcileLocal`; a row the entry took
+  meanwhile is free again. `ArgumentError` for an unknown/deleted id, a bank row or no match. `matchedBankIds()` = live
+  bank rows a live entry points at (the app's "Matched" mark). Logs `match.unlink {off, rematched}`, `match.relink
+  {off, freed}`. Tests: `test/d2_unlink_match_test.dart` (incl. two devices, backup, schema 18 → 19).
 - `models.dart` — `Tx`, `Goal`, `GoalContribution`, `WishItem`, `WalletSettings` (row ↔ object), `goalTotal`.
   `WalletSettings.categoryBudgets` (`{category: cents per month}`, default `{}`) is validated entry by entry: only
   `spendingCategories` (fixed + flex) with whole cents 0..`maxBudget` are kept, other entries are dropped (one
@@ -377,7 +389,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   never revives or undoes a per-key change; new patterns get orders after the largest live one; a clock-less legacy row
   goes through `_write`; the map rows are left in place for older builds; `repo.migrate` logs `perKeySettings` (count);
   9 = the `account` entity, no data migration; 10 = the `category` entity (P1), no data migration; 11 = tags (T1); 12 = P4
-  recurring columns, no data migration; 13 = splits; 14 = recurring income; 15 = P14 local blob tables, no synced change; 16 = `bills.attached_tx` (P16b), no data migration; 17 = the `iou` and `iou_part` entities (Q8), no data migration; 18 = the `review` entity (V3), no data migration). Opening an existing database with an older version
+  recurring columns, no data migration; 13 = splits; 14 = recurring income; 15 = P14 local blob tables, no synced change; 16 = `bills.attached_tx` (P16b), no data migration; 17 = the `iou` and `iou_part` entities (Q8), no data migration; 18 = the `review` entity (V3), no data migration; 19 = `tx.match_off` (D2 Unlink), no data migration). Opening an existing database with an older version
   clears the sync cursors (`sync_cursor`) once, so the next sync starts over like a new device (the latest snapshot if
   written by this schema or newer, else every file still on the relay) and applies ops (or fields) the older build skipped.
 - `local_db.dart` — encrypted local database (§4.9, SQLite3MultipleCiphers, web-safe): `localDbKey(VaultKey)` = HKDF
@@ -638,6 +650,10 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   paths or file names. Noisy per-render logs at FINER. `test/logs_impl_test.dart` checks core logs stay clean.
 
 ## Known limits (for the sync redesign)
+- D2 Unlink (`tx.match_off`, schema 19): a build older than 19 ignores the field, so it can match the unlinked pair
+  again (its `matched_to` op then reaches the new builds, which reopen the match: a rewrite back and forth on every
+  sync until that device updates). Every device updates together. The unlink does not undo what matching copied to the
+  bank row (category when it had none, extra tags) or the attachments it moved there.
 - Undo of a deleted payment row restores its bill link from this device's `undo.<txId>` record. If another device runs
   caught up inside the app's 2.5 s Undo window, sees the delete and unlinks the bill with a clock later than the undo,
   that unlink wins: the bill stays open (reserved) while the row counts again, until the owner links it.

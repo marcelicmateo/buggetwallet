@@ -247,7 +247,7 @@ void main() {
 
         final r = WalletRepo.open(path, dbKey: dbKey);
         addTearDown(r.close);
-        expect(r.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'], '18');
+        expect(r.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'], '${WalletRepo.schemaVersion}');
         expect(r.reviewDates(), isEmpty);
         final ops = r.pendingOps().length;
         final st = r.settings();

@@ -180,7 +180,7 @@ export 'src/logs.dart'
         timed,
         timedAsync;
 export 'src/logs_io.dart' if (dart.library.js_interop) 'src/logs_web.dart' show RotatingFileSink;
-export 'src/matching.dart' show MatchPlan, openEntries, planMatches, SeenBank;
+export 'src/matching.dart' show encodeMatchOff, MatchPlan, matchOffIds, maxMatchOff, openEntries, planMatches, SeenBank;
 export 'src/models.dart'
     show
         Account,
@@ -236,6 +236,7 @@ export 'src/repo.dart'
         WalletRepoBlobs,
         WalletRepoImport,
         WalletRepoIou,
+        WalletRepoMatch,
         WalletRepoMeta,
         WalletRepoPlanned,
         WalletRepoRecurring,

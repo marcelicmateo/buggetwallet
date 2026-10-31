@@ -65,7 +65,7 @@ extension WalletRepoImport on WalletRepo {
   /// [revived] ids read as live, and [transfers] (a [TransferPlan.transferTo]) overrides `transfer_to`.
   ({MatchPlan plan, List<Tx> manual, int open, int bank}) _planManualMatches(
       {List<Tx> fresh = const [], Set<String> revived = const {}, Map<String, String?> transfers = const {}}) {
-    final written = <String, String>{}, seenBank = <String, String>{};
+    final written = <String, String>{}, seenBank = <String, String>{}, matchOff = <String, Set<String>>{};
     Tx over(Tx tx) {
       var x = revived.contains(tx.id) ? _txWith(tx, deleted: false) : tx;
       if (transfers.containsKey(x.id)) x = _txWith(x, transferTo: transfers[x.id]);
@@ -78,6 +78,7 @@ extension WalletRepoImport on WalletRepo {
         final tx = Tx.fromRow(r);
         if (r['written'] case final String h) written[tx.id] = h;
         if (r['seen_bank'] case final String v) seenBank[tx.id] = v;
+        if (r['match_off'] case final String v when tx.manual) matchOff[tx.id] = matchOffIds(v);
         out.add(over(tx));
       }
       return out;
@@ -111,10 +112,13 @@ extension WalletRepoImport on WalletRepo {
           if (pointed.contains(x.id) && have.add(x.id)) x
       ]);
     }
-    final open = openEntries(manual, {
-      for (final b in targets)
-        if (b.manual || b.deleted || b.transferTo != null) b.id
-    });
+    final open = openEntries(
+        manual,
+        {
+          for (final b in targets)
+            if (b.manual || b.deleted || b.transferTo != null) b.id
+        },
+        matchOff: matchOff);
     if (open.isEmpty) return (plan: const MatchPlan({}, {}, 0), manual: manual, open: 0, bank: 0);
     final bank = {for (final b in targets) b.id: b};
     for (final m in open) {
@@ -140,7 +144,7 @@ extension WalletRepoImport on WalletRepo {
     final plan = planMatches(manual, [...bank.values], (b) {
       final k = cz.table.kindOf(cz.autoCategory(b));
       return k == BudgetKind.flex || k == BudgetKind.fixed;
-    }, written, seenBank: seenBank);
+    }, written, seenBank: seenBank, matchOff: matchOff);
     return (plan: plan, manual: manual, open: open.length, bank: bank.length);
   }
 

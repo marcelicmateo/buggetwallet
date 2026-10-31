@@ -34,6 +34,7 @@ part 'repo_changes.dart';
 part 'repo_blobs.dart';
 part 'repo_import.dart';
 part 'repo_iou.dart';
+part 'repo_match.dart';
 part 'repo_meta.dart';
 part 'repo_planned.dart';
 part 'repo_recurring.dart';
@@ -176,8 +177,9 @@ class WalletRepo {
   /// `blob_own` tables become `blob_cache.uploaded`, [_migrateBlobTables]; snapshots of this schema carry declared
   /// blob sets), version 16: attachments (P16b: `bills` gains `attached_tx`; no data migration), version 17: IOUs (Q8:
   /// the `iou` and `iou_part` entities; no data migration), version 18: weekly reviews as dated rows (V3: the `review`
-  /// entity; no data migration, the legacy `lastReview` / `reviewStreak` settings stay the streak's base).
-  static const schemaVersion = 18;
+  /// entity; no data migration, the legacy `lastReview` / `reviewStreak` settings stay the streak's base), version 19:
+  /// unlinked cash matches (D2: `tx` gains `match_off`, [WalletRepoMatch.unlinkMatch]; no data migration).
+  static const schemaVersion = 19;
 
   /// Device-local, set once by the schema-15 migration ([_migrateBlobTables]): the next sync runs PUT every cached file
   /// a live bill points to again (api-3 builds deleted files on the relay), cleared once all of them were stored.
