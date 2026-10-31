@@ -60,7 +60,8 @@ class _PeriodReportScreenState extends State<PeriodReportScreen> {
                   : Column(children: [
                       _Stepper(
                         report: reports[i],
-                        daysLeft: wc.period().daysLeft,
+                        today: wc.today(),
+                        paydayDay: wc.settings.paydayDay,
                         onPrev: i > 0 ? () => go(i - 1) : null,
                         onNext: i < reports.length - 1 ? () => go(i + 1) : null,
                       ),
@@ -82,8 +83,15 @@ class _PeriodReportScreenState extends State<PeriodReportScreen> {
 class _Stepper extends StatelessWidget {
   final PeriodReport report;
   final VoidCallback? onPrev, onNext;
-  final int daysLeft;
-  const _Stepper({required this.report, required this.daysLeft, required this.onPrev, required this.onNext});
+  final String today;
+  final int paydayDay;
+  const _Stepper({required this.report, required this.today, required this.paydayDay, required this.onPrev, required this.onNext});
+
+  /// The running report's expected payday came and no salary row has started a new period.
+  bool get _late => nextPayday(report.start, paydayDay).compareTo(today) <= 0;
+
+  /// Days from today to this report's own end (exclusive), not Today's period: that one may have ended already.
+  int _daysLeft() => daysBetween(today, report.end);
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -103,7 +111,10 @@ class _Stepper extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
                   // The title already has the dates: the chip only says it is running and how long it has to go.
-                  child: StateChip.date('Running · $daysLeft ${daysLeft == 1 ? 'day' : 'days'} left', key: const ValueKey('reportRunning')),
+                  child: _late
+                      ? const StateChip.over(text: 'Salary late', key: ValueKey('reportLate'))
+                      : StateChip.date('Running · ${_daysLeft()} ${_daysLeft() == 1 ? 'day' : 'days'} left',
+                          key: const ValueKey('reportRunning')),
                 ),
             ]),
           ),

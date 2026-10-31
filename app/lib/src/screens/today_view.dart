@@ -63,6 +63,7 @@ class TodayView implements Listenable {
   TagTable get tagTable => _wc.tagTable;
   CategorizedTx shown(CategorizedTx t) => _wc.shown(t);
   Bill? billForTx(String txId) => _wc.billForTx(txId);
+  bool isMatchedBank(String bankId) => _wc.isMatchedBank(bankId);
   int splitCount(String txId) => _wc.splitCount(txId);
   bool splitIsBroken(String txId) => _wc.splitIsBroken(txId);
   bool setupCollapsedFor(List<String> steps) => _wc.setupCollapsedFor(steps);

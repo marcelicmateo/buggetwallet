@@ -108,6 +108,51 @@ Future<void> _tapIcon(WidgetTester t, String key) async {
 void main() {
   setUpAll(_loadFonts);
 
+  group('running chip wording', () {
+    /// Payday 10, today 20 Oct 2026, the given synthetic salary rows.
+    WalletController wallet(List<String> salaryDays, {String? periodStart}) {
+      final wc = seamedController(WalletRepo.inMemory(), key: VaultKey.generate(), clock: () => _clock);
+      wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [
+        for (final d in salaryDays) syntheticTx(d, 150000, 'Plaća/Mirovina', 'Neto placa synthetic $d'),
+      ]));
+      wc.repo.updateSettings({
+        'salary': 150000,
+        'salaryConfirmed': true,
+        'paydayDay': 10,
+        if (periodStart != null) 'periodStart': periodStart,
+      });
+      wc.snoozeKeyBackup();
+      wc.reload();
+      addTearDown(wc.dispose);
+      return wc;
+    }
+
+    testWidgets("the days left count from the report's own end, also when Today's period ended", (tester) async {
+      // Saved start 12 Sep ends Today's period on 10 Oct (0 days left there); the salary of 11 Oct starts the report that runs to 10 Nov.
+      final wc = wallet(['2026-09-11', '2026-10-11'], periodStart: '2026-09-12');
+      expect(wc.period().daysLeft, 0, reason: "Today's period has ended");
+      await _pump(tester, wc);
+      expect(find.text('Running · 21 days left'), findsOneWidget);
+      expect(_k('reportLate'), findsNothing);
+    });
+
+    testWidgets('the expected payday passed without a salary: "Salary late", no days left', (tester) async {
+      final wc = wallet(['2026-09-10']);
+      await _pump(tester, wc);
+      expect(_k('reportLate'), findsOneWidget);
+      expect(find.text('Salary late'), findsOneWidget);
+      expect(_k('reportRunning'), findsNothing);
+      expect(find.textContaining('days left'), findsNothing);
+    });
+
+    testWidgets('the salary came on time: the chip counts the days to the next payday', (tester) async {
+      final wc = wallet(['2026-09-10', '2026-10-10']);
+      await _pump(tester, wc);
+      expect(find.text('Running · 21 days left'), findsOneWidget);
+      expect(find.text('Salary late'), findsNothing);
+    });
+  });
+
   group('the running period', () {
     testWidgets('exact cents on every tile, the chips say each thing once', (tester) async {
       final wc = _wallet();

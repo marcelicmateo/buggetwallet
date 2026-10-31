@@ -477,6 +477,9 @@ class TxTile extends StatelessWidget {
 
   /// The payment is linked to an IOU (Q8): a small "lent", "borrowed" or "repaid" tag.
   final String? iouTag;
+
+  /// A hand-added expense was replaced by this bank row (D2): a small link mark and "Matched". The sheet has the details.
+  final bool matched;
   const TxTile(
       {super.key,
       required this.t,
@@ -490,7 +493,8 @@ class TxTile extends StatelessWidget {
       this.splitBroken = false,
       this.matchedPart,
       this.highlight,
-      this.iouTag});
+      this.iouTag,
+      this.matched = false});
 
   @override
   Widget build(BuildContext context) {
@@ -520,6 +524,12 @@ class TxTile extends StatelessWidget {
       Tag(src),
       if (splitCount > 0) Tag('Split · $splitCount'),
       if (iouTag != null) Tag(iouTag!),
+      if (matched)
+        Row(key: const ValueKey('rowMatched'), mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.link, size: 14, color: c.good),
+          const SizedBox(width: 3),
+          Text('Matched', style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
+        ]),
       if (matchedPart != null) Tag('Part ${matchedPart! + 1} matches'),
       if (t.isPart) Tag('part of ${money(t.tx.amount, t.tx.currency, decimals: 2, signed: true)}'),
       if (splitBroken || t.splitBroken)

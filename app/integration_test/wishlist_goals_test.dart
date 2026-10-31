@@ -11,7 +11,8 @@ import 'package:wallet_core/wallet_core.dart';
 
 import 'support/harness.dart';
 
-/// Salary 2000, rent 500, default goals 200: 1300 to spend.
+/// Salary 2000, rent 500, default goals 200: 1300 to spend from the start (today) to the period end (payday rule C: the 28th of next month,
+/// or of this month on the 1st-4th; the tests read `wc.period().end`, never a fixed date).
 Map<String, Object?> plan(String start) =>
     {'salary': 200000, 'rent': 50000, 'loan': 0, 'subs': 0, 'paydayDay': 28, 'periodStart': start, 'salaryConfirmed': true};
 

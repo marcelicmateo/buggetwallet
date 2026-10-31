@@ -659,6 +659,72 @@ void main() {
     });
   });
 
+  group('one-time approval prompt', () {
+    testWidgets('shown while approval is off and unanswered; Turn on sets it and hides the prompt for good', (t) async {
+      final (a, _) = await twoDevices();
+      await _pump(t, a.wc);
+      await t.pump();
+      expect(_k('approvalPrompt'), findsOneWidget);
+      expect(find.text('Require approval for new devices?'), findsOneWidget);
+      expect(a.mem.locked, isFalse);
+      await t.tap(_k('approvalPromptOn'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 100));
+      expect(a.mem.locked, isTrue);
+      expect(_k('approvalPrompt'), findsNothing);
+      // Approval turned off again later: the question is not asked a second time.
+      a.mem.locked = false;
+      await a.wc.refreshDevices();
+      await t.pump();
+      expect(_k('approvalPrompt'), findsNothing);
+      await t.pump(const Duration(seconds: 5));
+    });
+
+    testWidgets('Not now hides it for good and changes nothing on the relay', (t) async {
+      final (a, _) = await twoDevices();
+      await _pump(t, a.wc);
+      await t.pump();
+      await t.tap(_k('approvalPromptLater'));
+      await t.pump();
+      expect(_k('approvalPrompt'), findsNothing);
+      expect(a.mem.locked, isFalse);
+      expect(a.wc.approvalPromptDue, isFalse);
+      expect(_k('requireApproval'), findsOneWidget, reason: 'the switch stays');
+      await _pump(t, a.wc); // the page is opened again
+      await t.pump();
+      expect(_k('approvalPrompt'), findsNothing);
+      await t.pump(const Duration(seconds: 5));
+    });
+
+    testWidgets('not shown when approval is already on (a new wallet)', (t) async {
+      final (a, _) = await twoDevices(lockedAfter: true);
+      await _pump(t, a.wc);
+      await t.pump();
+      expect(_k('requireApproval'), findsOneWidget);
+      expect(_k('approvalPrompt'), findsNothing);
+      expect(a.wc.approvalPromptDue, isFalse);
+      await t.pump(const Duration(seconds: 5));
+    });
+
+    testWidgets('not shown without a relay list (no relay, or one without device keys)', (t) async {
+      final wc = seamedController(WalletRepo.inMemory(), key: key);
+      addTearDown(wc.dispose);
+      await _pump(t, wc);
+      expect(wc.deviceList, isNull);
+      expect(wc.approvalPromptDue, isFalse);
+      expect(_k('approvalPrompt'), findsNothing);
+    });
+
+    testWidgets('fits 320 dp at text scale 2', (t) async {
+      final (a, _) = await twoDevices();
+      await _pump(t, a.wc, size: const Size(320, 3200), scale: 2);
+      await t.pump();
+      expect(_k('approvalPrompt'), findsOneWidget);
+      expect(t.takeException(), isNull);
+      await t.pump(const Duration(seconds: 5));
+    });
+  });
+
   group('layout', () {
     for (final dark in [false, true]) {
       testWidgets('320 dp at text scale 2 with a waiting key and a removed one (${dark ? 'dark' : 'light'})', (t) async {

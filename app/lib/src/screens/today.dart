@@ -707,6 +707,7 @@ class _RecentTile extends StatelessWidget {
                   currency: cur,
                   fxRates: view.settings.fxRates,
                   hasBill: view.billForTx(t.tx.id) != null,
+                  matched: view.isMatchedBank(t.tx.id),
                   iouTag: view.iouTagOf(t.tx.id),
                   splitCount: view.splitCount(t.tx.id),
                   splitBroken: view.splitIsBroken(t.tx.id),

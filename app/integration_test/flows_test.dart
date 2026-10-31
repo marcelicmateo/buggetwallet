@@ -12,7 +12,9 @@ import 'package:wallet_core/wallet_core.dart';
 
 import 'support/harness.dart';
 
-/// Salary 2000, rent 500, the two default goals (100 + 100 a month): 1300 to spend from today to the 28th next month.
+/// Salary 2000, rent 500, the two default goals (100 + 100 a month): 1300 to spend from the start (today) to the period end. Under payday
+/// rule C that is the 28th of next month, or of this month on the 1st-4th (a start up to 7 days after a 28th belongs to it): the tests
+/// read `wc.period()`, never a fixed date.
 Map<String, Object?> plan(String start) =>
     {'salary': 200000, 'rent': 50000, 'loan': 0, 'subs': 0, 'paydayDay': 28, 'periodStart': start, 'salaryConfirmed': true};
 

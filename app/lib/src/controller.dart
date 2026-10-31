@@ -864,12 +864,17 @@ class WalletController extends ChangeNotifier {
 
   List<String> get _paydays => _cached(const MemoKey('paydays'), () => salaryPaydays(wholeTxs, today(), currency: currency));
 
-  /// The period start: saved value, or the latest payday (its first salary payment), or today.
+  /// The period start: saved value, or the latest payday (its first salary payment), or with no salary the latest
+  /// expected payday on or before today (owner 2026-10-31).
   WalletSettings get effectiveSettings => _cached(const MemoKey('effective'), () {
         if (settings.periodStart != null) return settings;
-        final m = settings.toMap()..['periodStart'] = _paydays.lastOrNull ?? today();
+        final m = settings.toMap()..['periodStart'] = _paydays.lastOrNull ?? latestExpectedPayday();
         return WalletSettings.fromMap(m, table: categoryTable);
       });
+
+  /// The latest expected payday (`paydayDay`, clamped to short months) on or before today: core's `currentPeriodStart` walks the
+  /// expected paydays on from a start 62 days back (no period is longer), so this is core's own rule, not date maths here.
+  String latestExpectedPayday() => currentPeriodStart(addDays(today(), -62), settings.paydayDay, today());
 
   /// A payday more than 20 days after the current period start, not yet started as a new month.
   String? newPayday(String periodStart) => _paydays.where((d) => d.compareTo(addDays(periodStart, 20)) > 0).lastOrNull;

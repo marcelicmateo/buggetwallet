@@ -473,7 +473,7 @@ class _TxSheetState extends State<TxSheet> {
   bool saving = false;
 
   /// The bank row that replaced this hand-added expense, or the expense a bank row replaced (read once: it scans the rows).
-  /// Read-only: there is no unlink yet.
+  /// Read-only: core has no unlink write yet (D2 Unlink is queued on it).
   late final Tx? matchedBank =
       row.tx.manual && row.tx.matchedTo != null && !row.tx.matchPending ? widget.wc.repo.transaction(row.tx.matchedTo!) : null;
   late final Tx? matchedEntry = row.tx.manual ? null : widget.wc.entryMatchedTo(row.tx.id);

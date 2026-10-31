@@ -522,6 +522,39 @@ void main() {
       expect(find.textContaining('Matched with your bank'), findsOneWidget);
     });
 
+    testWidgets('the list row of that bank row shows "Matched"; an unmatched bank row and a plain entry do not', (t) async {
+      final wc = wallet();
+      wc.repo.addTransaction(date: '2026-10-18', amount: 2340, category: 'Eating out', note: 'lunch');
+      wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [
+        syntheticTx('2026-10-18', -2340, 'POS plaćanje', 'PBZ POS SYNTHETIC CAFE'),
+        syntheticTx('2026-10-19', -990, 'POS plaćanje', 'PBZ POS SYNTHETIC KIOSK'),
+      ]));
+      wc.reload();
+      final matched = wc.txs.firstWhere((x) => !x.tx.manual && x.tx.amount == -2340);
+      final other = wc.txs.firstWhere((x) => !x.tx.manual && x.tx.amount == -990);
+      expect(wc.isMatchedBank(matched.tx.id), isTrue);
+      expect(wc.isMatchedBank(other.tx.id), isFalse);
+      Future<void> tile(CategorizedTx row, bool on) =>
+          pumpApp(t, Scaffold(body: TxTile(t: row, currency: 'EUR', matched: on)), size: const Size(400, 300));
+      await tile(matched, wc.isMatchedBank(matched.tx.id));
+      expect(key('rowMatched'), findsOneWidget);
+      expect(find.text('Matched'), findsOneWidget);
+      await tile(other, wc.isMatchedBank(other.tx.id));
+      expect(key('rowMatched'), findsNothing);
+    });
+
+    test('deleting the bank row reopens the entry: nothing is matched any more', () {
+      final wc = wallet();
+      wc.repo.addTransaction(date: '2026-10-18', amount: 2340, category: 'Eating out', note: 'lunch');
+      wc.repo.importBatch(
+          ImportBatch(source: 'pbz', transactions: [syntheticTx('2026-10-18', -2340, 'POS plaćanje', 'PBZ POS SYNTHETIC CAFE')]));
+      wc.reload();
+      final bank = wc.txs.firstWhere((x) => !x.tx.manual);
+      expect(wc.isMatchedBank(bank.tx.id), isTrue);
+      wc.deleteTransaction(bank.tx);
+      expect(wc.isMatchedBank(bank.tx.id), isFalse);
+    });
+
     testWidgets('a plain expense has no mark', (t) async {
       final wc = wallet();
       wc.repo.addTransaction(date: '2026-10-18', amount: 2340, category: 'Eating out', note: 'lunch');
