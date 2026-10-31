@@ -112,7 +112,7 @@ void main() {
       final txs = [ct('2026-03-10', 1000, 'Salary'), ct('2026-03-31', 1000, 'Salary')];
       expect(views(periodSummaries(txs, st, '2026-04-08')), [
         period('2026-03-10', '2026-03-31', income: 1000),
-        period('2026-03-31', '2026-04-15', income: 1000, running: true),
+        period('2026-03-31', '2026-05-15', income: 1000, running: true), // 15 Apr is only 15 days on (RX7f)
       ]);
     });
 

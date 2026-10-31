@@ -25,10 +25,6 @@ class PeriodSummary {
   double? get savingsRate => income > 0 ? net / income : null; // can be negative
 }
 
-/// Salary parts this close to a payday's first payment belong to that payday (grouping only; the received-income
-/// window is `samePaydayDays` in budget.dart).
-const _salaryGroupDays = 20;
-
 /// After this many days without salary, paydays are assumed on `paydayDay`.
 const _missingSalaryDays = 45;
 
@@ -52,7 +48,7 @@ List<String> salaryPaydays(List<CategorizedTx> txs, String today, {required Stri
     ..sort();
   final real = <String>[];
   for (final d in salary) {
-    if (real.isEmpty || daysBetween(real.last, d) > _salaryGroupDays) real.add(d);
+    if (real.isEmpty || daysBetween(real.last, d) > salaryGroupDays) real.add(d);
   }
   return real;
 }
@@ -62,7 +58,7 @@ List<String> salaryPaydays(List<CategorizedTx> txs, String today, {required Stri
 List<String> detectPaydays(List<CategorizedTx> txs, WalletSettings st, String today) {
   final real = salaryPaydays(txs, today, currency: st.currency);
   final ps = st.periodStart;
-  if (ps != null && ps.compareTo(today) <= 0 && (real.isEmpty || daysBetween(real.last, ps) > _salaryGroupDays)) real.add(ps);
+  if (ps != null && ps.compareTo(today) <= 0 && (real.isEmpty || daysBetween(real.last, ps) > salaryGroupDays)) real.add(ps);
 
   final out = <String>[];
   for (var i = 0; i < real.length; i++) {
@@ -70,7 +66,7 @@ List<String> detectPaydays(List<CategorizedTx> txs, WalletSettings st, String to
     final until = i + 1 < real.length ? real[i + 1] : null; // next real payday (exclusive) or today (inclusive)
     if (daysBetween(real[i], until ?? today) <= _missingSalaryDays) continue;
     // Before a late real salary, skip assumed days within 20 days of it: they would only cut off a short, empty period.
-    final stop = until == null ? null : addDays(until, -_salaryGroupDays);
+    final stop = until == null ? null : addDays(until, -salaryGroupDays);
     for (var d = nextPayday(real[i], st.paydayDay);
         stop != null ? d.compareTo(stop) < 0 : d.compareTo(today) <= 0;
         d = nextPayday(d, st.paydayDay)) {
@@ -101,7 +97,7 @@ List<String> payPeriodStarts(List<CategorizedTx> txs, WalletSettings st, String 
   final end = nextPayday(ps, st.paydayDay);
   final named = salaryPaydays(txs, today, currency: st.currency).where((r) {
     final gap = daysBetween(ps, r);
-    return gap > 0 && gap <= _salaryGroupDays && r.compareTo(end) < 0;
+    return gap > 0 && gap <= salaryGroupDays && r.compareTo(end) < 0;
   }).firstOrNull; // real paydays are over 20 days apart: at most one
   if (named == null) return days;
   final i = days.indexOf(named);

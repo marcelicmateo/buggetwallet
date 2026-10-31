@@ -90,10 +90,13 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   paydayDay)`: expected paydays = `paydayIn(month, day)`, clamped to the month's last day. A start within
   `paydayWindowDays` (7, = `samePaydayDays`) of an expected payday belongs to it: late = the latest one in
   [start − 7, start], else early = the one in (start, start + 7]; the period ends on the expected payday after it.
-  Otherwise (a hand-set or mid-cycle start, a first run, a salary more than 7 days early or late) the old rule: the
-  payday of the month after the start's month. So 2 Mar with payday 31 → 31 Mar (was 30 Apr), 29 Jan / 3 → 3 Mar (old
-  rule: 5 days), 8 Mar / 10 → 10 Apr, 1 Oct and 7 Oct / 15 → 15 Nov (one period holds the salary; rule B ended 7 Oct on
-  15 Oct and the next period counted `salary` again). Every period is 8..62 days. `previousPayday(date)` = the latest
+  Otherwise (a hand-set or mid-cycle start, a first run, a salary more than 7 days early or late) the first expected
+  payday more than `salaryGroupDays` (20, dates.dart, shared with periods.dart's grouping) days after the start (RX7f,
+  owner 2026-10-31; RX7e's "payday of the month after the start's month" gave 25 Sep / 3 an 8-day period to 3 Oct and
+  "Start new period" then counted `salary` again). So 2 Mar with payday 31 → 31 Mar (was 30 Apr), 29 Jan / 3 → 3 Mar,
+  8 Mar / 10 → 10 Apr, 1 Oct and 7 Oct / 15 → 15 Nov, 25 Sep / 3 → 3 Nov, 30 Sep / 10 → 10 Nov, a hand-set 26 Mar / 10
+  → 10 May (a start in the last 20 days before a payday runs to the one after: owner-accepted). Every period is 21..51
+  days (the app's first start walks from today − 62), so a salary 1..20 days after a saved start is always inside it. `previousPayday(date)` = the latest
   expected payday more than 7 days before `date` (rangeFor's steps back). One rule for `computePeriod`, `periodDays`,
   `currentPeriodStart`, `detectPaydays`' assumed paydays, `runningPeriodEnd` and ranges; `loanLeft` uses `paydayIn`
   directly. Tests `test/rx7d_next_payday_test.dart` (incl. day-by-day reference over two years, every payday day).
@@ -104,7 +107,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   fit, `newDaily` never negative. `lowIncome` (moved from the app): received > 0, below 90 % of salary (int maths), at
   least 4 days in and not in the first `samePaydayDays` (7) days; in `incomeMode == 'received'` those first 7 days count
   `max(received, salary)` (salary parts still landing; owner: paid 10th–15th). `periods.dart`'s grouping constant is
-  `_salaryGroupDays` (20). `WalletSettings.fromMap` reads a stored `paydayDay` 29..31 as 28 (`maxPaydayDay`).
+  `salaryGroupDays` (20, dates.dart). `WalletSettings.fromMap` reads a stored `paydayDay` 29..31 as 28 (`maxPaydayDay`).
   **Plan split (CX):** `PeriodBudget.planSplit` → `PlanSplit {inTotal, fixed, saved, spending, over}` for the Plan donut
   (pure getter): `inTotal` = income + landedIncome, `fixed` = fixedPlan + reservedBills + reservedPlanned (= fixedPlan +
   `beforePayday`), `saved` = goalMonthly, `spending` = max(0, flexBudget), `over` = max(0, −flexBudget); identity

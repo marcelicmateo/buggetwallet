@@ -103,8 +103,8 @@ int _byDateThenId(CategorizedTx a, CategorizedTx b) {
   return d != 0 ? d : comparePart(a, b);
 }
 
-/// Days before the oldest payday group's start the data must reach for that group to be whole (`_salaryGroupDays` in
-/// periods.dart: salary parts this close to a payday's first payment belong to it).
+/// Days before the oldest payday group's start the data must reach for that group to be whole (`salaryGroupDays` in
+/// dates.dart: salary parts this close to a payday's first payment belong to it).
 const _wholeGroupDays = 20;
 
 /// The salary rows (as [salaryPaydays] reads them) grouped by payday, oldest first: only groups starting on or after
