@@ -8,7 +8,7 @@
 #   tools/relay.sh reset     stop and delete the data folder (asks first; BW_YES=1 skips the question)
 #   tools/relay.sh image     (re)build the image
 #
-# Dev mode: plain HTTP on 127.0.0.1, wallet creation open. The real deployment (Caddy + HTTPS + create token) is relay/deploy/.
+# Dev mode: plain HTTP on 127.0.0.1, wallet creation open. The real deployment (Caddy + HTTPS + create token) is relay/deploy/native/.
 # Data: ${BW_DATA_DIR:-~/.local/share/budget-wallet}/relay/. Allowed origins: BW_RELAY_ORIGINS, default the local web build
 # (http://127.0.0.1:8080, http://localhost:8080; tools/web.sh serve).
 set -euo pipefail

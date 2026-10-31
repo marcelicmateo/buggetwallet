@@ -2,7 +2,7 @@
 # Local builds in a rootless Podman container. Runs the same steps as CI (.github/workflows/ci.yml).
 #
 #   tools/build.sh test     lint, then importer + core + sync + relay + app: analyze and tests (all in parallel)
-#   tools/build.sh lint     quick checks: Dart formatting, shellcheck, actionlint (pre-commit hook)
+#   tools/build.sh lint     quick checks: Dart formatting, shellcheck, actionlint
 #   tools/build.sh analyze [pkg…]   analyze only (importer core sync relay app; default all): app compiles against a changed API
 #                           without running its tests (app ~7 s)
 #   tools/build.sh stage    one stage verification, each step its own run and history lines, in this order: test, desktop-test,
@@ -65,17 +65,6 @@ CMD=${1:-test}
 source "$ROOT/tools/timing.sh"
 
 usage() { sed -n '2,/^set -/{/^set -/!p}' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
-
-# One line, once per run dir, when the opt-in pre-commit hook (tools/install-hooks.sh) isn't installed in this checkout
-hook_hint() {
-  local hook
-  [[ -n ${BW_RUN_DIR:-} && ! -e $BW_RUN_DIR/.hook-hint ]] || return 0
-  : > "$BW_RUN_DIR/.hook-hint"
-  hook=$(cd "$ROOT" && git rev-parse --git-path hooks/pre-commit 2>/dev/null) || return 0
-  [[ $hook == /* ]] || hook=$ROOT/$hook
-  [[ -e $hook ]] || echo "hint: no pre-commit hook here; tools/install-hooks.sh adds one that runs tools/build.sh lint" >&2
-  return 0
-}
 
 # stage (host): the stage verification, one sub-run per step so each keeps its own run dir and history lines. Continues after
 # a failure; stage-summary.txt goes into the stage's own run dir (dist/logs points there at the end).
@@ -155,7 +144,7 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
   case "$CMD" in
     image) build_image; exit ;;
     image-name) podman image exists "$IMAGE" || build_image; echo "$IMAGE"; exit ;;
-    test|lint|apk|linux|all|importer|core|sync|relay|app|mutate|desktop-test|desktop-smoke|perf|web|web-test|analyze|outdated|relay-bin) run_begin "$CMD"; hook_hint ;;
+    test|lint|apk|linux|all|importer|core|sync|relay|app|mutate|desktop-test|desktop-smoke|perf|web|web-test|analyze|outdated|relay-bin) run_begin "$CMD" ;;
     stage) host_stage; exit ;;
     relay-native-test) "$ROOT/tools/build.sh" relay-bin x64 && exec "$ROOT/tools/relay-native-test.sh" "${@:2}" ;;
     format|shell|lsp|mcp) ;;

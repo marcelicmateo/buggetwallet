@@ -18,7 +18,7 @@ salary/rent/loan figures, merchant lists derived from the owner's spending, keys
 - `docs/architecture.md`, `docs/setup.md`.
 - Each package has its own short `CLAUDE.md` (files, rules, how to test). Read the one for the code you touch.
 - `tools/` — `build.sh` (local builds, lint, format, LSP, MCP), `emulator.sh`, `live.sh` + `live_vm.py`, `build-times.sh` + `build_log.py` +
-  `timing.sh` (run logs and timing history), `ci-status.sh` (CI results), `make-signing-key.sh`, `relay-deploy.sh` (sets up/upgrades/backs up the relay on a rented server over ssh; `--dry-run`), `install-hooks.sh`,
+  `timing.sh` (run logs and timing history), `ci-status.sh` (CI results), `make-signing-key.sh`, `relay-deploy.sh` (sets up/upgrades/backs up the native relay (systemd + Caddy) on a Pi or rented server over ssh; `--dry-run`),
   `make_fixtures.py`, `log-summary.py` (summary of an app log), `token-usage.py` (Claude token use per day/session/model/commit,
   from local transcripts). `dev/` — `Containerfile` and `install-lint-tools.sh`.
 - **App logs:** the app logs to `<app support dir>/logs/bw-YYYY-MM-DD.log` (debug level by default while testing; Plan ›
@@ -47,7 +47,6 @@ Mac, iPhone, Windows and web are out of scope for now (owner's decision): don't 
   Unformatted code fails: run `tools/build.sh format`. Shared analyzer/lint/formatter rules (page width 140) are in
   the root `analysis_options.yaml`; fix lints rather than ignoring them, tune the rule there if one is wrong for us.
 - `tools/build.sh lsp` is a Dart language server over stdin/stdout (container, repo at the same path).
-  `tools/install-hooks.sh` adds an opt-in pre-commit hook running `lint`.
 - **See the app:** `tools/emulator.sh screens` boots an Android emulator (Podman + /dev/kvm, `dev/Containerfile.emulator`),
   runs `app/integration_test/screens_test.dart` with a synthetic demo wallet and saves every tab to `dist/screens/*.png`
   — read them to check UI changes before pushing. `start`/`install`/`shot`/`adb`/`stop` drive a running emulator.
@@ -118,11 +117,10 @@ The main session is the lead: it takes the owner's request, splits it, merges re
   that goes into the brief, so builders don't explore the codebase themselves (token rule in PIPELINE.md).
 - `test-writer` — writes tests from the spec in parallel, without basing them on the implementation.
 - `reviewer` — read-only review of the diff before every push.
-- `ci-watcher` — waits for a CI run the owner started and reports the result (`tools/ci-status.sh`); not used after pushes.
 - `devops` — only for build, CI, signing or version work.
 **Model and effort first (owner rule):** before starting agents, check each one's `model:` and `effort:` in its
 `.claude/agents/*.md` frontmatter and fit them to the task (cheapest that does the job well; current defaults:
-scout and ci-watcher haiku/low, test-writer and devops sonnet/medium, ui-builder sonnet/high, core-builder and reviewer high
+scout haiku/low, test-writer and devops sonnet/medium, ui-builder sonnet/high, core-builder and reviewer high
 on the session model).
 Agents without a file (general-purpose, Explore, Plan) get `model` set on the Agent call. Say the choice in one line.
 Owner bug reports go before new features. **Bugs are fixed as soon as they're found** (owner rule), in the same
