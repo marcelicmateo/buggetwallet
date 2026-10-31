@@ -80,7 +80,12 @@ class DayIndex {                                                     // pure, we
 class SeriesBar { DateRange span; Bucket bucket; int spent; bool partial; }
 List<SeriesBar> spendingSeries(DayIndex ix, DateRange window, Bucket b, {required String today, String? category, String? tag, String? merchantKey});
 List<IncomeSpendingBar> incomeSeries(DayIndex ix, DateRange window, Bucket b, {required String today});
-List<BudgetMonth> budgetSeries(...);                                 // month or quarter buckets only
+class BudgetBar { DateRange span; Bucket bucket; int budgeted; int actual; bool prorated; bool partial; int get over; }
+// Any bucket (§6 Q2, owner): month/quarter = the exact month budgets (sum); week/day = the pro-rated share: each month's
+// budget split over its days in integer cents by largest remainder (ties: earlier day first), a bucket's budget = the sum
+// of its days, so the days of a month add up to that month's budget exactly; prorated = true below a month.
+List<BudgetBar> budgetSeries(DayIndex ix, DateRange window, Bucket b, Map<String, int> budgets,
+    {required String today, required CategoryTable table, String? category});   // category null = all budgeted lines
 String bucketLabel(DateRange span, Bucket b);                        // "14", "6–12 Oct", "Oct 26", "Q4 26"
 ```
 `spendingByMonth`/`incomeVsSpending`/`tagTrend`/`merchantTrend` stay (old callers, and the month-equality tests).
