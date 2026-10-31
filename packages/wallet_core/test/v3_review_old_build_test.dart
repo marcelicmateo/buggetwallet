@@ -109,7 +109,7 @@ void main() {
 
     // The upgrade: 17 → 18 clears the cursors, the skipped op replays.
     old.reopen();
-    expect(old.repo.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'], '18');
+    expect(old.repo.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'], '${WalletRepo.schemaVersion}');
     now += 1000;
     await old.run();
     expect(old.repo.reviewDates(), ['2026-03-01']);
