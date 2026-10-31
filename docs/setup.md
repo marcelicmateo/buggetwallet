@@ -139,6 +139,7 @@ system, wallet creation open, the local web build's origins allowed): the way to
 (`http://10.0.2.2:8787`). For a phone on the same Wi-Fi, run the image by hand with a published port:
 
 ```sh
+podman build -f dev/Containerfile.relay -t localhost/budget-wallet-relay:latest .
 podman run -d --name bw-relay-lan --read-only --userns=keep-id:uid=10001,gid=10001 -p 8787:8787 \
   -v /srv/budget-wallet-relay-lan:/data:z localhost/budget-wallet-relay:latest
 ```
@@ -175,12 +176,21 @@ ssh root@<server IP>
 # on the server, as root:
 useradd -m -G sudo bw && mkdir -p /home/bw/.ssh && cp ~/.ssh/authorized_keys /home/bw/.ssh/ \
   && chown -R bw: /home/bw/.ssh && chmod 700 /home/bw/.ssh && echo 'bw ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/bw
-# (Fedora: -G wheel instead of -G sudo)
-printf 'PermitRootLogin no\nPasswordAuthentication no\n' > /etc/ssh/sshd_config.d/10-bw.conf && systemctl restart ssh   # Fedora: sshd
-apt update && apt -y upgrade && apt -y install rsync unattended-upgrades      # Fedora: dnf -y upgrade && dnf -y install rsync dnf-automatic
+# (Fedora: -G wheel instead of -G sudo, and afterwards: restorecon -R /home/bw/.ssh   # a wrong SELinux label locks bw out)
 ```
-Before closing root login, open a second terminal and check that `ssh bw@<server IP> sudo true` works. From now on log in as
-`ssh bw@<server IP>` (or add an ssh alias).
+Before closing root login, open a second terminal and check that `ssh bw@<server IP> sudo -n true` works (no error, no prompt).
+Only then, back in the root session, harden ssh and update:
+```sh
+printf 'PermitRootLogin no\nPasswordAuthentication no\n' > /etc/ssh/sshd_config.d/10-bw.conf && systemctl restart ssh   # Fedora: sshd
+apt update && apt -y upgrade && apt -y install rsync unattended-upgrades
+# Fedora instead:
+dnf -y upgrade && dnf -y install rsync dnf-automatic
+printf '[commands]\napply_updates = yes\n' > /etc/dnf/automatic.conf && systemctl enable --now dnf-automatic.timer
+```
+Debian and Ubuntu apply security updates with `unattended-upgrades` as installed. On Fedora, `dnf-automatic` does nothing until
+`apply_updates = yes` is set and its timer is enabled, as above. (Fedora 41+ ships `dnf5`; if `dnf-automatic.timer` is not found
+there, install `dnf5-plugin-automatic` and use `dnf5-automatic.timer`, with the same settings in `/etc/dnf/automatic.conf`.) From now on
+log in as `ssh bw@<server IP>` (or add an ssh alias).
 
 ### 6.3 Name and install
 1. **DNS:** at your domain's DNS provider, an `A` record (and `AAAA` with the server's IPv6) for the name, e.g. `wallet.example.org`,
