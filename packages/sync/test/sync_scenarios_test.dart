@@ -710,8 +710,8 @@ void main() {
 
     for (final damaged in [true, false]) {
       test(
-          'the file with the bank row is ${damaged ? 'damaged' : 'not fetchable'} for the phone for good: the phone keeps '
-          'its entry, does not match on its own, and repeated syncs write nothing new', () async {
+          'the file with the bank row is ${damaged ? 'damaged for the phone (KL: until its author covers it with a snapshot)' : 'not fetchable for the phone for good: the phone keeps its entry, does not match on its own'}, '
+          'and repeated syncs write nothing new', () async {
         final phone = device('phone'), laptop = device('laptop');
         List<String> files() => net.files.keys.where((k) => k.startsWith('d/')).toList()..sort();
         phone.repo.addTransaction(date: '2026-01-17', amount: 2340, category: 'Eating out', note: 'synthetic lunch');
@@ -722,28 +722,35 @@ void main() {
         final rows = laptop.repo.deviceId;
         final good = net.files['d/$rows/1']!;
         if (damaged) net.relay.replace(rows, 1, Uint8List.sublistView(good, 0, good.length ~/ 2));
-        var repaired = false;
+        var repaired = false, rounds = 0;
 
         Future<void> round() async {
+          rounds++;
           for (final d in [phone, laptop]) {
             if (d == phone && !damaged && !repaired) net.relay.failGet(rows, 1);
             now += 120000; // the 2-minute sync
             final rep = await d.run();
-            if (d == phone && !repaired) {
+            // KL: a damaged (quarantined) file blocks the phone for two runs; the second asks the laptop (its author),
+            // whose snapshot covering it unblocks the phone on its third run. A file it cannot fetch asks nothing.
+            if (d == phone && !repaired && (!damaged || rounds <= 2)) {
               expect(rep.caughtUp, isFalse);
               expect(rep.waiting.single.reason, damaged ? isNotNull : isNull);
             }
           }
         }
 
-        for (var i = 0; i < 3; i++) {
+        for (var i = 0; i < (damaged ? 6 : 3); i++) {
           await round();
         }
         final m = phone.repo.transactions(includeHidden: true).singleWhere((t) => t.manual);
         final bank = laptop.repo.transaction(m.id)!.matchedTo;
         expect(bank, isNotNull, reason: 'the laptop holds the bank row and matched the entry');
-        expect(phone.repo.transaction(m.id)!.matchedTo, isNull, reason: 'the phone got neither the row nor the match');
-        expect(phone.repo.transaction(m.id)!.live, isTrue, reason: 'the entry still counts on the phone');
+        if (damaged) {
+          expect(phone.repo.transaction(m.id)!.matchedTo, bank, reason: 'KL: row and match came with the author\'s snapshot');
+        } else {
+          expect(phone.repo.transaction(m.id)!.matchedTo, isNull, reason: 'the phone got neither the row nor the match');
+          expect(phone.repo.transaction(m.id)!.live, isTrue, reason: 'the entry still counts on the phone');
+        }
         final settled = files();
         for (var i = 0; i < 5; i++) {
           await round();
@@ -754,7 +761,8 @@ void main() {
 
         // The file is repaired (or can be fetched again): one expense on both devices, same state.
         repaired = true;
-        if (damaged) net.relay.replace(rows, 1, good);
+        // (KL: the author's snapshot covers the damaged file, so the relay may have pruned it already.)
+        if (damaged && net.files.containsKey('d/$rows/1')) net.relay.replace(rows, 1, good);
         await round();
         await round();
         for (final d in [phone, laptop]) {

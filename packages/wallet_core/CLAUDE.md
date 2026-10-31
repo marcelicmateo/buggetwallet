@@ -668,10 +668,13 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   (the relay never overwrites a file, the blocked reader never acks past it; matching and pairing wait there, cash
   entries keep counting). Self-heal: any caught-up device that applied the file (the author or another one), once it
   has seen the blocked device (seen within 24 h) stay below it for over 24 h, writes a snapshot covering it, and the
-  blocked device goes on from it on its next run. Remaining case: no device that applied the file before it was
-  damaged is still syncing and caught up; then it clears only when a newer build reads it (unknownVersion/applyFailed)
-  or the file is repaired on the server. A blocked device that cannot read snapshots stays blocked (no storm: the
-  snapshot covers the file, so nobody writes another).
+  blocked device goes on from it on its next run. KL: from its second blocked run the blocked device asks the author
+  (at most once per file per 24 h); a KL-or-newer author that still syncs writes a covering snapshot on its next
+  caught-up run and resends its state. When the author is gone (and no other device heals it), the owner can skip the
+  file (`skipBlockedFile`, Settings › Sync): device-local, the later files are read, but that file's changes are lost on
+  this device unless the author later resends its state or a state-digest repair with a device that holds them brings
+  them back. A blocked device that cannot read snapshots stays blocked until skipped (no storm: the snapshot covers the
+  file, so nobody writes another).
 - Encrypted local database: a database encrypted with one wallet key cannot be opened after joining another wallet
   (`WalletDbKeyException`; the app decides what to do). The side copy of a native conversion is plaintext for as long
   as the conversion runs (deleted after the check, or used to recover at the next open).
