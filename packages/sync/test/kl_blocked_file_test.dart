@@ -226,4 +226,66 @@ void main() {
     expect(b.repo.localValue('syncSkipped'), isNull);
     expect(blockedFiles(b.repo), hasLength(1));
   });
+
+  /// B's quarantine entry of A's file 2 rewritten to [reason] (same bytes, same hash), as if it had been refused so.
+  void requarantine(Dev b, SyncProblemReason reason) {
+    final list = jsonDecode(b.repo.localValue('syncBadFiles')!) as List;
+    for (final j in list) {
+      (j as Map)['r'] = reason.name;
+    }
+    b.repo.setLocalValue('syncBadFiles', jsonEncode(list));
+    final book = jsonDecode(b.repo.localValue('syncBlocked')!) as Map;
+    for (final e in book.values) {
+      (e as Map)['r'] = reason.name;
+    }
+    b.repo.setLocalValue('syncBlocked', jsonEncode(book));
+  }
+
+  for (final reason in [SyncProblemReason.unknownVersion, SyncProblemReason.clockDrift, SyncProblemReason.applyFailed]) {
+    test('RF3: a file quarantined as ${reason.name} is listed as not skippable and cannot be skipped', () async {
+      final (_, b) = await blockedPair();
+      expect(blockedFiles(b.repo).single.skippable, isTrue, reason: 'precondition: a damaged file');
+      requarantine(b, reason);
+      final blocked = blockedFiles(b.repo).single;
+      expect((blocked.reason, blocked.skippable), (reason, false));
+      expect(() => skipBlockedFile(b.repo, blocked.device, blocked.file), throwsArgumentError);
+      expect(b.repo.localValue('syncSkipped'), isNull, reason: 'nothing stored');
+      expect(blockedFiles(b.repo), hasLength(1));
+    });
+  }
+
+  test('RF3: the engine never honours a skip of a file now quarantined for a reason that waits', () async {
+    final (a, b) = await blockedPair();
+    final blocked = blockedFiles(b.repo).single;
+    skipBlockedFile(b.repo, blocked.device, blocked.file);
+    // The skip of the damaged bytes is stored; the same bytes are then refused as a newer format (another build).
+    final skipped = b.repo.localValue('syncSkipped');
+    expect(skipped, isNotNull);
+    final bad = jsonDecode(b.repo.localValue('syncBadFiles')!) as List;
+    for (final j in bad) {
+      (j as Map)['r'] = SyncProblemReason.unknownVersion.name;
+    }
+    b.repo.setLocalValue('syncBadFiles', jsonEncode(bad));
+    final r = await b.sync();
+    expect(r.caughtUp, isFalse);
+    expect(r.waiting.single.seq, 2, reason: 'still waiting for the update, not skipped');
+    expect(b.repo.syncCursors()[a.id], 1);
+  });
+
+  test('RF3: a skipped damaged file stays skipped over later runs', () async {
+    final (a, b) = await blockedPair();
+    final blocked = blockedFiles(b.repo).single;
+    expect(blocked.reason, SyncProblemReason.corrupt);
+    skipBlockedFile(b.repo, blocked.device, blocked.file);
+    for (var i = 0; i < 3; i++) {
+      sim.tick(const Duration(days: 2));
+      final r = await b.sync();
+      expect(r.caughtUp, isTrue, reason: 'run $i');
+      expect(r.problems, isEmpty, reason: 'run $i');
+      expect(blockedFiles(b.repo), isEmpty);
+    }
+    expect(b.repo.localValue('syncBadFiles'), isNull, reason: 'no longer quarantined');
+    expect((jsonDecode(b.repo.localValue('syncSkipped')!) as Map).keys, ['${blocked.device}/2']);
+    expect(b.repo.syncCursors()[a.id], 3);
+  });
 }

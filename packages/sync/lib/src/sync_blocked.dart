@@ -26,6 +26,15 @@ class BlockedFile {
   final DateTime? authorSeen;
   const BlockedFile(this.device, this.file, this.reason, {required this.since, this.authorSeen});
 
+  /// The reasons a file may be skipped for ([skipBlockedFile]): damaged (corrupt) or sealed with another key (badKey,
+  /// otherKey): bytes no build of this wallet will ever read. Never a newer format (unknownVersion: readable after an
+  /// update), a clock ahead (clockDrift: readable once the clock catches up) or a refused apply (applyFailed: a bug
+  /// a later build may fix); those wait.
+  static const skippableReasons = {SyncProblemReason.corrupt, SyncProblemReason.badKey, SyncProblemReason.otherKey};
+
+  /// Whether the owner may skip it ([skipBlockedFile]); the UI offers "Skip damaged file" only then.
+  bool get skippable => skippableReasons.contains(reason);
+
   /// The author's short id, as [SyncProblem.device] shows it.
   String get short => SyncProblem.shortId(SyncEngine.streamBase(device));
 
@@ -33,7 +42,8 @@ class BlockedFile {
   String toString() => 'BlockedFile($short, ${reason.name})';
 }
 
-/// The files that block this device now, as its last complete sync run found them (device-local, no network).
+/// The files that block this device now, as its last complete sync run found them (device-local, no network). Each
+/// says whether the owner may skip it ([BlockedFile.skippable]); one that is not waits for an update or the clock.
 List<BlockedFile> blockedFiles(WalletRepo repo) {
   final skipped = SkippedFiles.load(repo);
   return [
@@ -45,13 +55,19 @@ List<BlockedFile> blockedFiles(WalletRepo repo) {
 /// The owner skips blocked file [file] of [device] (from [blockedFiles]): device-local, never synced. The next run treats
 /// that file (these bytes: a repaired copy on the relay is read normally) as applied and empty, so the device's later
 /// files are read; it is never retried. Its changes are lost on this device unless its author resends its state (any
-/// state resend still repairs it). A file that is not quarantined here is left alone.
+/// state resend still repairs it). A file that is not quarantined here is left alone. [ArgumentError] (nothing
+/// stored) for a file quarantined for a reason that is not [BlockedFile.skippable] (a newer format, a clock ahead, a
+/// refused apply): it is read again later, so skipping it would lose its changes for nothing.
 void skipBlockedFile(WalletRepo repo, String device, String file) {
   final key = BadFile.keyOf(device, file);
   final bad = BadFiles.load(repo).byKey[key];
   if (bad == null) {
     logEvent(_log, Level.INFO, 'sync.skipFile.none');
     return;
+  }
+  if (!BlockedFile.skippableReasons.contains(bad.reason)) {
+    logEvent(_log, Level.WARNING, 'sync.skipFile.refused', {'reason': bad.reason.name});
+    throw ArgumentError('Only a damaged sync file can be skipped.');
   }
   final skipped = SkippedFiles.load(repo);
   skipped.byKey[key] = bad.hash;

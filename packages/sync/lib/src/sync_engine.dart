@@ -1208,8 +1208,9 @@ class SyncEngine {
       }
       final was = run.bad.byKey[k], skip = run.skipped.byKey[k];
       final hash = was != null || skip != null ? await fileHash(bytes) : null;
-      if (skip != null && skip == hash) {
-        // KL: the owner skipped these bytes (skipBlockedFile): applied as an empty file, never read again.
+      if (skip != null && skip == hash && (was == null || BlockedFile.skippableReasons.contains(was.reason))) {
+        // KL: the owner skipped these bytes (skipBlockedFile): applied as an empty file, never read again. Only bytes
+        // quarantined as damaged or sealed with another key: a newer format or a clock ahead is read again later.
         if (run.bad.byKey.remove(k) != null) run.badChanged = true;
         repo.setSyncCursor(d, seq);
         repo.recordSyncFile(d, seq, 0);
