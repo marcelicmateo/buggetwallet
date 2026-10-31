@@ -892,11 +892,7 @@ class WalletController extends ChangeNotifier {
       () => timed(
           'wc.period',
           () => computePeriod(txs, effectiveSettings, goals, today(),
-              bills: recurringBills(),
-              planned: plannedOpen(),
-              table: categoryTable,
-              matchRows: rawExpanded,
-              payeeAliases: payeeAliases()),
+              bills: recurringBills(), planned: plannedOpen(), table: categoryTable, matchRows: rawExpanded, payeeAliases: payeeAliases()),
           warnMs: 50));
 
   /// One entry per day of the running pay period: within the day's money, over, today or to come (Today's day dots).
@@ -905,11 +901,7 @@ class WalletController extends ChangeNotifier {
       () => timed(
           'wc.periodDays',
           () => core.periodDays(txs, effectiveSettings, goals, today(),
-              bills: recurringBills(),
-              planned: plannedOpen(),
-              table: categoryTable,
-              matchRows: rawExpanded,
-              payeeAliases: payeeAliases()),
+              bills: recurringBills(), planned: plannedOpen(), table: categoryTable, matchRows: rawExpanded, payeeAliases: payeeAliases()),
           warnMs: 100));
 
   /// Saved or lost per pay period (salary to salary), oldest first; the last one is still running.

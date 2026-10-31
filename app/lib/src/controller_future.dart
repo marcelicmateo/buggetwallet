@@ -128,8 +128,11 @@ extension FutureSpending on WalletController {
   List<PlannedCost> plannedOpen() => _cached(const MemoKey('plannedOpen'), () => repo.plannedCosts());
 
   /// Planned costs, confirmed bills and unconfirmed calendar events from [from] to [to] (inclusive), by date. Cached.
-  List<UpcomingItem> upcomingItems(String from, String to) => _cached(MemoKey('upcoming', (from, to, cal.version)),
-      () => upcoming(planned: plannedEverything(), bills: recurringBills(),
+  List<UpcomingItem> upcomingItems(String from, String to) => _cached(
+      MemoKey('upcoming', (from, to, cal.version)),
+      () => upcoming(
+          planned: plannedEverything(),
+          bills: recurringBills(),
           events: cal.events,
           from: from,
           to: to,
@@ -193,8 +196,9 @@ extension FutureSpending on WalletController {
     final aliases = payeeAliases();
     final xs = items.where((i) => switch (i.kind) {
           UpcomingKind.bill => i.amount != null && !(i.bill?.coveredByPlanIn(categoryTable) ?? false),
-          UpcomingKind.planned =>
-            ahead(i) && i.planned != null && plannedReserves(i.planned!, recurring, occurrences, table: categoryTable, payeeAliases: aliases),
+          UpcomingKind.planned => ahead(i) &&
+              i.planned != null &&
+              plannedReserves(i.planned!, recurring, occurrences, table: categoryTable, payeeAliases: aliases),
           _ => false,
         });
     return (count: xs.length, total: xs.fold<int>(0, (a, i) => a + i.amount!));
@@ -647,8 +651,8 @@ extension FutureSpending on WalletController {
   /// [ExportFile.rows] is the number of events; 0 means there is nothing to save.
   ExportFile exportPlannedIcs() {
     final t = today();
-    final text = plannedIcs(plannedOpen(), recurringBills(),
-        from: t, to: addDays(t, 365), payeeAliases: payeeAliases(), events: cal.events);
+    final text =
+        plannedIcs(plannedOpen(), recurringBills(), from: t, to: addDays(t, 365), payeeAliases: payeeAliases(), events: cal.events);
     final rows = 'BEGIN:VEVENT'.allMatches(text).length;
     return ExportFile('budget-wallet-planned.ics', Uint8List.fromList(utf8.encode(text)), rows);
   }

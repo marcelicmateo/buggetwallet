@@ -60,7 +60,8 @@ void main() {
 
     test('several costs: the text counts them', () {
       final wc = wallet();
-      expect(wc.autoPaidText([const AutoPaid(plannedId: 'a', txId: 't', title: 'x'), const AutoPaid(plannedId: 'b', txId: 'u', title: 'y')]),
+      expect(
+          wc.autoPaidText([const AutoPaid(plannedId: 'a', txId: 't', title: 'x'), const AutoPaid(plannedId: 'b', txId: 'u', title: 'y')]),
           '2 planned costs marked paid');
     });
 
@@ -78,10 +79,34 @@ void main() {
       wc.reload();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 500));
       expect(find.descendant(of: find.byType(SnackBar), matching: find.text('Marked paid: Synthetic groceries')), findsOneWidget);
       await tester.tap(key('toastUndo'));
       await tester.pump();
       expect(wc.plannedOpen().map((p) => p.id), [id]);
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.byType(SnackBar), findsNothing, reason: 'the undo itself is not announced');
+    });
+
+    tw('two bank rows that fit the cost: it stays open and no toast shows', (tester) async {
+      final wc = wallet();
+      final id = wc.repo.addPlanned(title: 'Synthetic groceries', date: '2026-10-18', amount: 4500, category: 'Groceries');
+      wc.reload();
+      tester.view.physicalSize = const Size(400, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(BudgetWalletApp(wc: wc));
+      await tester.pump();
+      wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [
+        syntheticTx('2026-10-19', -4500, 'POS plaćanje', 'PBZ POS PBZ7LIDL HRVATSKA ZAGREB'),
+        syntheticTx('2026-10-20', -4500, 'POS plaćanje', 'PBZ POS PBZ7LIDL HRVATSKA ZAGREB'),
+      ]));
+      wc.reload();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 800));
+      expect(find.byType(SnackBar), findsNothing);
+      expect(wc.plannedOpen().map((p) => p.id), [id]);
+      expect(wc.takeAutoPaid(), isEmpty);
     });
   });
 
@@ -142,12 +167,28 @@ void main() {
       await tester.pumpAndSettle();
       expect(key('belongs:${gym.id}'), findsOneWidget);
       await tester.tap(key('belongs:${gym.id}'));
-      await tester.pumpAndSettle();
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 300)); // the picker closes, then the sheet, then the toast slides in
+      }
       expect(wc.payeeAliases().values, [gym.payee]);
       expect(key('toastUndo'), findsOneWidget);
       await tester.tap(key('toastUndo'));
       await tester.pump();
       expect(wc.payeeAliases(), isEmpty);
+    });
+
+    tw('closing the picker without a choice links nothing', (tester) async {
+      final wc = withGym();
+      final id = slip(wc, 'Synth Gym Ltd');
+      await _openSheet(tester, wc, id);
+      await tester.tap(key('slipBelongsTo'));
+      await tester.pumpAndSettle();
+      expect(find.text('Belongs to bill…'), findsWidgets);
+      await tester.tapAt(const Offset(200, 20)); // the barrier
+      await tester.pumpAndSettle();
+      expect(wc.payeeAliases(), isEmpty);
+      expect(find.byType(SnackBar), findsNothing);
+      expect(wc.billPlannedBy(wc.bill(id)!), isNull);
     });
 
     tw('a slip an expected bill already covers has no button', (tester) async {
@@ -162,18 +203,38 @@ void main() {
   group('calendar events', () {
     test('a confirm stores the uid + start time ref; a dismiss finds a row stored under the old ref', () {
       final wc = wallet();
-      const e = CalendarEvent(calendarId: 'c1', uid: 'u-1@example.com', title: 'Synthetic event', date: '2026-10-24', allDay: false, startMinutes: 600);
+      const e = CalendarEvent(
+          calendarId: 'c1', uid: 'u-1@example.com', title: 'Synthetic event', date: '2026-10-24', allDay: false, startMinutes: 600);
       expect(e.ref, isNot(e.legacyRef));
       wc.repo.addPlanned(
-          title: 'Synthetic event', date: e.date, amount: 5000, category: 'Shopping', source: PlannedSource.calendar, sourceRef: e.legacyRef);
+          title: 'Synthetic event',
+          date: e.date,
+          amount: 5000,
+          category: 'Shopping',
+          source: PlannedSource.calendar,
+          sourceRef: e.legacyRef);
       wc.reload();
       wc.dismissSuggestion(UpcomingItem(kind: UpcomingKind.suggestion, key: 'e:${e.ref}', date: e.date, title: e.title, event: e));
       final rows = wc.plannedEverything();
       expect(rows, hasLength(1), reason: 'the old row is the one skipped');
       expect(rows.single.status, PlannedStatus.skipped);
       expect(rows.single.sourceRef, e.legacyRef);
-      wc.confirmSuggestion(UpcomingItem(kind: UpcomingKind.suggestion, key: 'e:${e.ref}', date: e.date, title: e.title, event: e), amount: 5000);
+      wc.confirmSuggestion(UpcomingItem(kind: UpcomingKind.suggestion, key: 'e:${e.ref}', date: e.date, title: e.title, event: e),
+          amount: 5000);
       expect(wc.plannedEverything().map((p) => p.sourceRef), contains(e.ref));
+    });
+  });
+
+  group('calendar events without an id', () {
+    const noId = CalendarEvent(calendarId: 'c1', uid: '', title: 'Synthetic event', date: '2026-10-24', allDay: false, startMinutes: 600);
+    test('the title, date and start time identify it; a rename with a uid keeps the ref', () {
+      final later = CalendarEvent(calendarId: 'c9', uid: '', title: 'synthetic EVENT', date: noId.date, allDay: false, startMinutes: 600);
+      expect(later.ref, noId.ref, reason: 'the same on another device and calendar');
+      expect(CalendarEvent(calendarId: 'c1', uid: '', title: noId.title, date: noId.date, allDay: false, startMinutes: 900).ref,
+          isNot(noId.ref));
+      const a = CalendarEvent(calendarId: 'c1', uid: 'u@x', title: 'Old name', date: '2026-10-24', allDay: false, startMinutes: 600);
+      const b = CalendarEvent(calendarId: 'c1', uid: 'u@x', title: 'New name', date: '2026-10-24', allDay: false, startMinutes: 600);
+      expect(b.ref, a.ref);
     });
   });
 
@@ -181,9 +242,12 @@ void main() {
     /// An overdue bill inside the period, one overdue from before it, a bill later, a planned cost.
     WalletController overdueWallet() {
       final wc = wallet();
-      wc.repo.addRecurring(label: 'Synth overdue', category: 'Shopping', amount: 3100, intervalDays: 30, firstDue: '2026-10-05', payee: 'synth_a');
-      wc.repo.addRecurring(label: 'Synth old', category: 'Shopping', amount: 1700, intervalDays: 30, firstDue: '2026-09-10', payee: 'synth_b');
-      wc.repo.addRecurring(label: 'Synth later', category: 'Shopping', amount: 2200, intervalDays: 30, firstDue: '2026-10-28', payee: 'synth_c');
+      wc.repo.addRecurring(
+          label: 'Synth overdue', category: 'Shopping', amount: 3100, intervalDays: 30, firstDue: '2026-10-05', payee: 'synth_a');
+      wc.repo
+          .addRecurring(label: 'Synth old', category: 'Shopping', amount: 1700, intervalDays: 30, firstDue: '2026-09-10', payee: 'synth_b');
+      wc.repo.addRecurring(
+          label: 'Synth later', category: 'Shopping', amount: 2200, intervalDays: 30, firstDue: '2026-10-28', payee: 'synth_c');
       wc.repo.addPlanned(title: 'Synthetic gift', date: '2026-10-24', amount: 4000, category: 'Shopping');
       wc.reload();
       return wc;
@@ -198,7 +262,7 @@ void main() {
       expect(wc.setAside(items), (count: 4, total: p.beforePayday));
       expect(wc.comingUp().total + p.reservedBills, p.beforePayday);
       expect(wc.overdueEarlier().map((c) => c.bill.label), ['Synth old']);
-      expect(items.where(wc.isOverdueCycle).map((i) => i.title), ['Synth overdue']);
+      expect(items.where(wc.isOverdueCycle).map((i) => i.title), ['Synth overdue', 'Synth old']);
     });
 
     tw('the page shows the same cents as Today, marks the overdue cycle and lists the older one apart', (tester) async {
@@ -208,18 +272,19 @@ void main() {
       expect(find.text(total), findsWidgets);
       expect(find.text('Set aside'), findsOneWidget);
       expect(find.text('4 costs'), findsOneWidget);
-      expect(find.text('Overdue'), findsNWidgets(2), reason: 'the marked cycle and the panel heading');
+      final marked = wc.upcomingItems(wc.upcomingRange().start, wc.upcomingRange().end).where(wc.isOverdueCycle);
+      for (final i in marked) {
+        expect(key('overdue:${i.key}'), findsOneWidget);
+      }
       expect(key('upcomingOverdue'), findsOneWidget);
+      expect(find.text('OVERDUE'), findsOneWidget, reason: 'the panel heading');
     });
   });
 }
 
 Future<void> _openSheet(WidgetTester tester, WalletController wc, String id) async {
-  await pumpApp(
-      tester,
-      Scaffold(
-          body: Builder(
-              builder: (c) => Center(child: TextButton(onPressed: () => openBill(c, wc, id), child: const Text('open'))))),
+  await pumpApp(tester,
+      Scaffold(body: Builder(builder: (c) => Center(child: TextButton(onPressed: () => openBill(c, wc, id), child: const Text('open'))))),
       size: const Size(400, 1600));
   await tester.tap(find.text('open'));
   await tester.pumpAndSettle();

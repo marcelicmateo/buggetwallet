@@ -240,8 +240,8 @@ extension TagsDb on WalletController {
       });
 
   /// [tag] in the month of [r] (`monthIn`) against the month before and the 6-month average.
-  CategoryCompare compareTagFor(String tag, DateRange r) => memo(
-      MemoKey('ins.tagcompare', (r.start, r.end, tag)), () => compareTag(tag, txs, monthIn(r), today: today(), currency: currency));
+  CategoryCompare compareTagFor(String tag, DateRange r) =>
+      memo(MemoKey('ins.tagcompare', (r.start, r.end, tag)), () => compareTag(tag, txs, monthIn(r), today: today(), currency: currency));
 
   /// [tag]'s spending per month over [r].
   List<MonthBar> tagBars(String tag, DateRange r) =>

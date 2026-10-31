@@ -64,7 +64,7 @@ String _billFileLabel(String? type) => switch (type) {
     };
 
 /// One bill: fields (a mark on the ones guessed from text), items, the original photo or PDF, Confirm, who paid it, warranty and
-/// return-by dates, Delete. Pops `'confirmed'`, `'saved'`, `'deleted'` or `'paid'`.
+/// return-by dates, Delete. Pops `'confirmed'`, `'saved'`, `'deleted'`, `'paid'` or `'linked'` ("Belongs to bill…", which toasts by itself).
 class BillSheet extends StatefulWidget {
   final WalletController wc;
   final String billId;
@@ -212,7 +212,7 @@ class _BillSheetState extends State<BillSheet> {
       setState(() => error = err);
       return;
     }
-    Navigator.pop(context, 'saved');
+    Navigator.pop(context, 'linked'); // no message of its own: openBill's "Saved" would replace the Undo toast below
     toastOn(messenger, 'Belongs to ${r.label.isEmpty ? r.payee : r.label} from now on',
         wide: wide, accessible: accessible, actionLabel: 'Undo', onAction: () => wc.unlinkSlip(saved));
   }
@@ -338,7 +338,8 @@ class _BelongsSheet extends StatelessWidget {
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       const Heading('Belongs to bill…'),
       const SizedBox(height: 4),
-      const Muted('Pick the expected bill this slip is for. The way the payee is spelled here is remembered for it.', size: BwType.metaSize),
+      const Muted('Pick the expected bill this slip is for. The way the payee is spelled here is remembered for it.',
+          size: BwType.metaSize),
       const SizedBox(height: 8),
       if (list.isEmpty)
         const EmptyNote('No expected bill to pick. Confirm one in Plan › Expected bills first.')
