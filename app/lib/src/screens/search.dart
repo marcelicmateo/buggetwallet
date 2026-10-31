@@ -2,7 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:wallet_core/wallet_core.dart' show Bill, BillStatus, CategorizedTx, PlannedCost, PlannedStatus, SearchFilter, SearchResult;
+import 'package:wallet_core/wallet_core.dart'
+    show Bill, BillStatus, CategorizedTx, PlannedCost, PlannedStatus, RuleKind, RuleView, SearchFilter, SearchResult;
 
 import '../controller.dart';
 import '../format.dart';
@@ -15,6 +16,7 @@ import '../widgets/charts.dart' show RangePicker, systemRangePicker;
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
 import 'bill_sheet.dart';
+import 'rules_panel.dart' show openRuleForm;
 import 'search_filters.dart';
 import 'upcoming.dart';
 import 'upcoming_view.dart';
@@ -213,6 +215,16 @@ class _SearchResults extends StatelessWidget {
                     query),
             ]),
           ]),
+        if (r.rules.isNotEmpty)
+          _ResultSection('Rules', r.rules.length, [
+            Rows(children: [
+              for (final rule in r.rules)
+                KeyedSubtree(
+                    key: ValueKey('searchRule:${rule.id}'),
+                    child: _ResultRow(rule.text, '', rule.categoryLabel == null ? 'Tags only' : '→ ${rule.categoryLabel}', 'rule',
+                        () => _openRule(context, wc, rule), query, true)),
+            ]),
+          ]),
         if (r.bills.isNotEmpty)
           _ResultSection('Expected bills', r.bills.length, [
             Rows(children: [
@@ -238,6 +250,15 @@ class _SearchResults extends StatelessWidget {
   }
 }
 
+/// A rule found by name: its own form (Settings › Rules' edit path); a built-in rule cannot be edited, so Settings › Rules opens.
+Future<void> _openRule(BuildContext context, WalletController wc, RuleView rule) async {
+  if (rule.kind == RuleKind.builtIn || !rule.editable) {
+    wc.openSettings(SettingsSection.rules, via: 'search');
+    return;
+  }
+  await openRuleForm(context, wc, edit: rule);
+}
+
 /// A ruled result section: its title with the count, then the [rows].
 class _ResultSection extends StatelessWidget {
   const _ResultSection(this.title, this.n, this.rows);
@@ -254,8 +275,11 @@ class _ResultSection extends StatelessWidget {
 /// One tappable result. The name wraps and the value keeps its width (SplitRow), so a long goal name or amount fits 320 dp at
 /// text scale 2.0.
 class _ResultRow extends StatelessWidget {
-  const _ResultRow(this.label, this.value, this.sub, this.kind, this.go, [this.query = '']);
+  const _ResultRow(this.label, this.value, this.sub, this.kind, this.go, [this.query = '', this.highlightSub = false]);
   final String label, value, sub, kind, query;
+
+  /// The match is bolded in [sub] too (a rule's category label).
+  final bool highlightSub;
   final VoidCallback go;
   @override
   Widget build(BuildContext context) {
@@ -276,7 +300,11 @@ class _ResultRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               start: Highlighted(label, query, style: const TextStyle(fontWeight: FontWeight.w500)),
               end: Text(value, textAlign: TextAlign.end, style: numStyle.copyWith(fontWeight: FontWeight.w500))),
-          Padding(padding: const EdgeInsets.only(top: 2), child: Text(sub, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2))),
+          Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: highlightSub
+                  ? Highlighted(sub, query, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2))
+                  : Text(sub, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2))),
         ]),
       ),
     );

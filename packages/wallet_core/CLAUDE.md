@@ -581,6 +581,18 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   rule row by row, so `rowsFor` sums equal their totals. Group key `''` (`Other`) = manual row without a note or `merchantKey`
   `x`. Tests: `test/n3_ranges_test.dart`, `test/n3_insights_test.dart` (incl. a loose 500 ms perf test on ~10k rows from
   `test/support/n3.dart` `bigWalletRows`).
+- `series.dart` — zoomable graph data (stage ZC, `docs/context/ZC_SPEC.md` §3–4 + "Settled by the lead"), pure and
+  web-safe, no DateTime (epoch-day maths on the strings). `DayIndex(expanded, currency:)`: one pass, per-day prefix sums
+  of spending (`countsAsSpending`, refunds subtracted), income, extra; per category/tag/merchant key (`merchantGroupKey`,
+  shared with `insights.dart`) built on first use and cached; `first`/`last` = days holding a counted row. `bucketFor`
+  (day ≤ 35 days, week ≤ 155, month ≤ 4 years, else quarter; coarser while > `maxBars`), `bucketsOf` (aligned: Monday
+  weeks, calendar months/quarters, clipped at the window), `spendingSeries`/`incomeSeries`/`budgetSeries` read the index
+  only (≈0.1 ms per 40-bar window on 20k rows); windows of 5 years or more → `ArgumentError`. `partial` = holds today or
+  clipped. `budgetSeries`: each category's month budget split over its days by largest remainder (earlier days get the
+  extra cent), a bar's `budgeted` = Σ of its days' shares, `over` = Σ per category max(0, actual − share), `prorated` =
+  not whole calendar months; a `category:` without a `budgets` entry counts nowhere (0/0/0), a 0 budget is real (spending =
+  over). Whole months equal `spendingByMonth`/`tagTrend`/`merchantTrend`/`incomeVsSpending`/
+  `budgetVsActualSeries`. Tests: `test/series_test.dart` (incl. perf), spec tests `test/zc_series_spec_test.dart`.
 - `reports.dart` — reports (P8, spec `docs/context/P8_SPEC.md`), pure and web-safe, nothing written. `periodReports(txs, st, today,
   table:, count:)` → `PeriodReport {start, end, running, income, fixed, flex}` (+ `out`, `net`) on the periods of
   `periodSummaries` (same income/out/net; `fixed` = Σ `byCategory` of tags whose `table.kindOf` is fixed, `flex` = out −

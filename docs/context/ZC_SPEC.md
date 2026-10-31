@@ -80,10 +80,30 @@ class DayIndex {                                                     // pure, we
 class SeriesBar { DateRange span; Bucket bucket; int spent; bool partial; }
 List<SeriesBar> spendingSeries(DayIndex ix, DateRange window, Bucket b, {required String today, String? category, String? tag, String? merchantKey});
 List<IncomeSpendingBar> incomeSeries(DayIndex ix, DateRange window, Bucket b, {required String today});
-List<BudgetMonth> budgetSeries(...);                                 // month or quarter buckets only
+class BudgetBar { DateRange span; Bucket bucket; int budgeted; int actual; bool prorated; bool partial; int get over; }
+// Any bucket (§6 Q2, owner): month/quarter = the exact month budgets (sum); week/day = the pro-rated share: each month's
+// budget split over its days in integer cents by largest remainder (ties: earlier day first), a bucket's budget = the sum
+// of its days, so the days of a month add up to that month's budget exactly; prorated = true below a month.
+List<BudgetBar> budgetSeries(DayIndex ix, DateRange window, Bucket b, Map<String, int> budgets,
+    {required String today, required CategoryTable table, String? category});   // category null = all budgeted lines
 String bucketLabel(DateRange span, Bucket b);                        // "14", "6–12 Oct", "Oct 26", "Q4 26"
 ```
 `spendingByMonth`/`incomeVsSpending`/`tagTrend`/`merchantTrend` stay (old callers, and the month-equality tests).
+
+**Settled by the lead 2026-11-01 (Z2 gaps):**
+- `IncomeSpendingBar {DateRange span; Bucket bucket; int income; int extra; int spent; bool partial; int get net}`,
+  `net = income + extra - spent` (as `IncomeVsSpending`).
+- Pro-rating is **per category**: each budgeted category's month budget is split over its days on its own; a bucket's
+  `budgeted` = the sum of those shares. `over` is a **field**, Σ per category of max(0, actual_c − share_c), as
+  `BudgetMonth.over`, so whole-month buckets equal `budgetVsActualSeries` exactly (budgeted, actual, over).
+- `partial` = the whole bucket holds today, or the window clips it (the `_partial` rule of `insights.dart`). Buckets after
+  today are not partial (as `MonthBar`); the app keeps windows from going past today.
+- A clipped budget bucket counts only its days: `budgeted` = their shares, `prorated = true` (it is not a whole month).
+  Budget vs actual at month/quarter widens its window to whole months in the app (owner 2026-10-20: calendar months).
+- Week labels: `5–11 Oct`; across months `29 Sep – 5 Oct`; across years `29 Dec 25 – 4 Jan 26`; a one-day piece `12 Oct`.
+- `bucketsOf` and every series function throw `ArgumentError` for a window of 5 years or more (`to >= from + 5 years`).
+- `DayIndex.first/last` = the first/last date holding a counted row (live, home currency, spending/income/extra);
+  deleted rows, transfers and other currencies don't move them; null when there is none.
 
 ## 5. App
 - `widgets/chart_viewport.dart` `ChartViewport`: owns the window (start/end), turns drag/pinch/double tap/buttons into a

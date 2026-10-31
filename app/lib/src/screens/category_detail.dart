@@ -63,14 +63,18 @@ class _CategoryDetailState extends State<CategoryDetailScreen> {
     );
   }
 
-  MonthBarsTile _bars(String cur, List<MonthBar> bars, String label, String id) => MonthBarsTile(
+  /// One month: its one figure is the hero's, so the exact-months rows are left out (the bars stay).
+  Widget _bars(String cur, List<MonthBar> bars, String label, String id) => DashItem(
+      span: bars.length <= 1 ? 4 : 2,
+      child: MonthBarsTile(
+        rows: bars.length > 1,
         label: label,
         currency: cur,
         nowMonth: monthOf(wc.today()),
         bars: bars,
         barsKey: ValueKey('detailBars_$id'),
         rowKey: (m) => ValueKey('detailRow_${id}_$m'),
-      );
+      ));
 
   List<Widget> _categoryView(BuildContext context, String cur, List<MerchantTotal> merchants) {
     final c = context.c;
@@ -82,14 +86,14 @@ class _CategoryDetailState extends State<CategoryDetailScreen> {
         span: 2,
         child: HeroTile(
           valueKey: const ValueKey('detailTotal'),
-          label: name,
+          label: 'Total',
           value: moneyExact(total, cur),
           sub: rangeLabel(range),
           chip: parts.heroChip,
         ),
       ),
       ...parts.tiles,
-      DashItem(span: 2, child: _bars(cur, wc.categoryBars(widget.category, range), '$name per month', 'category')),
+      _bars(cur, wc.categoryBars(widget.category, range), '$name per month', 'category'),
       DashItem(
         span: 2,
         child: Tile(
@@ -142,7 +146,7 @@ class _CategoryDetailState extends State<CategoryDetailScreen> {
           sub: '${rangeLabel(range)} · ${m.count} ${m.count == 1 ? 'payment' : 'payments'} in $name',
         ),
       ),
-      DashItem(span: 2, child: _bars(cur, wc.merchantBars(widget.category, m.key, range), '${m.label} per month', 'merchant')),
+      _bars(cur, wc.merchantBars(widget.category, m.key, range), '${m.label} per month', 'merchant'),
       DashItem(
         span: 4,
         child: PaymentsTile(

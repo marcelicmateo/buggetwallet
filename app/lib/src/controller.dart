@@ -1235,7 +1235,8 @@ class WalletController extends ChangeNotifier {
                 if (!p.deleted && p.title.isNotEmpty) p
             ],
             table: categoryTable,
-            tags: tagTable);
+            tags: tagTable,
+            rules: rulesList);
         logEvent(_searchLog, Level.FINE, 'search.run', {
           'chars': query.length,
           'tx': r.txs.length,
@@ -1243,7 +1244,8 @@ class WalletController extends ChangeNotifier {
           'wish': r.wishlist.length,
           'bills': r.bills.length,
           'planned': r.planned.length,
-          'billsDb': r.billsDb.length
+          'billsDb': r.billsDb.length,
+          'rules': r.rules.length
         });
         return r;
       });

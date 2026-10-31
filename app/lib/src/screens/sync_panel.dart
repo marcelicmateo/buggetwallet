@@ -213,12 +213,13 @@ class _SyncPanelState extends State<SyncPanel> {
           const StatusLabel(key: ValueKey('blobsUnsupported'), good: false, text: blobsUnsupportedText)
         else if (wc.syncBlobsWaiting > 0)
           StatusLabel(key: const ValueKey('blobsWaiting'), good: false, text: blobsWaitingText(wc.syncBlobsWaiting)),
-        if (wc.syncBadFiles > 0)
+        for (final f in wc.syncBlockedFiles) _BlockedFileRow(wc: wc, row: blockedRowOf(f, wc.now)),
+        if (wc.syncBadFiles > wc.syncBlockedFiles.length)
           StatusLabel(
               good: false,
-              text: wc.syncBadFiles == 1
+              text: wc.syncBadFiles - wc.syncBlockedFiles.length == 1
                   ? '1 sync file could not be read. It was skipped and will be tried again.'
-                  : '${wc.syncBadFiles} sync files could not be read. They were skipped and will be tried again.'),
+                  : '${wc.syncBadFiles - wc.syncBlockedFiles.length} sync files could not be read. They were skipped and will be tried again.'),
       ],
       TextField(
         key: const ValueKey('relayCreateToken'),
@@ -269,5 +270,52 @@ class _Info extends StatelessWidget {
       line,
       TextButton(key: okKey, onPressed: onOk, child: const Text('OK')),
     ]);
+  }
+}
+
+/// One blocked peer file (KL): what is wrong, when its device last synced, and (only when the device is gone) "Skip damaged file".
+class _BlockedFileRow extends StatelessWidget {
+  const _BlockedFileRow({required this.wc, required this.row});
+  final WalletController wc;
+  final BlockedRow row;
+
+  Future<void> _skip(BuildContext context) async {
+    final short = row.file.short;
+    logNav('sync.skipAsk');
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text(blockedSkipTitle),
+        content: Text(blockedSkipConfirmText(short)),
+        actions: [
+          TextButton(key: const ValueKey('skipBlockedCancel'), onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+              key: const ValueKey('skipBlockedConfirm'), onPressed: () => Navigator.pop(ctx, true), child: const Text('Skip file')),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    toast(context, blockedSkippedToast);
+    await wc.skipBlocked(row.file);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final f = row.file;
+    return Column(
+      key: ValueKey('blocked:${f.short}-${f.file}'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        StatusLabel(good: false, text: blockedFileText(f.short)),
+        if (row.seen != null) Muted(row.seen!),
+        if (row.hint != null) Muted(row.hint!),
+        if (row.canSkip)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: OutlinedButton(
+                key: ValueKey('skipBlocked:${f.short}-${f.file}'), onPressed: () => _skip(context), child: const Text('Skip damaged file')),
+          ),
+      ],
+    );
   }
 }

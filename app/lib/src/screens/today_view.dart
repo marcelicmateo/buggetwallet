@@ -33,6 +33,7 @@ class TodayView implements Listenable {
   // ---------- reads ----------
   WalletSettings get settings => _wc.settings;
   String get currency => _wc.currency;
+  DateTime get now => _wc.now;
   String today() => _wc.today();
   PeriodBudget period() => _wc.period();
   List<PeriodDay> periodDays() => _wc.periodDays();
