@@ -12,7 +12,13 @@ const digestKind = '_digest';
 
 /// Reserved op kind of a repair record: `{"ask": bool}`, id = the writer's stream. The data ops of a file holding one
 /// are a repair resend and apply with the equal-clock tie-break; `ask` asks every device to resend its state once.
+/// KL: `{"ask": false, "to": "<stream>", "seq": n}` (in a file of records only) asks only the author of stream `to`,
+/// whose file `seq` the writer has quarantined, to resend its state and write a snapshot covering that file; builds
+/// before KL skip it (`ask` is false).
 const repairKind = '_repair';
+
+/// The KL "unblock me" ask: [to]'s file [seq] blocks the writer.
+Op unblockAskOp(String stream, String hlc, String to, int seq) => Op(repairKind, stream, {'ask': false, 'to': to, 'seq': seq}, hlc);
 
 /// Whether [op] is a record ([digestKind], [repairKind]) rather than wallet data.
 bool isSyncRecord(Op op) => op.entity == digestKind || op.entity == repairKind;
@@ -142,6 +148,9 @@ class RunRecords {
   /// The repair asks read (their record clocks = their ids).
   final asks = <String>{};
 
+  /// The KL unblock asks read: id (record clock) → (stream asked, its file that blocks the writer).
+  final unblock = <String, (String, int)>{};
+
   void add(String stream, List<Op> records) {
     for (final op in records) {
       if (op.entity == digestKind) {
@@ -153,6 +162,8 @@ class RunRecords {
         }
       } else if (op.entity == repairKind && op.fields['ask'] == true) {
         asks.add(op.hlc);
+      } else if (op.entity == repairKind && op.fields['to'] is String && op.fields['seq'] is int) {
+        unblock[op.hlc] = (op.fields['to'] as String, op.fields['seq'] as int);
       }
     }
   }

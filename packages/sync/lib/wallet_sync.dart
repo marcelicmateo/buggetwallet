@@ -11,6 +11,7 @@ library;
 export 'src/blob_store.dart' show blobCacheBytesNative, blobCacheBytesWeb, BlobStore, maxBlobPlainBytes;
 export 'src/sync.dart'
     show relayFingerprint, SyncDevice, SyncException, SyncProblem, SyncProblemReason, syncReaderVersion, SyncReport, SyncWaiting;
+export 'src/sync_blocked.dart' show BlockedFile, blockedFiles, skipBlockedFile;
 export 'src/sync_engine.dart'
     show
         DeviceKeyTransport,

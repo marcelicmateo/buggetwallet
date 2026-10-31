@@ -38,6 +38,22 @@ dart:io code ever be needed, it goes in a `*_io.dart` file with a `*_web.dart` t
   their count. Database errors that are about this device (read-only, disk full, I/O, locked) stop the run instead,
   so the file is not refused for good. The quarantine is separate from the cursors: a schema upgrade reads every
   peer file again, an unchanged badKey/corrupt file stays skipped, unknownVersion/applyFailed are tried once more.
+- `sync_blocked.dart` (KL) — a quarantined peer file that blocks (a later file of that stream exists): every complete
+  run rewrites `BlockedBook` (local `syncBlocked` = `{"<stream>/<seq>": {r reason, s since ms, n runs, a asked ms, w
+  author lastSeen ms}}`; author = newest `lastSeen` of any stream of that device id). From its second blocked run the
+  device writes an **unblock ask** (records-only file, `unblockAskOp`: `_repair {ask: false, to: <stream>, seq}`, one
+  record clock per file; older builds skip it since `ask` is false) at most once per file per `SyncEngine.askEvery`
+  (24 h; `sync.unblock.ask {files}`; not while `deviceIdInUse`). The author (an install whose current or listed stream
+  is `to`; ids answered once, like repair asks, and not before `DigestBook.first` − drift) marks `syncUnblock`
+  (`{"<stream>": seq}`), which makes its next caught-up run write a snapshot at once (heal, no 24 h wait; one attempt per
+  ask, mark then cleared; dropped when the newest snapshot covers it) and queues one state resend (`book.send`,
+  `sync.unblock.answer`); the blocked device goes on via `_unblockBySnapshot`. Owner skip: `blockedFiles(repo)` →
+  `BlockedFile {device (stream, never shown), file (seq), reason, since, authorSeen, short}`;
+  `skipBlockedFile(repo, device, file)` stores the quarantined bytes' hash in local `syncSkipped` (newest 64, kept for
+  good, `sync.skipFile {reason}`); `_applyPeer` then treats exactly those bytes as an applied empty file (cursor moves,
+  quarantine record dropped, `sync.file.skipped`); other bytes under that seq (repaired on the relay) are read normally.
+  Its changes are lost on this device until a state resend (the author's, or a digest repair with a device that holds
+  them) brings them back.
 - `sync_digest.dart` (V2) — state digests and the repair: records are ops of reserved kinds inside normal sync files
   (`_digest` `{digest, vector, schema}`, `_repair` `{ask}`; `isSyncRecord`), never stored as data (older builds skip
   unknown kinds). `DigestBook` = one device-local value `syncDigest`: the data vector (per stream, the seq of the last
@@ -166,6 +182,7 @@ dart:io code ever be needed, it goes in a `*_io.dart` file with a `*_web.dart` t
   `h_compat.dart`, `synthetic.dart`); core's own two-device feature tests use the same files.
 - bill files (BlobStore, engine queues, Memory/RelayTransport blob calls):
   `test/blob_store_test.dart` (+ `blob_spec_test.dart`; real relay: `sync_relay_test.dart`).
+- blocked files (KL: ask the author, bounded asks, skip, restart, 3 devices with digest repair): `test/kl_blocked_file_test.dart`.
 - sync self-heal: `test/sync_self_heal_test.dart`, bill-file invariants incl. two devices, GC and the 14 → 15 migration (P14): `test/p14_blob_invariants_test.dart`.
 - State digests and repair (V2; 2 and 3 devices, no ping-pong, devicesDisagree, forged records):
   `test/state_digest_sync_test.dart`.

@@ -16,7 +16,15 @@ void main() {
       expect([r.caughtUp, r.waiting.isEmpty, r.devices.isEmpty], [false, true, true]);
       expect(const SyncException('x').toString(), 'x');
       expect(SyncEngine(MemoryTransport(), VaultKey.generate(), appVersion: '1.2').build, endsWith('+1.2'));
-      for (final f in ['sync_engine.dart', 'sync_memory.dart', 'sync_relay.dart', 'sync.dart', 'sync_problems.dart', 'blob_store.dart']) {
+      for (final f in [
+        'sync_engine.dart',
+        'sync_memory.dart',
+        'sync_relay.dart',
+        'sync.dart',
+        'sync_problems.dart',
+        'sync_blocked.dart',
+        'blob_store.dart'
+      ]) {
         expect(File('lib/src/$f').readAsStringSync(), isNot(contains("import 'dart:io'")), reason: f);
       }
     });

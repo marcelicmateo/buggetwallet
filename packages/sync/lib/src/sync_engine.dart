@@ -7,6 +7,7 @@ import 'package:sqlite3/common.dart' show SqliteException;
 import 'package:wallet_core/wallet_core.dart';
 
 import 'sync.dart';
+import 'sync_blocked.dart';
 import 'sync_digest.dart';
 import 'sync_problems.dart';
 import 'sync_relay.dart' show EnrolResult;
@@ -545,6 +546,14 @@ class SyncEngine {
   /// (`{"<peer>/<device>": [ack, ms]}`); and when this device last wrote a heal snapshot (ms).
   static const stuckKey = 'syncPeerStuck', healKey = 'syncHealAt';
 
+  /// Device-local (KL): the files of this install's streams a peer asked it to cover with a snapshot, because that peer
+  /// quarantined them and they block it (`{"<stream>": seq}`). Kept until the relay's newest snapshot covers them; while
+  /// one is not covered, a caught-up run writes a snapshot at once (like a heal, without waiting [stuckAfter]).
+  static const unblockKey = 'syncUnblock';
+
+  /// KL: a device blocked on a quarantined file for more than one run asks that file's author at most this often.
+  static const askEvery = Duration(hours: 24);
+
   /// Device-local: when (ms) a pruned file left only a snapshot of an older schema to start from while this device
   /// started from nothing (empty cursors: a schema-bump replay or a new install), so it may lack record kinds the old
   /// build skipped and another device still holds. Until then + [wantCurrentFor] it writes no snapshot (the relay's
@@ -805,7 +814,7 @@ class SyncEngine {
         if (book.vector.remove(d) != null) book.save(repo);
       }
     }
-    final run = _ApplyRun(state, cursors, BadFiles.load(repo), _BadSnapshots.load(repo));
+    final run = _ApplyRun(state, cursors, BadFiles.load(repo), _BadSnapshots.load(repo), SkippedFiles.load(repo));
     final problems = <SyncProblem>[if (inUse != null) inUse];
     final waiting = <SyncWaiting>[];
     try {
@@ -824,6 +833,7 @@ class SyncEngine {
       if (run.badChanged) run.bad.save(repo);
       run.badSnaps.save(repo);
     }
+    final blockedBook = _trackBlocked(repo, run, _now());
 
     // 4. Ack what was applied.
     final now = _now();
@@ -862,7 +872,9 @@ class SyncEngine {
     _setMap(repo, ackedKey, stored);
 
     // 5. Caught up: match, and maybe write a snapshot.
-    final heal = _trackStuck(repo, state, cursors, myLast, now, stream, {...ownOld, stream});
+    final mine = {...ownOld, stream};
+    final unblockAsks = _takeUnblockAsks(repo, mine);
+    final heal = _trackStuck(repo, state, cursors, myLast, now, stream, mine) | _unblockWanted(repo, state, mine);
     // deviceIdInUse is information about this install's own stream (already handled), not a file left unread.
     final caughtUp = waiting.isEmpty &&
         problems.every((p) => p.reason == SyncProblemReason.deviceIdInUse) &&
@@ -890,8 +902,24 @@ class SyncEngine {
       // name another file for that bill: a set from it could let GC drop theirs. The snapshot goes, its set does not.
       final fullHeld = waitingRefs.any((h) => blobFailures[h] == TransportFailure.full);
       await _maybeSnapshot(repo, state, cursors, myLast, now, heal: heal, heldBlobs: heldBlobs, declare: !fullHeld);
+      // One snapshot attempt per unblock ask: the asker asks again after [askEvery] if it is still blocked.
+      if (repo.localValue(unblockKey) != null) {
+        repo.setLocalValue(unblockKey, null);
+        logEvent(_log, Level.INFO, 'sync.unblock.snapshot');
+      }
     } else {
       logEvent(_log, Level.INFO, 'sync.match.waiting', {'waiting': waiting.length, 'bad': problems.length});
+    }
+
+    // KL: blocked behind a quarantined file for more than one run: ask its author (records only, once per file per
+    // [askEvery]). An unblock ask read here is answered with one resend of this device's state.
+    if (inUse == null && await _askAuthors(repo, blockedBook, myLast, stream, now)) myLast++;
+    if (unblockAsks > 0 && book.send == null) {
+      final n = repo.queueStateResend();
+      book
+        ..send = _recordHlc(repo)
+        ..save(repo);
+      logEvent(_log, Level.WARNING, 'sync.unblock.answer', {'asks': unblockAsks, 'ops': n});
     }
 
     // 6. State digests (V2): answer a repair ask, compare with the peers' digests, send this device's own.
@@ -1070,11 +1098,11 @@ class SyncEngine {
   /// Uploads [records] alone as this device's next file (after [myLast], which must be what [sentKey] says, else
   /// nothing is sent). Best effort: a failure is logged and the run goes on (the digest is sent after the next data
   /// change). Clears the digest's dirty mark once stored.
-  Future<void> _putRecords(WalletRepo repo, int myLast, List<Op> records) async {
+  Future<bool> _putRecords(WalletRepo repo, int myLast, List<Op> records, {bool digest = true}) async {
     final me = _streamOf(repo);
     if (int.tryParse(repo.localValue(sentKey) ?? '') != myLast) {
       logEvent(_log, Level.INFO, 'sync.digest.notSent', {'reason': 'marker'});
-      return;
+      return false;
     }
     final seq = myLast + 1;
     final sealed = await seal(_filePayload(records), key, aad: aadSyncFile(me, seq));
@@ -1092,17 +1120,20 @@ class SyncEngine {
       // it: [sendingKey] stays, so the next run recognises its own file.
       if (e.failure == TransportFailure.conflict) repo.setLocalValue(sendingKey, null);
       logEvent(_log, Level.WARNING, 'sync.digest.notSent', {'reason': e.failure.name});
-      return;
+      return false;
     }
     final written = _list(repo, streamsKey);
     if (!written.contains(me)) _setList(repo, streamsKey, [...written, me]);
     repo.recordSyncFile(me, seq, 0);
     repo.setLocalValue(sentKey, '$seq');
     repo.setLocalValue(sendingKey, null);
-    _book!
-      ..dirty = false
-      ..save(repo);
+    if (digest) {
+      _book!
+        ..dirty = false
+        ..save(repo);
+    }
     logEvent(_log, Level.FINE, 'sync.digest.sent', {'records': records.length, 'bytes': sealed.length});
+    return true;
   }
 
   /// Step 2: starts from the relay's snapshot when a file a peer still needs was pruned, or when this device has applied
@@ -1175,8 +1206,18 @@ class SyncEngine {
         logEvent(_log, Level.WARNING, 'sync.file.unreadable', {'seq': seq, 'failure': e.failure.name});
         return _PeerWaiting(SyncWaiting(_short(d), seq), SyncProblem(_short(d), SyncProblemReason.unreadable, bytes: 0));
       }
-      final was = run.bad.byKey[k];
-      if (was != null && !was.retryNow(build, repo.clock.now()) && was.hash == await fileHash(bytes)) {
+      final was = run.bad.byKey[k], skip = run.skipped.byKey[k];
+      final hash = was != null || skip != null ? await fileHash(bytes) : null;
+      if (skip != null && skip == hash) {
+        // KL: the owner skipped these bytes (skipBlockedFile): applied as an empty file, never read again.
+        if (run.bad.byKey.remove(k) != null) run.badChanged = true;
+        repo.setSyncCursor(d, seq);
+        repo.recordSyncFile(d, seq, 0);
+        run.applied(d, seq, changed: 0, ops: 0, bytes: bytes.length);
+        logEvent(_log, Level.WARNING, 'sync.file.skipped', {'seq': seq});
+        continue;
+      }
+      if (was != null && !was.retryNow(build, repo.clock.now()) && was.hash == hash) {
         run.listed.add(k);
         return _PeerBlocked(SyncWaiting(_short(d), seq, reason: was.reason), was.problem(isNew: false));
       }
@@ -1587,6 +1628,96 @@ class SyncEngine {
     return !recent;
   }
 
+  /// KL: rewrites [BlockedBook] from a complete apply pass: every quarantined file a peer stopped at while a later file
+  /// of it exists (so it blocks), with since when, in how many runs, when this device last asked its author, and when
+  /// the author (any stream of its device id) was last seen by the relay. Files no longer blocking are dropped.
+  BlockedBook _trackBlocked(WalletRepo repo, _ApplyRun run, DateTime now) {
+    final old = BlockedBook.load(repo), state = run.state;
+    final seenById = <String, int>{};
+    for (final MapEntry(key: d, value: dev) in state.devices.entries) {
+      final ms = dev.lastSeen?.millisecondsSinceEpoch;
+      final b = streamBase(d);
+      if (ms != null && ms > (seenById[b] ?? 0)) seenById[b] = ms;
+    }
+    final next = <String, BlockedEntry>{};
+    for (final MapEntry(key: d, value: (w, _)) in run.blocked.entries) {
+      final reason = w.reason;
+      if (reason == null || w.seq >= (state.devices[d]?.last ?? 0)) continue;
+      final k = BadFile.keyOf(d, '${w.seq}'), was = old.byKey[k];
+      next[k] = BlockedEntry(reason,
+          since: was?.since ?? now.millisecondsSinceEpoch, runs: (was?.runs ?? 0) + 1, asked: was?.asked, seen: seenById[streamBase(d)]);
+    }
+    final book = BlockedBook(next);
+    if (next.isNotEmpty || old.byKey.isNotEmpty) book.save(repo);
+    final fresh = next.keys.where((k) => !old.byKey.containsKey(k)).length;
+    if (fresh > 0 || next.length != old.byKey.length) logEvent(_log, Level.INFO, 'sync.blocked', {'files': next.length, 'new': fresh});
+    return book;
+  }
+
+  /// KL: a file that has blocked this device for more than one run gets an unblock ask to its author (a records-only
+  /// file, [unblockAskOp]), at most once per file per [askEvery]. Returns whether that file was stored (it is this
+  /// device's next seq).
+  Future<bool> _askAuthors(WalletRepo repo, BlockedBook book, int myLast, String stream, DateTime now) async {
+    final nowMs = now.millisecondsSinceEpoch;
+    final due = [
+      for (final MapEntry(key: k, value: b) in book.byKey.entries)
+        // Not an old stream of this device id: this install never reads its own asks.
+        if (b.runs >= 2 &&
+            (b.asked == null || nowMs - b.asked! >= askEvery.inMilliseconds) &&
+            streamBase(k.substring(0, k.lastIndexOf('/'))) != repo.deviceId)
+          (k, b)
+    ];
+    if (due.isEmpty) return false;
+    final wall = repo.clock.now();
+    final ops = [
+      // One record clock (= ask id) per file: the author answers each id once.
+      for (final (i, (k, _)) in due.indexed)
+        unblockAskOp(stream, Hlc(wall, i, repo.deviceId).toString(), k.substring(0, k.lastIndexOf('/')),
+            int.parse(k.substring(k.lastIndexOf('/') + 1))),
+    ];
+    if (!await _putRecords(repo, myLast, ops, digest: false)) return false;
+    for (final (_, b) in due) {
+      b.asked = nowMs;
+    }
+    book.save(repo);
+    logEvent(_log, Level.WARNING, 'sync.unblock.ask', {'files': due.length});
+    return true;
+  }
+
+  /// KL: the unblock asks read in this run that name one of this install's streams ([mine]) and that it has not answered
+  /// yet (by id; asks written before this device's first V2 run are ignored, like repair asks): each marks its file in
+  /// [unblockKey]. Returns how many were taken (the caller queues one state resend for them).
+  int _takeUnblockAsks(WalletRepo repo, Set<String> mine) {
+    final recs = _records!, book = _book!;
+    if (recs.unblock.isEmpty) return 0;
+    final since = (book.first ?? 0) - maxClockDrift.inMilliseconds;
+    final marks = _map(repo, unblockKey);
+    var n = 0;
+    for (final MapEntry(key: id, value: (to, seq)) in recs.unblock.entries) {
+      if (!mine.contains(to) || book.answered.contains(id) || Hlc.parse(id).millis < since) continue;
+      book.answer(id);
+      n++;
+      if (((marks[to] as int?) ?? 0) < seq) marks[to] = seq;
+    }
+    if (n == 0) return 0;
+    book.save(repo);
+    _setMap(repo, unblockKey, marks);
+    logEvent(_log, Level.INFO, 'sync.unblock.asked', {'asks': n});
+    return n;
+  }
+
+  /// KL: whether a file in [unblockKey] still needs a snapshot (the relay's newest does not cover it); marks of covered
+  /// files, of streams this install no longer writes, or the relay no longer lists are dropped.
+  bool _unblockWanted(WalletRepo repo, RelayState state, Set<String> mine) {
+    final marks = _map(repo, unblockKey);
+    if (marks.isEmpty) return false;
+    final covers = state.snapshot?.covers ?? const <String, int>{};
+    final n = marks.length;
+    marks.removeWhere((s, seq) => seq is! int || !mine.contains(s) || !state.devices.containsKey(s) || (covers[s] ?? 0) >= seq);
+    if (marks.length != n) _setMap(repo, unblockKey, marks);
+    return marks.isNotEmpty;
+  }
+
   /// Writes a snapshot when the newest is older than [snapshotAge] or [snapshotOpsBehind] ops behind, or at once with
   /// [heal] ([_trackStuck]) (called only when caught up). Failures are logged: another device may simply have written a
   /// newer one.
@@ -1727,7 +1858,10 @@ class _ApplyRun {
   /// Every peer was tried and the waiting list built: only then are quarantine records forgotten.
   var complete = false;
 
-  _ApplyRun(this.state, this.cursors, this.bad, this.badSnaps);
+  /// The files the owner skipped (KL, [skipBlockedFile]).
+  final SkippedFiles skipped;
+
+  _ApplyRun(this.state, this.cursors, this.bad, this.badSnaps, this.skipped);
 
   int cur(String d) => cursors[d] ?? 0;
 
