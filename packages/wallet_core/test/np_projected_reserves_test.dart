@@ -153,13 +153,13 @@ void main() {
       expect(projected.total, 5000 + 4 * 1500 + 30000 + 60000 + 20000 + 4000 + 2500);
       expect(projected.count, 10);
       expect(cycleKeys(projected.cycles), [
-        '$quarterly@2026-11-01',
         '$weekly@2026-11-12',
         '$weekly@2026-11-19',
         '$monthly@2026-11-24',
         '$weekly@2026-11-26',
         '$instalment@2026-11-27',
         '$weekly@2026-12-03',
+        '$quarterly@2027-01-31', // due 1 Nov (before the start): paid, the next cycle is held
         '$yearly@2027-03-01',
       ]);
       expect([for (final p in projected.planned) p.id], ['p1', 'bill:bbb']);
@@ -180,9 +180,86 @@ void main() {
       expect(p.end, end);
       expect(p.beforePayday, projected.total);
       expect(p.beforePaydayCount, projected.count);
-      expect([for (final c in p.reservedCycles) '${c.bill.id}:${c.reserve}']..sort(),
-          [for (final c in projected.cycles) '${c.bill.id}:${c.reserve}']..sort());
+      expect(cycleKeys(p.reservedCycles), cycleKeys(projected.cycles));
+      expect([for (final c in p.reservedCycles) c.reserve], [for (final c in projected.cycles) c.reserve]);
       expect([for (final x in p.reservedPlannedRows) x.id], [for (final x in projected.planned) x.id]);
+    });
+  });
+
+  group('long bills against the period that starts', () {
+    late WalletRepo r;
+    var now = DateTime.utc(2026, 10, 20, 12).millisecondsSinceEpoch;
+    setUp(() => r = WalletRepo.inMemory(now: () => now));
+    tearDown(() => r.close());
+
+    ImportBatch batch(List<NormalizedTransaction> rows) => ImportBatch(source: 'pbz', transactions: rows);
+    List<CategorizedTx> cats() {
+      final cz = r.categorizer();
+      return [for (final t in r.transactions()) cz.categorize(t)];
+    }
+
+    PeriodReserves projectNow(String start, String end) => projectedReserves(
+        start: start, end: end, bills: r.recurringBills(), txs: cats(), planned: const [], currency: 'EUR', table: r.categoryTable());
+
+    PeriodBudget startPeriod(String start) {
+      r.refreshRecurring(start);
+      return computePeriod(cats(), settings(start), const [], start, bills: r.recurringBills(), table: r.categoryTable());
+    }
+
+    test('parts paid of a cycle due before the start do not lower the next cycle: held in full', () {
+      now = DateTime.utc(2026, 10, 26, 12).millisecondsSinceEpoch;
+      const start = '2026-11-10', end = '2026-12-10';
+      final id = r.addRecurring(
+          label: 'Insurance',
+          category: 'Car & transport',
+          amount: 30000,
+          intervalDays: 91,
+          firstDue: '2026-11-01',
+          payee: key('Brindle Cover'));
+      r.importBatch(batch([pay('2026-10-25', 10000, 'Brindle Cover')])); // one part of the 1 Nov cycle
+      r.refreshRecurring('2026-10-26');
+      final running =
+          computePeriod(cats(), settings('2026-10-10'), const [], '2026-10-26', bills: r.recurringBills(), table: r.categoryTable());
+      expect(running.reservedCycles.single.reserve, 20000); // this period: the rest of the 1 Nov cycle
+      final projected = projectNow(start, end);
+      expect(cycleKeys(projected.cycles), ['$id@2027-01-31']);
+      expect(projected.total, 30000);
+
+      // The rest is paid on the due date: the parts add up, the cycle after is due 31 Jan.
+      now = DateTime.utc(2026, 11, 10, 12).millisecondsSinceEpoch;
+      r.importBatch(batch([pay('2026-11-01', 20000, 'Brindle Cover')]));
+      final p = startPeriod(start);
+      expect((p.beforePayday, p.beforePaydayCount), (projected.total, projected.count));
+      expect(cycleKeys(p.reservedCycles), cycleKeys(projected.cycles));
+    });
+
+    test('a long bill due inside the next period stays as it is, parts already paid towards it included', () {
+      now = DateTime.utc(2026, 11, 6, 12).millisecondsSinceEpoch;
+      const start = '2026-11-10', end = '2026-12-10';
+      final id = r.addRecurring(
+          label: 'Insurance',
+          category: 'Car & transport',
+          amount: 30000,
+          intervalDays: 91,
+          firstDue: '2026-11-15',
+          payee: key('Brindle Cover'));
+      final other = r.addRecurring(
+          label: 'Licence',
+          category: 'Car & transport',
+          amount: 60000,
+          intervalDays: 365,
+          firstDue: '2026-12-01',
+          payee: key('Tarnwick Roads'));
+      r.importBatch(batch([pay('2026-11-05', 10000, 'Brindle Cover')])); // a part of the 15 Nov cycle, paid early
+      r.refreshRecurring('2026-11-06');
+      final projected = projectNow(start, end);
+      expect(cycleKeys(projected.cycles), ['$id@2026-11-15', '$other@2026-12-01']);
+      expect([for (final c in projected.cycles) c.reserve], [20000, 60000]);
+
+      now = DateTime.utc(2026, 11, 10, 12).millisecondsSinceEpoch;
+      final p = startPeriod(start);
+      expect((p.beforePayday, p.beforePaydayCount), (projected.total, projected.count));
+      expect(cycleKeys(p.reservedCycles), cycleKeys(projected.cycles));
     });
   });
 

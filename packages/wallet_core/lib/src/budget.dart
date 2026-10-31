@@ -612,7 +612,9 @@ class PeriodReserves {
 /// a [RecurringBill.finished] one is left as it is) that is not [RecurringBill.isLong] gets as `nextDue` its first
 /// occurrence in the period ([billOccurrences] over `[start, end − 1]`, the Upcoming rows' rule), or, with no occurrence
 /// there, its first date on or after [start] ([firstDueFrom]): such a bill holds nothing but still covers its slips as it
-/// will then. A long bill is kept as it is (held for its `nextDue` cycle whatever the date, as [dueCycles] holds it).
+/// will then. A [RecurringBill.isLong] bill moves to [firstDueFrom] too (its `nextDue` when not before [start]): held
+/// for that cycle whatever the date, as [dueCycles] holds it, so a cycle due before [start] is paid and the next one is
+/// held in full (parts paid of the old cycle never lower it; parts already paid of a cycle due on or after [start] do).
 /// Then the period's own path ([computePeriod]: [dueCycles], [DueCycle.coveredIn], [duePlanned] from [start],
 /// [plannedReserves] with these bills and their cycles). [txs] = the rows bills are matched on ([computePeriod]'s
 /// `matchRows`: parts already paid count). So `projectedReserves(...).total` == `computePeriod(...).beforePayday` on
@@ -634,11 +636,11 @@ PeriodReserves projectedReserves(
   final moved = <RecurringBill>[];
   for (final b in bills) {
     if (b.isIncome || !b.confirmed) continue;
-    if (b.isLong || b.finished || !isIsoDate(b.nextDue)) {
+    if (b.finished || !isIsoDate(b.nextDue)) {
       moved.add(b);
       continue;
     }
-    final occ = billOccurrences(b, start, last);
+    final occ = b.isLong ? const <String>[] : billOccurrences(b, start, last);
     final due = occ.isNotEmpty ? occ.first : firstDueFrom(b, start);
     moved.add(due == b.nextDue ? b : b.copyWith(nextDue: due));
   }
