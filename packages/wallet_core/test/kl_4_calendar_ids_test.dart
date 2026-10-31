@@ -134,7 +134,7 @@ void main() {
       expect(r.plannedCosts(includeClosed: true).single.id, 'calendar:${e.ref}');
     });
 
-    test('a legacy row and a new-ref row of the same event: listed and exported once', () {
+    test('RF4: a legacy row and a new-ref row of the same event both reserve, so both are listed and exported', () {
       final e = ev('u4@example.invalid', 'Synth dinner', at: 1140);
       final old = PlannedCost(
           id: 'calendar:${e.legacyRef}',
@@ -146,13 +146,23 @@ void main() {
       final fresh = PlannedCost(
           id: 'calendar:${e.ref}', title: 'Synth dinner', date: e.date, amount: 4000, source: PlannedSource.calendar, sourceRef: e.ref);
       final items = upcoming(planned: [old, fresh], bills: const [], events: [e], from: '2026-03-01', to: '2026-03-31');
-      expect(items.map((i) => i.key), ['p:${fresh.id}']);
-      final text = plannedIcs([old, fresh], const [], from: '2026-03-01', to: '2026-03-31', events: [e]);
-      expect('BEGIN:VEVENT'.allMatches(text), hasLength(1));
-      expect(text, contains('planned-${fresh.id}'));
-      // Another same-name event without its own new-ref row keeps the legacy row standing for it.
-      final twin = ev('u5@example.invalid', 'Synth dinner', at: 600);
-      expect(supersededIdsFor([old, fresh], [e, twin]), isEmpty);
+      expect(items.map((i) => i.key).toSet(), {'p:${old.id}', 'p:${fresh.id}'}, reason: 'the owner sees both and can delete one');
+      final today = computePeriod(const [], _st, const [], '2026-03-01', planned: [old, fresh], table: CategoryTable.builtIn);
+      expect(items.fold<int>(0, (s, i) => s + (i.amount ?? 0)), today.reservedPlanned, reason: 'Upcoming = Today, exactly');
+      final text = plannedIcs([old, fresh], const [], from: '2026-03-01', to: '2026-03-31');
+      expect('BEGIN:VEVENT'.allMatches(text), hasLength(2));
+      expect(text, allOf(contains('planned-${old.id}'), contains('planned-${fresh.id}')));
+      // Deleting one leaves one row, listed and reserved once.
+      final gone = PlannedCost(
+          id: old.id,
+          title: old.title,
+          date: old.date,
+          amount: 4000,
+          source: PlannedSource.calendar,
+          sourceRef: e.legacyRef,
+          deleted: true);
+      final left = upcoming(planned: [gone, fresh], bills: const [], events: [e], from: '2026-03-01', to: '2026-03-31');
+      expect(left.map((i) => i.key), ['p:${fresh.id}']);
     });
   });
 
@@ -221,16 +231,4 @@ void main() {
       expect(sugg(b.repo.plannedCosts(includeClosed: true), [e1, e2]), isEmpty);
     });
   });
-}
-
-/// The rows [upcoming] leaves out as superseded, read through its output (the helper is not in the barrel).
-Set<String> supersededIdsFor(List<PlannedCost> planned, List<CalendarEvent> events) {
-  final listed = {
-    for (final i in upcoming(planned: planned, bills: const [], events: events, from: '2026-03-01', to: '2026-03-31'))
-      if (i.planned != null) i.planned!.id
-  };
-  return {
-    for (final p in planned)
-      if (p.isOpen && !listed.contains(p.id)) p.id
-  };
 }

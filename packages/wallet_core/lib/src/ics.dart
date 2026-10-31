@@ -618,17 +618,16 @@ String _compact(String iso) => iso.replaceAll('-', '');
 /// and per occurrence of a confirmed bill ([billOccurrences]),
 /// dated in [from, to]. `SUMMARY` = `<title> · <amount>` ([_euroText], so [amountFromText] reads the amount back),
 /// stable UIDs (`planned-<id>@budget-wallet`, `bill-<id>-<yyyymmdd>@budget-wallet`), `DTSTAMP` from [from] so the same
-/// data gives the same text. CRLF, folded at 75 octets, text escaped. KL-A: with the calendar [events] read on this
-/// device, a legacy-ref row that a new-ref row stands for ([supersededCalendarRows]) is not exported twice;
-/// [payeeAliases] as in `billPayeeKey`.
+/// data gives the same text. CRLF, folded at 75 octets, text escaped. Every such row is exported, also both rows of an
+/// event two builds decided under its legacy and its new ref (both reserve, as in `upcoming`); [payeeAliases] as in
+/// `billPayeeKey`.
 String plannedIcs(List<PlannedCost> planned, List<RecurringBill> bills,
-    {required String from, required String to, Map<String, String> payeeAliases = const {}, List<CalendarEvent> events = const []}) {
+    {required String from, required String to, Map<String, String> payeeAliases = const {}}) {
   final rows = <(String uid, String date, String title, int amount)>[];
   if (isIsoDate(from) && isIsoDate(to) && from.compareTo(to) <= 0) {
     bool inRange(String d) => d.compareTo(from) >= 0 && d.compareTo(to) <= 0;
-    final superseded = supersededCalendarRows(planned, events);
     for (final p in planned) {
-      if (p.deleted || p.status == PlannedStatus.skipped || p.amount == null || superseded.contains(p.id)) continue;
+      if (p.deleted || p.status == PlannedStatus.skipped || p.amount == null) continue;
       if (plannedCoverage(p, bills, payeeAliases: payeeAliases) case final c? when c.occurrence == null || inRange(c.occurrence!)) continue;
       if (p.date.compareTo(from) < 0 || p.date.compareTo(to) > 0 || !isIsoDate(p.date)) continue;
       rows.add(('planned-${p.id}@budget-wallet', p.date, p.title, p.amount!));

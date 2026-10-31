@@ -828,7 +828,10 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
 - Calendar refs (KL-A, `calendarEventRef`): stable uid + date + start time, else normalized title + date + start time;
   the same event read from two sources (phone calendar and an `.ics` link with another uid) gives two suggestions. A
   title without letters and no uid gets a per-calendar ref, so its "No cost" or confirm on one device does not reach
-  the same event read on another device. A huge `.ics` file
+  the same event read on another device. A pre-KL decision stored under the legacy title + date ref applies to every
+  event with that title on that day (pre-KL builds could not tell them apart). Two builds deciding the same event (one
+  under the legacy ref, one under the new) leave two rows: both reserve, and Upcoming and the `.ics` export list both
+  (Upcoming = Today, exactly), so the owner deletes one. A huge `.ics` file
   (over 10⁶ recurrence steps) gives later recurring events their first in-range occurrence only.
 
 ## Tests
