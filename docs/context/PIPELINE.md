@@ -59,15 +59,16 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 ## Owner grill 2026-10-31 (answers in `OWNER_DECISIONS_2026-10-31.md`)
 | # | Item | Agent | Branch | Depends on | Status |
 |---|---|---|---|---|---|
-| G1 | App fixes: demoWallet fixture independent of the real date; first start without salary = last expected payday (controller.dart ~870); report "Salary late" + days left from the report's end; one-time device-approval prompt; D2 Unlink + "matched" mark | ui-builder (sonnet/high) | worktree | RX7e | queued (next) |
-| G2 | Stage run (test, desktop, web) + review, then push v2 | lead + haiku watcher + reviewer | v2 | G1 | queued |
+| G1 | App fixes: demoWallet fixture independent of the real date; first start without salary = last expected payday (controller.dart ~870); report "Salary late" + days left from the report's end; one-time device-approval prompt; D2 Unlink + "matched" mark | ui-builder (sonnet/high) | worktree | RX7e | done 9df704f merged 3dc7591 (app 2363; Unlink blocked on core → D2) |
+| G2 | Stage run (test, desktop, web) + review, then push v2 | lead + haiku watcher + reviewer | v2 | G1 | running (stage run 3 + review of 99eb765..3dc7591) |
 | RX8 | Tag detail dashboard, 4 columns on desktop, layout tests, screenshots | scout → ui-builder | worktree | G2 | queued |
 | ZC | Zoomable graphs (`ZC_SPEC.md`), "budget share" label | scout → core + test-writer + ui | worktrees | RX8 | queued after RX8 |
 | KL | Known limits fixed: Upcoming = Today reserved; planned cost auto-Paid (same category, exact amount, ±3 days, Undo); search rule names; slip alias picker; calendar ids (UID/event id + time); "Add as new" copy id per device; damaged file: ask author resend + "Skip damaged file" | core-builder + ui-builder | worktrees | G2 | queued (parallel with RX8 where files don't overlap) |
-| T1 | Trim: remove install-hooks.sh, quadlet files + setup.md parts, ci-watcher agent, deleted desktop tests' history lines | lead (devops if build.sh changes) | v2 | – | queued |
+| T1 | Trim: remove install-hooks.sh, quadlet files + setup.md parts, ci-watcher agent, deleted desktop tests' history lines | devops (sonnet/medium) | worktree | – | done c5f7e0f merged 87e6023 (lint + native dry-runs ok) |
 | T2 | Remove merged agent worktrees (28 GB), list unmerged | lead | – | G2 | queued |
-| T3 | Ruflo: token use per commit vs baseline → owner decides | lead | – | – | queued |
+| T3 | Ruflo: token use per commit vs baseline → owner decides | lead | – | – | done: per non-merge commit 3.6M → 8.1M tokens (confounded by heavier work, no saving seen); owner: disable; ruflo-mods/swarm/console disabled (local scope) 2026-10-31 |
 | T4 | Re-sync the design-system artifact (Paper Tiles tokens, dash kit) | ui-builder | – | – | queued (before ZC mockups) |
+| D2 | Core `unlinkMatch`/`relinkMatch` + synced `match_off` (schema 19: every device updates together), then the sheet's Unlink button + Undo toast | core-builder (session/high) → ui | worktree | G1 | core running |
 | M6+ | M6 checklist: add key-rotation drill; Pi setup starts with a CG-NAT check; Lenovo VPN relay until then | lead | – | – | queued |
 
 ## Stage HP: hardening pass during the M6 live test (2026-10-30; tests and reviews only, bug fixes with a test)
