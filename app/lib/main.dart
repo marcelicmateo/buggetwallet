@@ -128,9 +128,7 @@ class _BudgetWalletAppState extends State<BudgetWalletApp> {
       final done = wc.takeAutoPaid();
       if (done.isEmpty) return;
       toastOn(messenger, wc.autoPaidText(done),
-          wide: layoutOf(ctx) != LayoutSize.compact,
-          accessible: MediaQuery.accessibleNavigationOf(ctx),
-          actionLabel: 'Undo', onAction: () {
+          wide: layoutOf(ctx) != LayoutSize.compact, accessible: MediaQuery.accessibleNavigationOf(ctx), actionLabel: 'Undo', onAction: () {
         logNav('planned.autoPaid.undo');
         wc.undoAutoPaid(done);
       });
