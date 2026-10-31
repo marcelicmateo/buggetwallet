@@ -82,27 +82,61 @@ class IncomeSpendingBar {
   int get net => income + extra - spent;
 
   @override
-  String toString() => 'IncomeSpendingBar(${span.start}..${span.end}, ${bucket.name}, $income, $extra, $spent${partial ? ', partial' : ''})';
+  bool operator ==(Object other) =>
+      other is IncomeSpendingBar &&
+      other.span == span &&
+      other.bucket == bucket &&
+      other.income == income &&
+      other.extra == extra &&
+      other.spent == spent &&
+      other.partial == partial;
+
+  @override
+  int get hashCode => Object.hash(span, bucket, income, extra, spent, partial);
+
+  @override
+  String toString() =>
+      'IncomeSpendingBar(${span.start}..${span.end}, ${bucket.name}, $income, $extra, $spent${partial ? ', partial' : ''})';
 }
 
-/// One bar of [budgetSeries]. [budgeted] is exact for a month or quarter (the month budgets summed) and the pro-rated
-/// share below a month ([prorated]); [actual] = the budgeted categories' spending in [span] (refunds subtracted).
+/// One bar of [budgetSeries]. [budgeted] is exact for a whole month or quarter (the month budgets summed) and the
+/// pro-rated share otherwise ([prorated]: a day or week, or a month/quarter the window clips); [actual] = the budgeted
+/// categories' spending in [span] (refunds subtracted); [over] = Σ per category of max(0, actual_c − share_c), as
+/// `BudgetMonth.over`.
 class BudgetBar {
   final DateRange span;
   final Bucket bucket;
   final int budgeted;
   final int actual;
+  final int over;
   final bool prorated;
   final bool partial;
   const BudgetBar(
-      {required this.span, required this.bucket, required this.budgeted, required this.actual, required this.prorated, required this.partial});
-
-  /// How far [actual] is above [budgeted] (0 when within).
-  int get over => actual > budgeted ? actual - budgeted : 0;
+      {required this.span,
+      required this.bucket,
+      required this.budgeted,
+      required this.actual,
+      required this.over,
+      required this.prorated,
+      required this.partial});
 
   @override
-  String toString() =>
-      'BudgetBar(${span.start}..${span.end}, ${bucket.name}, $budgeted, $actual${prorated ? ', prorated' : ''}${partial ? ', partial' : ''})';
+  bool operator ==(Object other) =>
+      other is BudgetBar &&
+      other.span == span &&
+      other.bucket == bucket &&
+      other.budgeted == budgeted &&
+      other.actual == actual &&
+      other.over == over &&
+      other.prorated == prorated &&
+      other.partial == partial;
+
+  @override
+  int get hashCode => Object.hash(span, bucket, budgeted, actual, over, prorated, partial);
+
+  @override
+  String toString() => 'BudgetBar(${span.start}..${span.end}, ${bucket.name}, $budgeted, $actual, over $over'
+      '${prorated ? ', prorated' : ''}${partial ? ', partial' : ''})';
 }
 
 /// Per-day sums of one wallet's money, built in one pass over the expanded list (P6: split parts, never the whole
@@ -128,8 +162,8 @@ class DayIndex {
   final List<String?> _merchant;
   final Map<String, List<int>> _cache = {};
 
-  DayIndex._(this.table, this._currency, this._days, this._spentP, this._incomeP, this._extraP, this._rows, this._rowDay,
-      this._byCategory, this._byTag)
+  DayIndex._(this.table, this._currency, this._days, this._spentP, this._incomeP, this._extraP, this._rows, this._rowDay, this._byCategory,
+      this._byTag)
       : _merchant = List<String?>.filled(_rows.length, null);
 
   factory DayIndex(List<CategorizedTx> expanded, {required String currency, CategoryTable? table}) {
@@ -220,7 +254,8 @@ class DayIndex {
 
   List<int> _spentPrefix(String? category, String? tag, String? merchant) {
     if (category == null && tag == null && merchant == null) return _spentP;
-    final key = '${category == null ? '-' : '+$category'}\u0000${tag == null ? '-' : '+$tag'}\u0000${merchant == null ? '-' : '+$merchant'}';
+    final key =
+        '${category == null ? '-' : '+$category'}\u0000${tag == null ? '-' : '+$tag'}\u0000${merchant == null ? '-' : '+$merchant'}';
     final hit = _cache[key];
     if (hit != null) return hit;
     final Iterable<int> candidates = category != null
@@ -275,43 +310,49 @@ List<IncomeSpendingBar> incomeSeries(DayIndex ix, DateRange window, Bucket b, {r
 }
 
 /// Budgets ([budgets]: category → cents per calendar month, `WalletSettings.categoryBudgets`) against the spending of
-/// the budgeted categories ([category] null: every category in [budgets]; else that one) per bucket of [window].
-/// Children count in their parent ([table], as `budgetVsActual`).
-/// - Month and quarter: budgets are monthly (owner decision 2026-10-20), so a bar is the WHOLE calendar month or
-///   quarter, also when the window cuts it (a pay-period window shows the months it touches), with the exact budgets
-///   summed; for whole months `budgeted`/`actual` equal `budgetVsActualSeries`. [BudgetBar.partial] = it holds today.
-/// - Week and day (owner §6 Q2): bars are clipped like [bucketsOf]; each month's budget is split over its days in
-///   integer cents by largest remainder (all remainders tie, so the earlier days get the extra cent), per category,
-///   and a bar's budget is the sum of its days: the days of a month add up to its budget exactly. `prorated` = true.
+/// the budgeted categories ([category] null: every category in [budgets]; else that one) per bucket of [window]
+/// ([bucketsOf]). Rows count in their top-level category ([table], as `budgetVsActual`).
+/// Each category's month budget is split over the month's days in integer cents by largest remainder (all remainders
+/// tie, so the earlier days get the extra cent), on its own (owner §6 Q2, settled 2026-11-01); a bar's `budgeted` is
+/// the sum of its days' shares, so the days of a month add up to its budget exactly and a whole month or quarter is
+/// the exact month budgets summed. Whole months equal `budgetVsActualSeries` (budgeted, actual, over).
+/// `prorated` = the bar is not whole calendar months (a day, a week, or a month/quarter the window clips).
 List<BudgetBar> budgetSeries(DayIndex ix, DateRange window, Bucket b, Map<String, int> budgets,
     {required String today, required CategoryTable table, String? category}) {
   final (lo, hi) = _window(window);
   final t = _today(today);
   final lines = category != null ? {category: budgets[category] ?? 0} : budgets;
-  // Each budgeted category's rows: the index categories that roll up into it.
-  final prefixes = <List<int>>[];
+  // Each budgeted category: its month budget and the prefix sums of the index categories that roll up into it.
+  final keys = lines.keys.toList(growable: false);
+  final cents = [for (final k in keys) lines[k]!];
+  final slot = {for (var i = 0; i < keys.length; i++) keys[i]: i};
+  final prefixes = [for (final _ in keys) <List<int>>[]];
   for (final k in ix._categories) {
-    if (lines.containsKey(table.topLevel(k))) prefixes.add(ix._spentPrefix(k, null, null));
+    final i = slot[table.topLevel(k)];
+    if (i != null) prefixes[i].add(ix._spentPrefix(k, null, null));
   }
-  final prorated = b == Bucket.day || b == Bucket.week;
   final out = <BudgetBar>[];
   _spans(lo, hi, b, (s, e, fs, fe) {
-    final (from, to) = prorated ? (s, e) : (fs, fe);
-    var actual = 0;
-    for (final p in prefixes) {
-      actual += ix._sum(p, from, to);
+    var budgeted = 0, actual = 0, over = 0;
+    for (var i = 0; i < keys.length; i++) {
+      var a = 0;
+      for (final p in prefixes[i]) {
+        a += ix._sum(p, s, e);
+      }
+      final share = _share(cents[i], s, e);
+      budgeted += share;
+      actual += a;
+      if (a > share) over += a - share;
     }
-    var budgeted = 0;
-    for (final cents in lines.values) {
-      budgeted += _share(cents, from, to);
-    }
+    final whole = b != Bucket.day && b != Bucket.week && s == fs && e == fe;
     out.add(BudgetBar(
-      span: _range(from, to),
+      span: _range(s, e),
       bucket: b,
       budgeted: budgeted,
       actual: actual,
-      prorated: prorated,
-      partial: prorated ? _isPartial(s, e, fs, fe, t) : (t >= fs && t <= fe),
+      over: over,
+      prorated: !whole,
+      partial: _isPartial(s, e, fs, fe, t),
     ));
   });
   return out;

@@ -150,7 +150,9 @@ void main() {
     test('picks the bar size from the time on screen (spec §1 table)', () {
       expect(bucketFor(dr('2026-10-06', '2026-11-02')), Bucket.day); // 4 weeks
       expect(bucketFor(dr('2026-10-14', '2026-10-20')), Bucket.day); // 7 days, the zoom floor
-      expect(bucketFor(dr('2026-05-01', '2026-10-31')), Bucket.week); // 184 days is too many days, 27 weeks fit
+      // Spec §1 table: week up to ~5 months (the implementation's cut is 155 days); 6 months stay months as today.
+      expect(bucketFor(dr('2026-06-01', '2026-10-31')), Bucket.week); // 153 days: too many days, 22 weeks fit
+      expect(bucketFor(dr('2026-05-01', '2026-10-31')), Bucket.month); // 184 days = 6 months: past ~5 months
       expect(bucketFor(dr('2025-11-01', '2026-10-31')), Bucket.month); // a year
       expect(bucketFor(dr('2024-01-01', '2026-10-31')), Bucket.month); // under 3 years: 34 months
       expect(bucketFor(dr('2021-11-01', '2026-10-31')), Bucket.quarter); // 5 years
