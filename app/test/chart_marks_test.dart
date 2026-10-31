@@ -7,6 +7,7 @@ import 'package:budget_wallet/src/theme.dart';
 import 'package:budget_wallet/src/widgets/charts.dart';
 import 'package:budget_wallet/src/widgets/insight_charts.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -88,11 +89,11 @@ void main() {
   });
 
   testWidgets('monthly bars: 4 px round at the data end, square at the baseline', (t) async {
-    await t.pumpWidget(_app(const MonthlyBars(
+    await t.pumpWidget(_app(const SeriesBars(
       label: 'Spending per month',
       groups: [
-        BarGroup(month: '2026-08', rods: [BarRod(5000, Colors.blue)], partial: false, tip: 'a', spoken: 'a'),
-        BarGroup(month: '2026-09', rods: [BarRod(-3000, Colors.blue)], partial: false, tip: 'b', spoken: 'b'),
+        BarGroup(start: '2026-08-01', axis: 'Aug\n26', rods: [BarRod(5000, Colors.blue)], partial: false, tip: 'a', spoken: 'a'),
+        BarGroup(start: '2026-09-01', axis: 'Sep\n26', rods: [BarRod(-3000, Colors.blue)], partial: false, tip: 'b', spoken: 'b'),
       ],
     )));
     final groups = t.widget<BarChart>(find.byType(BarChart)).data.barGroups;
@@ -104,8 +105,7 @@ void main() {
     testWidgets('has a spoken text (start, lowest, payday), an end label and a tooltip with date and balance', (t) async {
       final handle = t.ensureSemantics();
       await t.pumpWidget(_app(const ForecastStepChart(points: _points, payday: '2026-10-28', currency: 'EUR')));
-      final chart = find.byType(ForecastStepChart);
-      final label = t.getSemantics(find.descendant(of: chart, matching: find.byType(Semantics)).first).label;
+      final label = t.getSemantics(find.bySemanticsLabel(RegExp('^Balance until payday')).first).label;
       expect(label, startsWith('Balance until payday.'));
       expect(label, contains('Starts at 1,000'));
       expect(label, contains('lowest −50')); // the dip below zero
@@ -113,12 +113,14 @@ void main() {
       expect(find.byKey(const ValueKey('forecastEndLabel')), findsOneWidget);
       expect(t.widget<Text>(find.byKey(const ValueKey('forecastEndLabel'))).data, contains('−50'));
 
-      final data = t.widget<LineChart>(find.byType(LineChart)).data;
-      expect(data.lineTouchData.enabled, isTrue);
-      // The tooltip for the second point (index 1): its date and its balance.
-      final spot = LineBarSpot(data.lineBarsData.single, 0, data.lineBarsData.single.spots[1]);
-      final items = data.lineTouchData.touchTooltipData.getTooltipItems([spot]);
-      expect(items.single!.text, '${shortDateOrRaw('2026-10-25')}\n${moneyExact(70000, 'EUR')}');
+      // fl_chart's own touch is off (its pan would take the drag); a pointer over the chart floats the date and the balance in force.
+      expect(t.widget<LineChart>(find.byType(LineChart)).data.lineTouchData.enabled, isFalse);
+      final mouse = TestPointer(1, PointerDeviceKind.mouse);
+      final box = t.getRect(find.byType(LineChart));
+      await t.sendEventToBinding(mouse.hover(Offset(box.left + box.width * 0.7, box.center.dy))); // day 6 of 8: 26 Oct
+      await t.pump();
+      expect(t.widget<Text>(find.descendant(of: find.byKey(const ValueKey('chartTip')), matching: find.byType(Text))).data,
+          '${shortDateOrRaw('2026-10-26')}\n${moneyExact(70000, 'EUR')}');
       handle.dispose();
     });
 
@@ -136,7 +138,7 @@ void main() {
     testWidgets('income chart: "Went out" is the second chart colour, never the status red (${b.name})', (t) async {
       final c = b == Brightness.light ? WalletColors.light : WalletColors.dark;
       await pump(t, InsightsScreen(wc: insightsWallet()), size: const Size(400, 6000), brightness: b);
-      final bars = t.widget<MonthlyBars>(find.byKey(const ValueKey('insightBars_income')));
+      final bars = t.widget<SeriesBars>(find.byKey(const ValueKey('insightBars_income')));
       for (final g in bars.groups) {
         expect(g.rods[0].color, c.chartPos);
         expect(g.rods[1].color, c.chart2);

@@ -5,7 +5,11 @@ import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
 import '../format.dart';
+import '../insights_api.dart';
+import '../logging.dart';
+import '../screens/bucket_payments.dart';
 import '../theme.dart';
+import 'chart_viewport.dart';
 import 'common.dart';
 import 'dash.dart';
 import 'insight_charts.dart';
@@ -51,13 +55,15 @@ class ComparePart {
 
 /// This month (only when the hero is not that month), last month and the 6-month average of [cmp], all core's. The hero total
 /// [total] over [range] is "the month" when the range starts on the 1st, ends in [month] and equals this month's figure, so the
-/// month is then said once, by the hero. When the page's Months list ([bars]) already has both [month] and the month before as
-/// rows, the two tiles would repeat them: only the Average stays (and the page lays out as when the hero is the month).
+/// month is then said once, by the hero. When the bars the page shows ([bars]) are month bars that include both [month] and the month
+/// before, the two tiles would repeat them: only the Average stays (and the page lays out as when the hero is the month). Day and week
+/// bars do not hold the months, so the tiles stay.
 ComparePart compareParts(CategoryCompare cmp,
-    {required String month, required DateRange range, required int total, required String cur, List<MonthBar> bars = const []}) {
+    {required String month, required DateRange range, required int total, required String cur, List<SeriesBar> bars = const []}) {
   final prev = monthsEnding(month, 2).first;
   final single = range.start == '$month-01' && monthOf(range.end) == month && cmp.thisMonth == total;
-  final listed = !single && bars.any((b) => b.month == month) && bars.any((b) => b.month == prev);
+  bool has(String m) => bars.any((b) => b.bucket == Bucket.month && monthOf(b.span.start) == m);
+  final listed = !single && has(month) && has(prev);
   final delta = spendDelta(cmp.thisMonth, cmp.lastMonth, monthShort(prev), key: const ValueKey('compareDelta'));
   return ComparePart(
       single ? delta : null,
@@ -82,84 +88,83 @@ ComparePart compareParts(CategoryCompare cmp,
       monthIsHero: single || listed);
 }
 
-String _monthNote(MonthBar b, String nowMonth) => !b.partial ? '' : (b.month == nowMonth ? ' · so far' : ' · part of the month');
-
-/// The exact amount of each month ([rowKey] names a row), the figures the bars cannot give to the cent. A tile of its own for a page
-/// with room beside the chart; [MonthBarsTile] with `rows: true` holds the same rows under the bars.
-class MonthRowsTile extends StatelessWidget {
-  final String currency, nowMonth;
-  final List<MonthBar> bars;
-  final Key Function(String month) rowKey;
-  const MonthRowsTile({super.key, required this.currency, required this.nowMonth, required this.bars, required this.rowKey});
-
-  @override
-  Widget build(BuildContext context) => Tile(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-          const TileLabel('Months'),
-          const SizedBox(height: 4),
-          _MonthRows(currency: currency, nowMonth: nowMonth, bars: bars, rowKey: rowKey),
-        ]),
-      );
-}
-
-class _MonthRows extends StatelessWidget {
-  final String currency, nowMonth;
-  final List<MonthBar> bars;
-  final Key Function(String month) rowKey;
-  const _MonthRows({required this.currency, required this.nowMonth, required this.bars, required this.rowKey});
-
-  @override
-  Widget build(BuildContext context) => DashRows(rows: [
-        for (final b in bars)
-          DashRowData(
-              key: rowKey(b.month), title: '${monthLong(b.month)}${_monthNote(b, nowMonth)}', amount: moneyExact(b.spent, currency)),
-      ]);
-}
-
-/// The spending per month as bars; with [rows] the exact amount of each month under them (otherwise a [MonthRowsTile] shows them).
-class MonthBarsTile extends StatelessWidget {
-  final String label, currency, nowMonth;
-  final List<MonthBar> bars;
+/// The spending of a category, merchant or tag over time as bars you can drag and zoom (ZC), with the exact amount of each bar under
+/// them. The window starts as the page's [range] (Reset goes back to it); drag, pinch and the buttons change it. [bars] reads the day
+/// index, [payments] gives the payments behind one bar (a tap on it or its row). A single bar is the hero's one figure: no row for it.
+class SeriesBarsTile extends StatelessWidget {
+  final WalletController wc;
+  final String id, label;
+  final DateRange range;
+  final List<SeriesBar> Function(DateRange window, Bucket bucket) bars;
+  final List<CategorizedTx> Function(DateRange span) payments;
   final Key barsKey;
-  final Key Function(String month) rowKey;
-  final bool rows;
-  const MonthBarsTile({
+  final Key Function(String rowId) rowKey;
+  const SeriesBarsTile({
     super.key,
+    required this.wc,
+    required this.id,
     required this.label,
-    required this.currency,
-    required this.nowMonth,
+    required this.range,
     required this.bars,
+    required this.payments,
     required this.barsKey,
     required this.rowKey,
-    this.rows = true,
   });
 
   @override
   Widget build(BuildContext context) {
     final c = context.c;
-    String note(MonthBar b) => _monthNote(b, nowMonth);
+    final cur = wc.currency, today = wc.today();
+    String name(SeriesBar x) => barName(x.span, x.bucket, x.partial, today);
+    void open(SeriesBar x) {
+      logNav('detail.bar', {'graph': id, 'bucket': x.bucket.name});
+      openBucketPayments(context, wc, title: barName(x.span, x.bucket, false, today), rows: () => payments(x.span));
+    }
+
     return Tile(
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-        const TileLabel('Per month'),
+        const TileLabel('Over time'),
         const SizedBox(height: 8),
-        MonthlyBars(
-          key: barsKey,
-          label: label,
-          groups: [
-            for (final b in bars)
-              BarGroup(
-                month: b.month,
-                partial: b.partial,
-                rods: [BarRod(b.spent, c.chartPos)],
-                tip: '${monthLong(b.month)}${note(b)}\n${moneyExact(b.spent, currency)}',
-                spoken: '${monthLong(b.month)}${note(b)}: ${moneyExact(b.spent, currency)}',
-              ),
-          ],
+        ChartViewport(
+          id: id,
+          initial: range,
+          edges: wc.chartEdges,
+          // The page's range is the hero's sub line; the dates show once the window has moved off it.
+          datesText: (w) => w == range ? null : rangeLabel(w),
+          chart: (context, w, b) {
+            final list = bars(w, b);
+            return SeriesBars(
+              key: barsKey,
+              label: label,
+              groups: [
+                for (var i = 0; i < list.length; i++)
+                  BarGroup(
+                    start: list[i].span.start,
+                    axis: barAxisText(list[i].span, b, firstOfAll: i == 0),
+                    partial: list[i].partial,
+                    rods: [BarRod(list[i].spent, c.chartPos)],
+                    tip: '${name(list[i])}\n${moneyExact(list[i].spent, cur)}',
+                    spoken: '${name(list[i])}: ${moneyExact(list[i].spent, cur)}',
+                  ),
+              ],
+              onOpen: (i) => open(list[i]),
+            );
+          },
+          legend: (context, w, b) =>
+              bars(w, b).any((x) => x.partial) ? Legend([LegendItem(c.chartPos, barFadedText(b), dashed: true)]) : const SizedBox.shrink(),
+          rows: (context, w, b) {
+            final list = bars(w, b);
+            // One bar is its one figure, the hero's: no row for it.
+            if (list.length <= 1) return const SizedBox.shrink();
+            return Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: DashRows(rows: [
+                for (final x in list)
+                  DashRowData(key: rowKey(barRowId(x.span, b)), title: name(x), amount: moneyExact(x.spent, cur), onTap: () => open(x)),
+              ]),
+            );
+          },
         ),
-        if (rows) ...[
-          const SizedBox(height: 8),
-          _MonthRows(currency: currency, nowMonth: nowMonth, bars: bars, rowKey: rowKey),
-        ],
       ]),
     );
   }

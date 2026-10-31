@@ -63,23 +63,28 @@ class _CategoryDetailState extends State<CategoryDetailScreen> {
     );
   }
 
-  /// One month: its one figure is the hero's, so the exact-months rows are left out (the bars stay).
-  Widget _bars(String cur, List<MonthBar> bars, String label, String id) => DashItem(
-      span: bars.length <= 1 ? 4 : 2,
-      child: MonthBarsTile(
-        rows: bars.length > 1,
-        label: label,
-        currency: cur,
-        nowMonth: monthOf(wc.today()),
-        bars: bars,
-        barsKey: ValueKey('detailBars_$id'),
-        rowKey: (m) => ValueKey('detailRow_${id}_$m'),
-      ));
+  /// The bars over time, starting at the page's range; one month is a row of days.
+  Widget _bars(String id, String label, {String? merchantKey}) {
+    final oneMonth = monthOf(range.start) == monthOf(range.end);
+    return DashItem(
+        span: oneMonth ? 4 : 2,
+        child: SeriesBarsTile(
+          wc: wc,
+          id: id,
+          label: label,
+          range: range,
+          bars: (w, b) => wc.spendingSeriesFor(w, b, category: widget.category, merchantKey: merchantKey),
+          payments: (span) => wc.rowsOf(widget.category, merchantKey, span),
+          barsKey: ValueKey('detailBars_$id'),
+          rowKey: (r) => ValueKey('detailRow_${id}_$r'),
+        ));
+  }
 
   List<Widget> _categoryView(BuildContext context, String cur, List<MerchantTotal> merchants) {
     final c = context.c;
     final total = wc.categoryTotal(widget.category, range);
-    final bars = wc.categoryBars(widget.category, range);
+    // The bars the tile shows when it opens (the same window, so the same bar size).
+    final bars = wc.spendingSeriesFor(range, bucketFor(range), category: widget.category);
     final parts =
         compareParts(wc.compareFor(widget.category, range), month: wc.monthIn(range), range: range, total: total, cur: cur, bars: bars);
     final biggest = merchants.fold<int>(1, (m, x) => x.spent > m ? x.spent : m);
@@ -95,7 +100,7 @@ class _CategoryDetailState extends State<CategoryDetailScreen> {
         ),
       ),
       ...parts.tiles,
-      _bars(cur, bars, '$name per month', 'category'),
+      _bars('category', '$name over time'),
       DashItem(
         span: 2,
         child: Tile(
@@ -148,7 +153,7 @@ class _CategoryDetailState extends State<CategoryDetailScreen> {
           sub: '${rangeLabel(range)} · ${m.count} ${m.count == 1 ? 'payment' : 'payments'} in $name',
         ),
       ),
-      _bars(cur, wc.merchantBars(widget.category, m.key, range), '${m.label} per month', 'merchant'),
+      _bars('merchant', '${m.label} over time', merchantKey: m.key),
       DashItem(
         span: 4,
         child: PaymentsTile(

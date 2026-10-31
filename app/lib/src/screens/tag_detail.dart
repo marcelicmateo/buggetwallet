@@ -30,10 +30,11 @@ class TagDetailScreen extends StatelessWidget {
           final rows = wc.rowsOfTag(tag, range);
           final total = wc.tagTotalFor(tag, range);
           final cmp = wc.compareTagFor(tag, range);
-          final bars = wc.tagBars(tag, range);
+          // The bars the tile shows when it opens (the same window, so the same bar size).
+          final bars = wc.spendingSeriesFor(range, bucketFor(range), tag: tag);
           final parts = compareParts(cmp, month: wc.monthIn(range), range: range, total: total.spent, cur: cur, bars: bars);
-          // One month: its one figure is the hero's, so no months list (the bars stay).
-          final oneMonth = bars.length <= 1;
+          // One month: its one figure is the hero's, so no exact rows until the window moves (the bars stay).
+          final oneMonth = monthOf(range.start) == monthOf(range.end);
           return Scaffold(
             appBar: DialogAppBar(title: name),
             body: DetailPage(children: [
@@ -49,28 +50,18 @@ class TagDetailScreen extends StatelessWidget {
               ),
               ...parts.tiles,
               DashItem(
-                span: oneMonth ? 4 : 2,
-                child: MonthBarsTile(
-                  label: '$name per month',
-                  currency: cur,
-                  nowMonth: monthOf(wc.today()),
-                  bars: bars,
+                span: oneMonth || parts.monthIsHero ? 4 : 2,
+                child: SeriesBarsTile(
+                  wc: wc,
+                  id: 'tag',
+                  label: '$name over time',
+                  range: range,
+                  bars: (w, b) => wc.spendingSeriesFor(w, b, tag: tag),
+                  payments: (span) => wc.rowsOfTag(tag, span),
                   barsKey: const ValueKey('tagDetailBars'),
-                  rowKey: (m) => ValueKey('tagDetailRow_$m'),
-                  // The months list is a tile beside the bars when the row has room (the hero is the month); else it sits under them.
-                  rows: !oneMonth && !parts.monthIsHero,
+                  rowKey: (r) => ValueKey('tagDetailRow_$r'),
                 ),
               ),
-              if (parts.monthIsHero && !oneMonth)
-                DashItem(
-                  span: 2,
-                  child: MonthRowsTile(
-                    currency: cur,
-                    nowMonth: monthOf(wc.today()),
-                    bars: bars,
-                    rowKey: (m) => ValueKey('tagDetailRow_$m'),
-                  ),
-                ),
               DashItem(
                 span: 4,
                 child: PaymentsTile(

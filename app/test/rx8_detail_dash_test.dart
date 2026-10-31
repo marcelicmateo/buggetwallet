@@ -11,7 +11,6 @@ import 'package:budget_wallet/src/screens/tag_detail.dart';
 import 'package:budget_wallet/src/theme.dart';
 import 'package:budget_wallet/src/widgets/common.dart' show TxTile;
 import 'package:budget_wallet/src/widgets/dash.dart';
-import 'package:budget_wallet/src/widgets/detail_tiles.dart' show MonthRowsTile;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -193,12 +192,13 @@ void main() {
       expect(inTile('compareAverage', moneyExact(cmp.average6, 'EUR')), findsOneWidget);
       expect(cmp.average6, (29000 / 6).round());
       expect(_k('tagDetailBars'), findsOneWidget);
-      // One month: its one figure is the hero's, so the months list is left out (the bars stay).
-      expect(wc.tagBars(tag, r), hasLength(1));
-      for (final b in wc.tagBars(tag, r)) {
-        expect(_k('tagDetailRow_${b.month}'), findsNothing);
+      // One month is ~30 day bars: the rows follow them (they are hidden only when there is a single bar), and add up to the hero.
+      final days = wc.spendingSeriesFor(r, bucketFor(r), tag: tag);
+      expect(days, hasLength(31));
+      for (final b in days) {
+        expect(_k('tagDetailRow_${b.span.start}'), findsOneWidget);
       }
-      expect(find.byType(MonthRowsTile), findsNothing);
+      expect(days.fold<int>(0, (a, b) => a + b.spent), 29544);
       // The hero label does not repeat the title.
       expect(find.descendant(of: find.byType(AppBar), matching: find.text('#${wc.tagTable.label(tag)}')), findsOneWidget);
       expect(find.text('TOTAL'), findsOneWidget, reason: 'the hero says Total, not the title again');
@@ -219,21 +219,40 @@ void main() {
       expect(tester.takeException(), isNull);
     }, timeout: _timeout);
 
-    testWidgets('a range with both months as rows: the This month and Last month tiles would repeat them, only Average stays',
+    testWidgets('a range that shows month rows with both months: the This month and Last month tiles would repeat them, only Average stays',
         (tester) async {
       final (:wc, :tag) = await _wallet();
-      final r = DateRange(start: '2026-08-01', end: '2026-10-31');
+      final r = DateRange(start: '2026-04-01', end: '2026-10-31'); // 214 days: a bar per month
       await _pump(tester, TagDetailScreen(wc: wc, tag: tag, range: r), size: const Size(1280, 3000));
       final cmp = wc.compareTagFor(tag, r);
       expect(heroIs('tagDetailTotal', moneyExact(29000 + 29544, 'EUR')), findsOneWidget);
-      for (final b in wc.tagBars(tag, r)) {
-        expect(_k('tagDetailRow_${b.month}'), findsOneWidget);
+      final months = wc.spendingSeriesFor(r, bucketFor(r), tag: tag);
+      expect(months.first.bucket, Bucket.month);
+      for (final b in months) {
+        expect(_k('tagDetailRow_${monthOf(b.span.start)}'), findsOneWidget);
       }
       expect(_k('tagDetailRow_2026-10'), findsOneWidget);
       expect(_k('tagDetailRow_2026-09'), findsOneWidget);
       expect(_k('compareThis'), findsNothing);
       expect(_k('compareLast'), findsNothing);
       expect(inTile('compareAverage', moneyExact(cmp.average6, 'EUR')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }, timeout: _timeout);
+
+    testWidgets('a range shown as weeks does not hold the months as rows: This month and Last month stay, the weeks add up to the hero',
+        (tester) async {
+      final (:wc, :tag) = await _wallet();
+      final r = DateRange(start: '2026-08-01', end: '2026-10-31'); // 92 days: a bar per week
+      await _pump(tester, TagDetailScreen(wc: wc, tag: tag, range: r), size: const Size(1280, 3000));
+      final cmp = wc.compareTagFor(tag, r);
+      final weeks = wc.spendingSeriesFor(r, bucketFor(r), tag: tag);
+      expect(weeks.first.bucket, Bucket.week);
+      for (final b in weeks) {
+        expect(_k('tagDetailRow_${b.span.start}'), findsOneWidget);
+      }
+      expect(weeks.fold<int>(0, (a, b) => a + b.spent), 29000 + 29544);
+      expect(inTile('compareThis', moneyExact(cmp.thisMonth, 'EUR')), findsOneWidget);
+      expect(inTile('compareLast', moneyExact(cmp.lastMonth, 'EUR')), findsOneWidget);
       expect(tester.takeException(), isNull);
     }, timeout: _timeout);
 
@@ -262,10 +281,12 @@ void main() {
       expect(_k('compareThis'), findsNothing);
       expect(_k('compareDelta'), findsOneWidget);
       expect(_k('detailBars_category'), findsOneWidget);
-      // One month: no months list under the hero's figure; the hero label is not the title again.
-      for (final b in wc.categoryBars('Groceries', r)) {
-        expect(_k('detailRow_category_${b.month}'), findsNothing);
+      // One month is ~30 day bars: a row each, adding up to the hero; the hero label is not the title again.
+      final days = wc.spendingSeriesFor(r, bucketFor(r), category: 'Groceries');
+      for (final b in days) {
+        expect(_k('detailRow_category_${b.span.start}'), findsOneWidget);
       }
+      expect(days.fold<int>(0, (a, b) => a + b.spent), total);
       expect(find.descendant(of: find.byType(AppBar), matching: find.text(wc.categoryTable.label('Groceries'))), findsOneWidget);
       expect(find.text('TOTAL'), findsOneWidget, reason: 'the hero says Total, not the title again');
       final merchants = wc.merchantsFor('Groceries', r);

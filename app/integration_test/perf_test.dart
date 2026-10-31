@@ -97,6 +97,45 @@ void main() {
       await t.pumpAndSettle();
     }, reportKey: '${perfPrefix}insights');
 
+    // Insights pan and pinch (ZC): drag the spending graph back and forth across years of ~20k rows and pinch it in and out. Each frame
+    // redraws the bars from the day index; the committed window rebuilds the rows. Budget = the chart actions' budget.
+    await goTab(t, 'Budget');
+    await binding.traceAction(() async {
+      await t.tap(find.byKey(const ValueKey('insightsOpen')));
+      await t.pumpAndSettle();
+      final graph = find.byKey(const ValueKey('chartGestures_spending'));
+      await t.ensureVisible(graph);
+      await t.pumpAndSettle();
+      final centre = t.getCenter(graph);
+      // a slow drag to the right (back in time), then to the left, a frame at a time
+      for (final dir in [1.0, -1.0, 1.0]) {
+        final g = await t.startGesture(centre);
+        for (var i = 0; i < 24; i++) {
+          await g.moveBy(Offset(dir * 8, 0));
+          await t.pump(const Duration(milliseconds: 16));
+        }
+        await g.up();
+        await t.pumpAndSettle();
+      }
+      // a pinch in (finer bars), then out (coarser), two fingers
+      for (final spread in [1.0, -1.0]) {
+        final a = await t.startGesture(centre - const Offset(30, 0), pointer: 1);
+        final b = await t.startGesture(centre + const Offset(30, 0), pointer: 2);
+        for (var i = 0; i < 20; i++) {
+          await a.moveBy(Offset(-spread * 4, 0));
+          await b.moveBy(Offset(spread * 4, 0));
+          await t.pump(const Duration(milliseconds: 16));
+        }
+        await a.up();
+        await b.up();
+        await t.pumpAndSettle();
+      }
+      await t.tap(find.byKey(const ValueKey('chartReset_spending')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('sheetClose')));
+      await t.pumpAndSettle();
+    }, reportKey: '${perfPrefix}insights_pan');
+
     // First visit of every tab after the data changed: an expense is added (the shown page rebuilds at once), the app is left idle for a
     // moment (the idle warm-up works out the derived values, then the other pages are built one per frame), then each tab is opened once.
     // Without the warm-up each of these switches builds its page and works its data out in the switch's own frame.

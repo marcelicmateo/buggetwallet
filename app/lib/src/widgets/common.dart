@@ -706,11 +706,14 @@ class LineItem extends StatelessWidget {
 
   /// The value's colour (default: the text colour), e.g. `bad` for "Over by …".
   final Color? valueColor;
-  const LineItem(this.label, this.value, {super.key, this.sub, this.bold = false, this.leading, this.valueColor});
+
+  /// A tap on the row (null: not tappable).
+  final VoidCallback? onTap;
+  const LineItem(this.label, this.value, {super.key, this.sub, this.bold = false, this.leading, this.valueColor, this.onTap});
   @override
   Widget build(BuildContext context) {
     final w = bold ? FontWeight.w600 : FontWeight.w500;
-    return Container(
+    final row = Container(
       constraints: const BoxConstraints(minHeight: rowMin),
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: LayoutBuilder(
@@ -734,6 +737,7 @@ class LineItem extends StatelessWidget {
         ]),
       ),
     );
+    return onTap == null ? row : InkWell(onTap: onTap, child: row);
   }
 }
 

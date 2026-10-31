@@ -138,9 +138,10 @@ void main() {
       expect(wc.insightRange('spending').kind, RangeKind.custom);
       expect(labelOf(tester, 'spending'), rangeLabel(DateRange(start: '2026-08-05', end: '2026-09-20')));
       expect(find.byKey(const ValueKey('rangeError_spending')), findsNothing);
-      // the bars follow the range: August and September only
-      expect(find.byKey(const ValueKey('barRow_spending_2026-08')), findsOneWidget);
-      expect(find.byKey(const ValueKey('barRow_spending_2026-10')), findsNothing);
+      // the bars follow the range: 47 days are weeks, from the 5th of August to the 20th of September, nothing in October
+      expect(find.byKey(const ValueKey('barRow_spending_2026-08-05')), findsOneWidget);
+      expect(find.byKey(const ValueKey('barRow_spending_2026-09-14')), findsOneWidget);
+      expect(find.byKey(const ValueKey('barRow_spending_2026-10-05')), findsNothing);
     });
 
     testWidgets('the system date range picker opens from the label', (tester) async {
@@ -498,7 +499,10 @@ void main() {
       final row = find.byKey(const ValueKey('barRow_income_2026-10'));
       await tester.ensureVisible(row);
       expect(find.descendant(of: row, matching: find.text('Net $exact')), findsOneWidget);
-      final g = tester.widget<MonthlyBars>(find.byKey(const ValueKey('insightBars_income'))).groups.firstWhere((g) => g.month == '2026-10');
+      final g = tester
+          .widget<SeriesBars>(find.byKey(const ValueKey('insightBars_income')))
+          .groups
+          .firstWhere((g) => g.start.startsWith('2026-10'));
       expect(g.tip, contains('Net $exact'));
       expect(g.spoken, contains('net $exact'));
     });

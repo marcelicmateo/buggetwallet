@@ -9,10 +9,12 @@ import '../insights_api.dart';
 import '../layout.dart';
 import '../logging.dart';
 import '../theme.dart';
+import '../widgets/chart_viewport.dart';
 import '../widgets/charts.dart';
 import '../widgets/common.dart';
 import '../widgets/insight_charts.dart';
 import '../widgets/sheets.dart';
+import 'bucket_payments.dart';
 import 'category_detail.dart';
 import 'period_reports.dart';
 import 'tag_detail.dart';
@@ -52,7 +54,8 @@ class InsightPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final model = wc.insightRange(id);
-    final control = picker == null ? RangeControl(model: model) : RangeControl(model: model, picker: picker!);
+    final list = id == 'share' || id == 'tags' || id == 'biggest'; // lists: − / + and a swipe on the dates (ZC)
+    final control = picker == null ? RangeControl(model: model, zoom: list) : RangeControl(model: model, picker: picker!, zoom: list);
     return ListenableBuilder(
       listenable: Listenable.merge([wc, model]),
       builder: (context, _) {
@@ -90,42 +93,90 @@ class InsightPanel extends StatelessWidget {
     );
   }
 
-  /// "so far" for the running month, "part of the month" for one cut by the range, null for a whole month.
-  String? _partNote(String month, bool partial) {
-    if (!partial) return null;
-    return month == monthOf(wc.today()) ? 'so far' : 'part of the month';
-  }
+  String _name(DateRange span, Bucket b, bool partial) => barName(span, b, partial, wc.today());
 
-  String _name(String month, bool partial) {
-    final note = _partNote(month, partial);
-    return note == null ? monthLong(month) : '${monthLong(month)} · $note';
+  Key _rowKey(DateRange span, Bucket b) => ValueKey('barRow_${id}_${barRowId(span, b)}');
+
+  /// A time graph in a [ChartViewport]: the bars follow the finger, the legend and the exact rows follow the committed window. Tapping
+  /// a bar or its row opens that bar's payments.
+  Widget _graph<T>(
+    BuildContext context,
+    InsightRange model, {
+    required String keyName,
+    required String label,
+    required int rods,
+    required List<T> Function(DateRange w, Bucket b) bars,
+    required DateRange Function(T) span,
+    required bool Function(T) partial,
+    required BarGroup Function(T bar, String name, Bucket b, bool first) group,
+    required Widget Function(T bar, String name, Key key, VoidCallback open) row,
+    required List<Widget> Function(bool anyPartial, bool anyShare, Bucket b) legend,
+    bool Function(T)? prorated,
+    bool income = false,
+    bool budgeted = false,
+  }) {
+    void open(T bar, Bucket b) {
+      final sp = span(bar);
+      logNav('insights.bar', {'graph': id, 'bucket': b.name});
+      openBucketPayments(context, wc, title: _name(sp, b, false), rows: () => wc.paymentsIn(sp, income: income, budgeted: budgeted));
+    }
+
+    return ChartViewport(
+      id: id,
+      window: model.range,
+      onCommit: model.setWindow,
+      onReset: model.reset,
+      canReset: model.isFree,
+      edges: model.edges,
+      rodsPerBar: rods,
+      chart: (context, w, b) {
+        final list = bars(w, b);
+        return SeriesBars(
+          key: ValueKey(keyName),
+          label: label,
+          groups: [
+            for (var i = 0; i < list.length; i++) group(list[i], _name(span(list[i]), b, partial(list[i])), b, i == 0),
+          ],
+          onOpen: (i) => open(list[i], b),
+        );
+      },
+      legend: (context, w, b) {
+        final list = bars(w, b);
+        return Legend(legend(list.any(partial), prorated != null && list.any(prorated), b));
+      },
+      rows: (context, w, b) {
+        final list = bars(w, b);
+        return Rows(children: [
+          for (final x in list) row(x, _name(span(x), b, partial(x)), _rowKey(span(x), b), () => open(x, b)),
+        ]);
+      },
+    );
   }
 
   List<Widget> _spending(BuildContext context, DateRange r, String cur) {
     final c = context.c;
-    final bars = wc.spendingBars(r);
     return [
-      MonthlyBars(
-        key: const ValueKey('insightBars_spending'),
+      _graph<SeriesBar>(
+        context,
+        wc.insightRange(id),
+        keyName: 'insightBars_spending',
         label: 'Spending per month',
-        groups: [
-          for (final b in bars)
-            BarGroup(
-              month: b.month,
-              partial: b.partial,
-              rods: [BarRod(b.spent, c.chartPos)],
-              tip: '${_name(b.month, b.partial)}\nOut ${moneyExact(b.spent, cur)}',
-              spoken: '${_name(b.month, b.partial)}: ${moneyExact(b.spent, cur)} spent',
-            ),
-        ],
+        rods: 1,
+        bars: wc.spendingSeriesFor,
+        span: (x) => x.span,
+        partial: (x) => x.partial,
+        group: (x, name, b, first) => BarGroup(
+          start: x.span.start,
+          axis: barAxisText(x.span, b, firstOfAll: first),
+          partial: x.partial,
+          rods: [BarRod(x.spent, c.chartPos)],
+          tip: '$name\nOut ${moneyExact(x.spent, cur)}',
+          spoken: '$name: ${moneyExact(x.spent, cur)} spent',
+        ),
+        row: (x, name, key, open) => LineItem(name, moneyExact(x.spent, cur), key: key, onTap: open),
+        legend: (anyPartial, _, b) =>
+            [LegendItem(c.chartPos, 'Spent'), if (anyPartial) LegendItem(c.chartPos, barFadedText(b), dashed: true)],
       ),
-      Legend([
-        LegendItem(c.chartPos, 'Spent'),
-        if (bars.any((b) => b.partial)) LegendItem(c.chartPos, 'Faded: not a whole month', dashed: true)
-      ]),
-      Rows(children: [
-        for (final b in bars) LineItem(_name(b.month, b.partial), moneyExact(b.spent, cur), key: ValueKey('barRow_${id}_${b.month}')),
-      ]),
     ];
   }
 
@@ -164,77 +215,83 @@ class InsightPanel extends StatelessWidget {
 
   List<Widget> _income(BuildContext context, DateRange r, String cur) {
     final c = context.c;
-    final bars = wc.incomeBars(r);
     return [
-      MonthlyBars(
-        key: const ValueKey('insightBars_income'),
+      _graph<IncomeSpendingBar>(
+        context,
+        wc.insightRange(id),
+        keyName: 'insightBars_income',
         label: 'Income and spending per month',
-        groups: [
-          for (final b in bars)
-            BarGroup(
-              month: b.month,
-              partial: b.partial,
-              rods: [BarRod(b.income + b.extra, c.chartPos), BarRod(b.spent, c.chart2)],
-              tip: '${_name(b.month, b.partial)}\nIn ${moneyExact(b.income + b.extra, cur)}\nOut ${moneyExact(b.spent, cur)}\n'
-                  'Net ${moneyExactSigned(b.net, cur)}',
-              spoken: '${_name(b.month, b.partial)}: in ${moneyExact(b.income + b.extra, cur)}, out ${moneyExact(b.spent, cur)}, '
-                  'net ${moneyExactSigned(b.net, cur)}',
-            ),
+        rods: 2,
+        income: true,
+        bars: wc.incomeSeriesFor,
+        span: (x) => x.span,
+        partial: (x) => x.partial,
+        group: (x, name, b, first) => BarGroup(
+          start: x.span.start,
+          axis: barAxisText(x.span, b, firstOfAll: first),
+          partial: x.partial,
+          rods: [BarRod(x.income + x.extra, c.chartPos), BarRod(x.spent, c.chart2)],
+          tip: '$name\nIn ${moneyExact(x.income + x.extra, cur)}\nOut ${moneyExact(x.spent, cur)}\nNet ${moneyExactSigned(x.net, cur)}',
+          spoken: '$name: in ${moneyExact(x.income + x.extra, cur)}, out ${moneyExact(x.spent, cur)}, net ${moneyExactSigned(x.net, cur)}',
+        ),
+        row: (x, name, key, open) => LineItem(name, 'Net ${moneyExactSigned(x.net, cur)}',
+            key: key,
+            onTap: open,
+            valueColor: x.net < 0 ? c.bad : null,
+            sub: 'In ${moneyExact(x.income + x.extra, cur)}${x.extra > 0 ? ' (${moneyExact(x.extra, cur)} extra)' : ''}'
+                ' · Out ${moneyExact(x.spent, cur)}'),
+        legend: (anyPartial, _, b) => [
+          LegendItem(c.chartPos, 'Came in'),
+          LegendItem(c.chart2, 'Went out'),
+          if (anyPartial) LegendItem(c.ink2, barFadedText(b), dashed: true),
         ],
       ),
-      Legend([
-        LegendItem(c.chartPos, 'Came in'),
-        LegendItem(c.chart2, 'Went out'),
-        if (bars.any((b) => b.partial)) LegendItem(c.ink2, 'Faded: not a whole month', dashed: true),
-      ]),
-      Rows(children: [
-        for (final b in bars)
-          LineItem(_name(b.month, b.partial), 'Net ${moneyExactSigned(b.net, cur)}',
-              key: ValueKey('barRow_${id}_${b.month}'),
-              valueColor: b.net < 0 ? c.bad : null,
-              sub: 'In ${moneyExact(b.income + b.extra, cur)}${b.extra > 0 ? ' (${moneyExact(b.extra, cur)} extra)' : ''}'
-                  ' · Out ${moneyExact(b.spent, cur)}'),
-      ]),
     ];
   }
 
   List<Widget> _budget(BuildContext context, DateRange r, String cur) {
     final c = context.c;
-    final bars = wc.budgetBars(r);
-    if (bars.every((b) => b.budgeted == 0)) {
+    if (wc.categoryBudgets.values.every((v) => v <= 0)) {
       return const [EmptyNote('No budgets set. Add them in Settings.')];
     }
-    final now = monthOf(wc.today());
-    String name(String m) => m == now ? '${monthLong(m)} · so far' : monthLong(m);
     return [
-      MonthlyBars(
-        key: const ValueKey('insightBars_budget'),
+      _graph<BudgetBar>(
+        context,
+        wc.insightRange(id),
+        keyName: 'insightBars_budget',
         label: 'Budget and actual per month',
-        groups: [
-          for (final b in bars)
-            BarGroup(
-              month: b.month,
-              partial: b.month == now,
-              rods: [BarRod(b.budgeted, c.lineStrong), BarRod(b.actual, c.chartPos, overCents: b.over)],
-              tip: '${name(b.month)}\nBudget ${moneyExact(b.budgeted, cur)}\nSpent ${moneyExact(b.actual, cur)}'
-                  '${b.over > 0 ? '\nOver by ${moneyExact(b.over, cur)}' : ''}',
-              spoken: '${name(b.month)}: budget ${moneyExact(b.budgeted, cur)}, spent ${moneyExact(b.actual, cur)}'
-                  '${b.over > 0 ? ', over by ${moneyExact(b.over, cur)}' : ''}',
-            ),
+        rods: 2,
+        bars: wc.budgetSeriesFor,
+        span: (x) => x.span,
+        partial: (x) => x.partial,
+        prorated: (x) => x.prorated,
+        budgeted: true,
+        group: (x, name, b, first) {
+          final what = x.prorated ? 'Budget share' : 'Budget';
+          return BarGroup(
+            start: x.span.start,
+            axis: barAxisText(x.span, b, firstOfAll: first),
+            partial: x.partial,
+            rods: [BarRod(x.budgeted, c.lineStrong), BarRod(x.actual, c.chartPos, overCents: x.over)],
+            tip: '$name\n$what ${moneyExact(x.budgeted, cur)}\nSpent ${moneyExact(x.actual, cur)}'
+                '${x.over > 0 ? '\nOver by ${moneyExact(x.over, cur)}' : ''}',
+            spoken: '$name: ${what.toLowerCase()} ${moneyExact(x.budgeted, cur)}, spent ${moneyExact(x.actual, cur)}'
+                '${x.over > 0 ? ', over by ${moneyExact(x.over, cur)}' : ''}',
+          );
+        },
+        row: (x, name, key, open) => LineItem(name, moneyExact(x.actual, cur),
+            key: key,
+            onTap: open,
+            leading: x.over > 0 ? Icon(Icons.error_outline, size: 18, color: c.bad, semanticLabel: 'Over a budget') : null,
+            sub: '${x.prorated ? 'Budget share' : 'Budget'} ${moneyExact(x.budgeted, cur)}'
+                '${x.over > 0 ? ' · over by ${moneyExact(x.over, cur)}' : ''}'),
+        legend: (anyPartial, anyShare, b) => [
+          LegendItem(c.lineStrong, anyShare ? 'Budget share' : 'Budget'),
+          LegendItem(c.chartPos, 'Spent'),
+          LegendItem(c.bad, 'Over a budget'),
+          if (anyPartial) LegendItem(c.ink2, barFadedText(b), dashed: true),
         ],
       ),
-      Legend([
-        LegendItem(c.lineStrong, 'Budget'),
-        LegendItem(c.chartPos, 'Spent'),
-        LegendItem(c.bad, 'Over a budget'),
-      ]),
-      Rows(children: [
-        for (final b in bars)
-          LineItem(name(b.month), moneyExact(b.actual, cur),
-              key: ValueKey('barRow_${id}_${b.month}'),
-              leading: b.over > 0 ? Icon(Icons.error_outline, size: 18, color: c.bad, semanticLabel: 'Over a budget') : null,
-              sub: 'Budget ${moneyExact(b.budgeted, cur)}${b.over > 0 ? ' · over by ${moneyExact(b.over, cur)}' : ''}'),
-      ]),
     ];
   }
 

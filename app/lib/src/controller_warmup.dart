@@ -66,15 +66,15 @@ extension WarmUpTasks on WalletController {
     final r = insightRange(id).range;
     switch (id) {
       case 'spending':
-        spendingBars(r);
+        spendingSeriesFor(r, bucketFor(r)); // builds the day index, which the income and budget graphs read too
       case 'share':
         shareFor(r);
       case 'tags':
         tagShareFor(r);
       case 'income':
-        incomeBars(r);
+        incomeSeriesFor(r, bucketFor(r));
       case 'budget':
-        budgetBars(r);
+        budgetSeriesFor(r, bucketFor(r));
       case 'biggest':
         biggestIn(r);
     }
