@@ -58,6 +58,7 @@ export 'src/budget.dart'
         Affordability,
         affordability,
         averageByCategory,
+        countsAsSpending,
         averageOut,
         changePermille,
         BudgetPreset,
