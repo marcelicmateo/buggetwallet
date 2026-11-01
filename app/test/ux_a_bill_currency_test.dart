@@ -5,9 +5,7 @@ import 'package:budget_wallet/src/screens/search.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
-import 'package:wallet_importer/wallet_importer.dart';
 
-import 'support/bills.dart';
 import 'support/wallet.dart';
 
 Finder k(String key) => find.byKey(ValueKey(key));

@@ -109,7 +109,7 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
   int _lostRows() {
     final a = _a;
     if (a == null) return 0;
-    final before = a.countsRows, after = _kind == AccountKind.cash || _source != null;
+    final before = a.countsRows;
     final rowsChange = a.isCash != (_kind == AccountKind.cash) || _source != a.source;
     if (!before || !rowsChange) return 0;
     final b = widget.wc.accountBalanceList().where((x) => x.account.id == a.id).firstOrNull;
