@@ -330,6 +330,56 @@ void main() {
     await tester.tap(find.byTooltip('Close'));
     await tester.pumpAndSettle();
 
+    // UX-A: a payment in yen (no decimals), the account form for a coin, the currency picker, and the built-in rules with their menu.
+    wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [
+      NormalizedTransaction(
+          id: transactionId(wc.today(), -150000, 'JPY SYNTHETIC RAMEN', 0),
+          source: 'pbz',
+          date: wc.today(),
+          amountMinor: -150000,
+          currency: 'JPY',
+          bankType: 'POS',
+          description: 'JPY SYNTHETIC RAMEN'),
+    ]));
+    wc.reload();
+    final yen = await wc.addTag('Synthetic yen');
+    await wc.setPaymentTag(wc.wholeTxs.firstWhere((x) => x.tx.currency == 'JPY').tx.id, yen, true);
+    unawaited(openTag(tester.element(find.byType(Scaffold).first), wc, yen, DateRange(start: addDays(wc.today(), -45), end: wc.today())));
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('10-yen-row');
+    await tester.tap(find.byTooltip('Close'));
+    await tester.pumpAndSettle();
+    await tester.tap(navTab('Settings'));
+    await tester.pumpAndSettle();
+    await settings(SettingsSection.accounts, find.byKey(const ValueKey('walletCurrency')), '10-settings-accounts');
+    Future<void> tapKey(String key) async {
+      final f = find.byKey(ValueKey(key));
+      await tester.scrollUntilVisible(f, 200, scrollable: find.byType(Scrollable).last);
+      await tester.pumpAndSettle();
+      await tester.tap(f);
+      await tester.pumpAndSettle();
+    }
+
+    await tester.scrollUntilVisible(find.byKey(const ValueKey('accountAdd')), -200, scrollable: pageList(SettingsScreen));
+    await tester.tap(find.byKey(const ValueKey('accountAdd')));
+    await tester.pumpAndSettle();
+    await tapKey('accountKind:crypto');
+    await binding.takeScreenshot('10-account-form-crypto');
+    await tapKey('accountCurrency');
+    await binding.takeScreenshot('10-currency-picker');
+    await tester.tapAt(const Offset(5, 5)); // the barrier closes the picker, then the form
+    await tester.pumpAndSettle();
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+    await settings(SettingsSection.rules, find.byKey(const ValueKey('builtInToggle')), '10-settings-rules');
+    await tester.tap(find.byKey(const ValueKey('builtInToggle')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('ruleMenu:builtIn:wolt')));
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('10-rules-builtin-menu');
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+
     // After the screenshots: logged actions with private-looking synthetic values, to prove they stay out of the log.
     wc.addExpense(amount: 9876, category: 'Home & tools', note: 'Desk lamp note', date: wc.today());
     wc.addWish('Gift card wish', 4321);

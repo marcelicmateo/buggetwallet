@@ -325,7 +325,7 @@ void main() {
   });
 
   group('rows left out of a file', () {
-    final many = [for (var i = 0; i < 7; i++) 'Row ${i + 2}: the amount "-1${i}.345" has more than 2 decimals'];
+    final many = [for (var i = 0; i < 7; i++) 'Row ${i + 2}: the amount "-1$i.345" has more than 2 decimals'];
 
     testWidgets('few reasons show at once, with the count', (t) async {
       await pumpApp(t, Scaffold(body: ImportProblems(problems: many.take(2).toList(), invalid: 2)));

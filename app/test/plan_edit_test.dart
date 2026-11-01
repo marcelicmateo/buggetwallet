@@ -104,6 +104,7 @@ void main() {
     await tester.ensureVisible(_key('planCurrency'));
     await tester.tap(_key('planCurrency'));
     await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.enterText(_key('currencySearch'), 'usd');
     await tester.pump();
     await tester.tap(_key('currency:USD'));
