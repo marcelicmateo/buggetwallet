@@ -3,7 +3,7 @@
     "PreToolUse": [
       {
         "matcher": "Bash",
-        "hooks": [{ "type": "command", "command": "$CLAUDE_PROJECT_DIR/tools/no-poll-hook.sh" }]
+        "hooks": [{ "type": "command", "command": "b=\"$CLAUDE_PROJECT_DIR/dist/bin/wallet-build\"; if [ -x \"$b\" ]; then exec \"$b\" hook no-poll; else exec \"$CLAUDE_PROJECT_DIR/tools/no-poll-hook.sh\"; fi" }]
       }
     ]
   }
