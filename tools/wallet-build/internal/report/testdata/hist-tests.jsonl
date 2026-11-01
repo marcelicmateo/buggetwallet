@@ -1,0 +1,12 @@
+{"ts": "2026-11-01T10:00:00+00:00", "run": "run0", "source": "local", "commit": "abc1234", "suite": "core", "test": "alpha", "ms": 10, "result": "success"}
+{"ts": "2026-11-01T10:00:00+00:00", "run": "run0", "source": "local", "commit": "abc1234", "suite": "app", "test": "beta", "ms": 900, "result": "success"}
+{"ts": "2026-11-01T10:00:00+00:00", "run": "run0", "source": "local", "commit": "abc1234", "suite": "core", "test": "gamma: odd é name", "ms": 5, "result": "success"}
+{"ts": "2026-11-02T10:00:00+00:00", "run": "run1", "source": "local", "commit": "abc1234", "suite": "core", "test": "alpha", "ms": 20, "result": "success"}
+{"ts": "2026-11-02T10:00:00+00:00", "run": "run1", "source": "local", "commit": "abc1234", "suite": "app", "test": "beta", "ms": 800, "result": "success"}
+{"ts": "2026-11-02T10:00:00+00:00", "run": "run1", "source": "local", "commit": "abc1234", "suite": "core", "test": "gamma: odd é name", "ms": 5, "result": "success"}
+{"ts": "2026-11-03T10:00:00+00:00", "run": "run2", "source": "local", "commit": "abc1234", "suite": "core", "test": "alpha", "ms": 30, "result": "success"}
+{"ts": "2026-11-03T10:00:00+00:00", "run": "run2", "source": "local", "commit": "abc1234", "suite": "app", "test": "beta", "ms": 700, "result": "success"}
+{"ts": "2026-11-03T10:00:00+00:00", "run": "run2", "source": "local", "commit": "abc1234", "suite": "core", "test": "gamma: odd é name", "ms": 7000, "result": "success"}
+{"ts": "2026-11-04T10:00:00+00:00", "run": "run3", "source": "local", "commit": "abc1234", "suite": "core", "test": "alpha", "ms": 40, "result": "success"}
+{"ts": "2026-11-04T10:00:00+00:00", "run": "run3", "source": "local", "commit": "abc1234", "suite": "app", "test": "beta", "ms": 600, "result": "success"}
+{"ts": "2026-11-04T10:00:00+00:00", "run": "run3", "source": "local", "commit": "abc1234", "suite": "core", "test": "gamma: odd é name", "ms": 5, "result": "success"}

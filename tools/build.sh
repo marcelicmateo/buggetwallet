@@ -65,6 +65,23 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
+# The Go port (tools/wallet-build, `make bin`) takes over the commands named in the case below. BW_IMPL=go forces it for every
+# command (to try a port), BW_IMPL=bash keeps this script; natively (BW_NATIVE=1: CI, and the bash steps inside the image)
+# auto means bash. A command is added to the auto list only after its parity case passes. Exit 3 = the tool did not build.
+impl=${BW_IMPL:-auto}
+[[ $impl == auto && ${BW_NATIVE:-} == 1 ]] && impl=bash
+cmd_=${1:-}
+case "$cmd_" in -q|--quiet) cmd_=${2:-} ;; esac
+case "$impl:${cmd_:-test}" in
+  go:*)  # add "|auto:<command>" to this pattern when its parity case passes
+    mkdir -p "$ROOT/dist/bin"
+    if ! (cd "$ROOT/tools/wallet-build" && GOTOOLCHAIN=local CGO_ENABLED=0 go build -trimpath -o "$ROOT/dist/bin/wallet-build" .) \
+      > "$ROOT/dist/wallet-build-build.log" 2>&1; then
+      [[ ${BW_QUIET:-} == 1 || ${1:-} == -q || ${1:-} == --quiet ]] || cat "$ROOT/dist/wallet-build-build.log" >&2
+      exit 3
+    fi
+    exec "$ROOT/dist/bin/wallet-build" "$@" ;;
+esac
 case "${1:-}" in -q|--quiet) BW_QUIET=1; shift ;; esac
 # Quiet: everything below (podman, flutter, python helpers, our own echo) inherits /dev/null; the logs are written by the steps.
 # lsp, mcp and image-name use stdout as their result, so they stay as they are.
@@ -180,6 +197,27 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
   fi
   # Build output goes to stderr (stdout belongs to the LSP client in `lsp` mode)
   podman image exists "$IMAGE" || build_image
+  # go-check (tools/wallet-build): the tool's gofmt, go vet, go test and a CGO_ENABLED=0 check, on the host before the container.
+  # The Go port runs the same step, so both implementations list it in lint and test.
+  # shellcheck disable=SC2329  # run by name through timed_log
+  go_check() {
+    local d=$ROOT/tools/wallet-build rc=0 out
+    command -v go > /dev/null || { echo "go not found on PATH: the host needs Go for tools/wallet-build"; return 1; }
+    echo "--- gofmt -l tools/wallet-build"
+    out=$(gofmt -l "$d") || rc=1
+    [[ -z $out ]] || { echo "gofmt: these files need formatting (run gofmt -w):"; echo "$out"; rc=1; }
+    echo "--- go vet ./..."; (cd "$d" && GOTOOLCHAIN=local go vet ./...) || rc=1
+    echo "--- go test ./..."; (cd "$d" && GOTOOLCHAIN=local go test ./...) || rc=1
+    echo "--- go version -m dist/bin/wallet-build"
+    mkdir -p "$ROOT/dist/bin"
+    (cd "$d" && GOTOOLCHAIN=local CGO_ENABLED=0 go build -trimpath -o "$ROOT/dist/bin/wallet-build" .) || { echo "wallet-build did not build"; return 1; }
+    out=$(cd "$ROOT" && GOTOOLCHAIN=local go version -m dist/bin/wallet-build 2>&1) || { echo "cannot read the build info of dist/bin/wallet-build"; return 1; }
+    grep -q 'CGO_ENABLED=0' <<<"$out" || { echo "dist/bin/wallet-build was not built with CGO_ENABLED=0"; rc=1; }
+    return "$rc"
+  }
+  if [[ "$CMD" == lint || "$CMD" == test ]]; then
+    BW_TIMED_COLD=false timed_log go-check "$BW_RUN_DIR/go-check.log" go_check || exit 1
+  fi
   if [[ "$CMD" == lsp ]]; then
     # Same path inside and outside, so file URIs match what the editor sends.
     # The analysis cache volume makes restarts fast.

@@ -1,0 +1,6 @@
+--- failing tests
+  core: fails on purpose
+  core: throws an error
+--- BUG: skips
+  core: BUG: named skip
+  core: skipped for now

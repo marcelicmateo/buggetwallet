@@ -1,0 +1,32 @@
+{"protocolVersion":"0.1.1","runnerVersion":"1.33.0","pid":1,"type":"start","time":0}
+{"suite":{"id":0,"platform":"vm","path":"test/x_test.dart"},"type":"suite","time":0}
+{"test":{"id":1,"name":"loading test/x_test.dart","suiteID":0},"type":"testStart","time":3}
+{"testID":1,"result":"success","skipped":false,"hidden":true,"type":"testDone","time":90}
+{"test":{"id":2,"name":"adds up","suiteID":0},"type":"testStart","time":100}
+{"testID":2,"result":"success","skipped":false,"hidden":false,"type":"testDone","time":104}
+{"test":{"id":3,"name":"parses the Kontoauszug äöü line","suiteID":0},"type":"testStart","time":110}
+{"testID":3,"result":"success","skipped":false,"hidden":false,"type":"testDone","time":125}
+{"test":{"id":4,"name":"slow database \"open\"","suiteID":0},"type":"testStart","time":130}
+{"testID":4,"result":"success","skipped":false,"hidden":false,"type":"testDone","time":5500}
+{"test":{"id":5,"name":"fails on purpose","suiteID":0},"type":"testStart","time":5500}
+{"testID":5,"result":"failure","skipped":false,"hidden":false,"type":"testDone","time":5530}
+{"test":{"id":6,"name":"throws an error","suiteID":0},"type":"testStart","time":5530}
+{"testID":6,"result":"error","skipped":false,"hidden":false,"type":"testDone","time":5700}
+{"test":{"id":7,"name":"skipped for now","suiteID":0},"type":"testStart","time":5700}
+{"testID":7,"messageType":"skip","message":"BUG: rounding differs","type":"print","time":5701}
+{"testID":7,"result":"success","skipped":true,"hidden":false,"type":"testDone","time":5701}
+{"test":{"id":8,"name":"plain skip","suiteID":0},"type":"testStart","time":5701}
+{"testID":8,"messageType":"skip","message":"not on this platform","type":"print","time":5702}
+{"testID":8,"result":"success","skipped":true,"hidden":false,"type":"testDone","time":5702}
+{"test":{"id":9,"name":"medium test","suiteID":0},"type":"testStart","time":5702}
+{"testID":9,"result":"success","skipped":false,"hidden":false,"type":"testDone","time":5802}
+{"test":{"id":10,"name":"half a second","suiteID":0},"type":"testStart","time":5802}
+{"testID":10,"result":"success","skipped":false,"hidden":false,"type":"testDone","time":6602}
+{"test":{"id":11,"name":"tiny a","suiteID":0},"type":"testStart","time":6602}
+{"testID":11,"result":"success","skipped":false,"hidden":false,"type":"testDone","time":6603}
+{"test":{"id":12,"name":"tiny b","suiteID":0},"type":"testStart","time":6603}
+{"testID":12,"result":"success","skipped":false,"hidden":false,"type":"testDone","time":6605}
+{"test":{"id":13,"name":"fifty","suiteID":0},"type":"testStart","time":6605}
+{"testID":13,"result":"success","skipped":false,"hidden":false,"type":"testDone","time":6655}
+not json at all
+{"success":true,"type":"done","time":9000}

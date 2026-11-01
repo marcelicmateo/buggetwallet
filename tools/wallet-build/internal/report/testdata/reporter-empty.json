@@ -1,0 +1,6 @@
+{"protocolVersion":"0.1.1","runnerVersion":"1.33.0","pid":1,"type":"start","time":0}
+{"suite":{"id":0,"platform":"vm","path":"test/x_test.dart"},"type":"suite","time":0}
+{"test":{"id":1,"name":"loading test/x_test.dart","suiteID":0},"type":"testStart","time":3}
+{"testID":1,"result":"success","skipped":false,"hidden":true,"type":"testDone","time":90}
+not json at all
+{"success":true,"type":"done","time":0}
