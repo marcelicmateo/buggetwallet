@@ -287,7 +287,9 @@ void main() {
       final b = importBankFile(_book(rows));
       expect(b.source, 'pbz');
       expect(b.skipped, 1);
-      expect(b.transactions.map((t) => (t.date, t.amountMinor)), [('2026-01-15', 150000), ('2026-01-16', -333)]);
+      // UX-A review: -3.333 is refused with a reason (v1 rounded it to -3.33).
+      expect(b.transactions.map((t) => (t.date, t.amountMinor)), [('2026-01-15', 150000)]);
+      expect(b.problems.single, contains('the amount -3.333 has more than 2 decimals'));
     });
   });
 }

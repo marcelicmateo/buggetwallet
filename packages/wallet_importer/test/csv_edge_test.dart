@@ -218,15 +218,19 @@ void main() {
         ('1 234,56', 123456), // no-break space
         ('1 234,56', 123456), // narrow no-break space (Croatian/French grouping)
         ('  -12.30  ', -1230),
-        ('12.3449', 1234), // more than two decimals round to the nearest cent
-        ('12.3451', 1235),
-        ('-12.3451', -1235),
-        ('0.004', 0),
         ('1e2', 10000),
+        ('12.3400', 1234), // zeros past the cents are no fraction
       ];
       for (final (text, cents) in cases) {
         final b = one(text);
         expect(_amounts(b), [cents], reason: 'amount "$text"');
+      }
+      // UX-A review: more than two non-zero decimals are refused with a reason, never rounded to the cent.
+      for (final text in ['12.3449', '12.3451', '-12.3451', '0.004']) {
+        final b = one(text);
+        expect(_amounts(b), isEmpty, reason: 'amount "$text"');
+        expect(b.invalid, 1, reason: 'amount "$text"');
+        expect(b.problems.single, contains('has more than 2 decimals'), reason: text);
       }
     });
 

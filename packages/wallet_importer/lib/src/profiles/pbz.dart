@@ -101,19 +101,18 @@ class PbzProfile extends BankProfile {
     if (a == null || d == impossibleDate) return const RowResult.invalid();
     final desc = cellText(row[2]);
     if (_hold.hasMatch(desc)) return const RowResult.skipped(); // card hold: the final booking arrives in a later export
-    final amount = cellCents(a);
-    if (amount == null) return const RowResult.invalid();
-    final currency = row.length > 4 && cellText(row[4]).isNotEmpty ? cellText(row[4]) : 'EUR';
-    // The amount in the currency's stored units (fiat hundredths as always, BTC satoshis; a 3-decimal currency's third
-    // decimal is refused); the id keeps v1's cents (`amount`).
-    final digits = storageDigitsOf(currency), strict = minorDigitsOf(currency) > digits;
-    final minor = cellMinor(a, digits, strict: strict);
-    if (minor == null) return const RowResult.invalid();
+    final currency = cellCurrency(row.length > 4 ? row[4] : null);
+    // The amount in the currency's stored units (fiat hundredths as always, BTC satoshis); a finer fraction is refused
+    // with its reason, never rounded (UX-A). Fiat ids hash the cents: exact here, so the ids v1 gave.
+    final (minor, problem) = cellAmount(a, currency, 'amount', row[3]);
+    if (minor == null) return RowResult.invalid(problem);
     final type = cellText(row[1]);
     final bc = ctx.column('balance');
     final balanceNum = bc >= 0 && bc < row.length && cellText(row[bc]).isNotEmpty ? cellNumber(row[bc]) : null;
+    final (balance, balanceProblem) = balanceNum == null ? (null, null) : cellAmount(balanceNum, currency, 'balance', row[bc]);
+    if (balanceProblem != null) return RowResult.invalid(balanceProblem);
     return RowResult.transaction(NormalizedTransaction(
-      id: ctx.v1Id(d, amount, desc),
+      id: ctx.v1Id(d, minor, desc, digits: storageDigitsOf(currency)),
       source: id,
       date: d,
       amountMinor: minor,
@@ -122,7 +121,7 @@ class PbzProfile extends BankProfile {
       description: desc,
       kindHint: _kind(type, desc),
       account: ctx.account,
-      balanceAfter: balanceNum == null ? null : cellMinor(balanceNum, digits, strict: strict),
+      balanceAfter: balance,
     ));
   }
 

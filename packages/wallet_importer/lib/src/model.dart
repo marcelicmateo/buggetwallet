@@ -111,13 +111,17 @@ class ImportBatch {
   /// The rest of the file still imports; the app tells the user how many rows were left out.
   final int invalid;
 
-  /// The 0-based file rows of the [invalid] ones, when the reader keeps them (a mapped CSV, `parseMappedCsv`); empty
-  /// otherwise. The app says `Row ${r + 1}`.
+  /// The 0-based file rows of the [invalid] ones (a mapped CSV and, since UX-A, the bank profiles; not rows past the
+  /// amount cap of a profile). The app says `Row ${r + 1}`.
   final List<int> invalidRows;
 
   /// How many of [invalid] were left out only because the amount is beyond ±[maxRowAmountMinor] (the reason the app
   /// shows: "too large").
   final int tooLarge;
+
+  /// Why rows were left out, where the reader can say (UX-A): `Row N: the amount "-12,345" has more than 2 decimals …`,
+  /// one per such row, in file order. Amounts appear here as written (the app shows them; never logged).
+  final List<String> problems;
 
   const ImportBatch(
       {required this.source,
@@ -125,7 +129,8 @@ class ImportBatch {
       this.skipped = 0,
       this.invalid = 0,
       this.invalidRows = const [],
-      this.tooLarge = 0});
+      this.tooLarge = 0,
+      this.problems = const []});
 
   /// The balance the bank states at the end of the file, per currency ([BankBalance]), from the rows'
   /// [NormalizedTransaction.balanceAfter] (completed rows only: the others are not in [transactions]).

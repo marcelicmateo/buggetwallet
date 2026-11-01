@@ -77,18 +77,47 @@ int? cellCents(double x) {
 }
 
 /// Amount in stored minor units of a currency with [digits] storage digits (`storageDigitsOf`: 2 for every fiat
-/// currency, BTC 8). 2 is [cellCents] (v1's rounding, unchanged) unless [strict]: then, as for any other count, a cell
-/// with a finer fraction (`1.235` dinar, `0.000000001` BTC) is refused (null), never rounded. Profiles pass [strict] for
-/// a currency with more ISO digits than it is stored with (KWD, BHD, …: the third decimal is not supported). Null also
-/// for what [cellCents] refuses, and beyond [maxAmountCents] minor units.
-int? cellMinor(double x, int digits, {bool strict = false}) {
-  if (digits == 2 && !strict) return cellCents(x);
+/// currency, BTC 8), or null: a cell with a finer fraction than [digits] (`-12.345` EUR, `1.235` dinar, `0.000000001` BTC)
+/// is never rounded (UX-A review: the same rule as a mapped CSV and an e-invoice), and what [cellCents] refuses (not
+/// finite, beyond [maxAmountCents] minor units). An exact value is the same number v1's rounding gave.
+int? cellMinor(double x, int digits) {
   final c = x * pow10(digits);
   if (!c.isFinite || c.abs() > maxAmountCents) return null;
   final r = c.roundToDouble();
-  // Doubles carry ~16 significant digits: only a difference above that noise is a real finer fraction.
-  if ((c - r).abs() > (r.abs() * 1e-12 > 1e-6 ? r.abs() * 1e-12 : 1e-6)) return null;
-  return r.toInt();
+  return _finer(c, r) ? null : r.toInt();
+}
+
+// Doubles carry ~16 significant digits: only a difference above that noise is a real finer fraction.
+bool _finer(double c, double r) => (c - r).abs() > (r.abs() * 1e-12 > 1e-6 ? r.abs() * 1e-12 : 1e-6);
+
+/// [x] (the cell [cell] in the column [what]: amount, fee, balance) in stored units of [currency]: (value, null), or
+/// (null, problem) when it has a finer fraction than the currency is stored with ([decimalsProblem]), or (null, null)
+/// for a value [cellMinor] refuses otherwise.
+(int?, String?) cellAmount(double x, String currency, String what, Object? cell) {
+  final digits = storageDigitsOf(currency);
+  final v = cellMinor(x, digits);
+  if (v != null) return (v, null);
+  final c = x * pow10(digits);
+  if (!c.isFinite || c.abs() > maxAmountCents) return (null, null);
+  final t = cellText(cell);
+  return (null, decimalsProblem(what, t.length > 24 ? '${t.substring(0, 23)}…' : t, currency));
+}
+
+/// Why an amount was refused for its decimals, per currency, without the row: `the amount 1,235 has more than 2
+/// decimals (the third decimal of KWD is not supported)`, `the amount -12.345 has more than 2 decimals`. Shared by the
+/// bank profiles and a mapped CSV.
+String decimalsProblem(String what, String quoted, String currency) {
+  final stored = storageDigitsOf(currency);
+  return minorDigitsOf(currency) > stored
+      ? 'the $what $quoted has more than $stored decimals (the third decimal of $currency is not supported)'
+      : 'the $what $quoted has more than $stored decimals';
+}
+
+/// A currency cell as a code: trimmed, upper case (`kwd` → `KWD`), `€` → `EUR`; [fallback] when empty.
+String cellCurrency(Object? cell, {String fallback = 'EUR'}) {
+  final t = cellText(cell);
+  if (t.isEmpty) return fallback;
+  return t == '€' ? 'EUR' : t.toUpperCase();
 }
 
 /// JavaScript's `Math.round`, which v1 used (`r2(x) = Math.round(x * 100) / 100`): nearest integer, exact halves

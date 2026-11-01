@@ -70,22 +70,25 @@ void main() {
     test('one minor unit at the smallest and largest rate', () {
       expect(convertMinor(1, FxRate.minRate), 0);
       expect(convertMinor(-1, FxRate.minRate), 0);
-      expect(convertMinor(1, FxRate.maxRate), 100);
-      expect(convertMinor(-1, FxRate.maxRate), -100);
+      expect(convertMinor(1, FxRate.maxRate), 1000000); // UX-A: up to 1,000,000 home units per foreign unit
+      expect(convertMinor(-1, FxRate.maxRate), -1000000);
     });
 
-    test('the largest amount at the largest rate is exact (no 64-bit or 2^53 overflow)', () {
-      const max = WalletSettings.maxAmount;
-      expect(convertMinor(max, FxRate.maxRate), _ref(max, FxRate.maxRate));
-      expect(convertMinor(-max, FxRate.maxRate), -max * 100);
-      expect(convertMinor(max - 1, FxRate.maxRate - 1), _ref(max - 1, FxRate.maxRate - 1));
+    test('the largest amount at the largest fast-path rate (10^8) is exact (no 64-bit or 2^53 overflow)', () {
+      const max = WalletSettings.maxAmount, fast = 100000000;
+      expect(convertMinor(max, fast), _ref(max, fast));
+      expect(convertMinor(-max, fast), -max * 100);
+      expect(convertMinor(max - 1, fast - 1), _ref(max - 1, fast - 1));
+      // UX-A: above it BigInt; a result past 2^53 is capped (homeAmount refuses it anyway).
+      expect(convertMinor(1000000000, FxRate.maxRate), _ref(1000000000, FxRate.maxRate));
+      expect(convertMinor(max, FxRate.maxRate), 9007199254740991);
     });
 
     test('random amounts and rates match the BigInt reference', () {
       final r = Random(15);
       for (var i = 0; i < 5000; i++) {
         final a = (r.nextInt(1 << 30) * (1 << 6) + r.nextInt(1 << 6)) % WalletSettings.maxAmount * (r.nextBool() ? 1 : -1);
-        final rate = 1 + r.nextInt(FxRate.maxRate);
+        final rate = 1 + r.nextInt(100000000);
         expect(convertMinor(a, rate), _ref(a, rate), reason: '$a × $rate');
       }
     });

@@ -500,7 +500,8 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   `accounts.kind` / `institution`, `bills.return_reminder_days` / `warranty_reminder_days`, setting rows
   `builtInRule:<slug>`; an older build drops them until it updates (the schema-bump replay fills them in). Amounts keep
   their stored scale (fiat in hundredths as always); BTC rows are stored in satoshis from 20 on (an older build shows
-  them wrongly), and a 3-decimal currency's third decimal is not supported. Details: `packages/wallet_core/CLAUDE.md` Known limits.
+  them wrongly; BTC rows imported before schema 20 would read 10^6 too small — the owner had none), a 3-decimal
+  currency's third decimal is not supported, and importers refuse (with a per-row reason) any amount v1 used to round. Details: `packages/wallet_core/CLAUDE.md` Known limits.
 - Upgrade every device together past the 2026-10-20 `dev` build 5b8fc13: that build paired transfers on amount alone;
   newer builds dissolve such pairs, but a device still on 5b8fc13 would re-create them on every sync.
 - Importer: v1-compatible rounding changed ids of rows with an exact negative half cent (3-decimal amounts, very rare);
