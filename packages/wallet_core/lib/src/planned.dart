@@ -3,6 +3,8 @@
 /// `WalletRepo.recurringBills()`, calendar events read on this device). Web-safe.
 library;
 
+import 'package:wallet_importer/wallet_importer.dart' show pow10;
+
 import 'bills.dart';
 import 'categories.dart';
 import 'dates.dart';
@@ -88,12 +90,18 @@ final _plainNumber = RegExp(r'^[+-]?(\d+\.?\d*|\.\d+)$');
 /// two digits is the decimal separator; else commas group thousands), currency signs and spaces ignored. Null if not
 /// a number, negative, in exponent form, or beyond [maxAmountCents]. The value is `abs() * 100` rounded to the cent
 /// (the rule the app's input fields had).
-int? parseMoneyCents(String input) {
+///
+/// [digits] (UX-A): the decimals the amount's currency is typed with (`displayDigitsOf`: JPY 0, EUR and KWD 2, BTC 8).
+/// The result is in its STORED units (`storageDigitsOf`): hundredths up to 2 digits (`"1000"` yen is 100000, as every
+/// fiat amount is stored), else [digits] (`"0.01"` BTC is 1000000). With 3 or more digits a comma followed by up to
+/// that many digits is the decimal separator (`"0,5"` BTC). For any count but 2 a finer fraction than [digits] is
+/// refused (null: `"10.5"` yen), never rounded.
+int? parseMoneyCents(String input, {int digits = 2}) {
   var s = input.trim().replaceAll(RegExp(r'[\s€\$£]'), '');
   if (s.isEmpty) return null;
-  if (RegExp(r',\d{1,2}$').hasMatch(s)) {
+  if (RegExp(digits >= 3 ? ',\\d{1,$digits}\$' : r',\d{1,2}$').hasMatch(s)) {
     s = s.replaceAll('.', '').replaceAll(',', '.');
-  } else if (RegExp(r'^[+-]?0*,\d{3}$').hasMatch(s)) {
+  } else if (digits <= 2 && RegExp(r'^[+-]?0*,\d{3}$').hasMatch(s)) {
     return null; // "0,005": a thousands group cannot follow a zero
   } else {
     s = s.replaceAll(',', '');
@@ -102,7 +110,12 @@ int? parseMoneyCents(String input) {
   final v = double.tryParse(s);
   if (v == null || !v.isFinite) return null;
   if (s.startsWith('-') && v != 0) return null;
-  final cents = v.abs() * 100;
+  if (digits != 2) {
+    final dot = s.indexOf('.');
+    final frac = dot < 0 ? '' : s.substring(dot + 1).replaceFirst(RegExp(r'0+$'), '');
+    if (frac.length > digits) return null;
+  }
+  final cents = v.abs() * pow10(digits > 2 ? digits : 2);
   if (cents > maxAmountCents) return null;
   return cents.round();
 }

@@ -180,8 +180,11 @@ class WalletRepo {
   /// entity; no data migration, the legacy `lastReview` / `reviewStreak` settings stay the streak's base), version 19:
   /// unlinked cash matches (D2: `tx` gains `match_off`, [WalletRepoMatch.unlinkMatch]), auto-Paid Undo marks (KL-A:
   /// `planned` gains `auto_off`, `WalletRepoPlanned.reopenPlanned`) and slip payee aliases (KL-A: the `payee_alias`
-  /// entity); no data migration.
-  static const schemaVersion = 19;
+  /// entity); no data migration. Version 20 (UX-A): `accounts` gains `kind` and `institution` (an older row's kind is
+  /// read from its source), `bills` gains `return_reminder_days` and `warranty_reminder_days`, and per-rule settings rows
+  /// `builtInRule:<slug>`; no data migration. Amounts keep their stored scale (`storageDigitsOf`: hundredths for every
+  /// fiat currency, as always; BTC satoshis, new in 20).
+  static const schemaVersion = 20;
 
   /// Device-local, set once by the schema-15 migration ([_migrateBlobTables]): the next sync runs PUT every cached file
   /// a live bill points to again (api-3 builds deleted files on the relay), cleared once all of them were stored.
@@ -525,7 +528,8 @@ class WalletRepo {
         table: table,
         tagContext: withTags ? tagContext() : null,
         splits: withTags ? splits() : const {},
-        iouTx: WalletRepoIou(this).iouLinkedTx());
+        iouTx: WalletRepoIou(this).iouLinkedTx(),
+        builtInOverrides: st.builtInRuleOverrides);
   }
 
   // ---------- writes ----------

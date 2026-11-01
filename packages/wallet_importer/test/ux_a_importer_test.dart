@@ -1,0 +1,105 @@
+// Stage UX-A (docs/context/UX_SPEC.md §1, storage rule of 2026-11-01), the builder's own importer tests: every fiat amount
+// is stored in hundredths as before (a non-zero third decimal is refused), BTC in satoshis; ids stay the ones every
+// earlier build gave (v1 for Revolut/PBZ). All data SYNTHETIC.
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:test/test.dart';
+import 'package:wallet_importer/src/ids.dart' show minorIdText;
+import 'package:wallet_importer/src/profiles/cells.dart' show cellMinor;
+import 'package:wallet_importer/wallet_importer.dart';
+
+const _hdr = 'Type,Product,Started Date,Completed Date,Description,Amount,Fee,Currency,State,Balance';
+
+ImportBatch _revolut(List<String> rows) => importBankFile(Uint8List.fromList(utf8.encode('$_hdr\n${rows.join('\n')}\n')));
+
+String _row(String amount, String currency, {String fee = '0', String balance = '0'}) =>
+    'Card Payment,Current,2026-03-01 10:00:00,2026-03-01 10:00:00,Synthetic shop,$amount,$fee,$currency,COMPLETED,$balance';
+
+void main() {
+  test('storage and display digits', () {
+    expect([
+      for (final c in ['EUR', 'JPY', 'KWD', 'BTC', 'ZZZ']) storageDigitsOf(c)
+    ], [
+      2,
+      2,
+      2,
+      8,
+      2
+    ]);
+    expect([
+      for (final c in ['EUR', 'JPY', 'KWD', 'BTC', 'ZZZ']) displayDigitsOf(c)
+    ], [
+      2,
+      0,
+      2,
+      8,
+      2
+    ]);
+  });
+
+  test('cellMinor: 2 digits is v1 rounding; strict and other digits refuse a finer fraction', () {
+    expect(cellMinor(-12.345, 2), -1234, reason: "v1's Math.round: halves towards +infinity");
+    expect(cellMinor(1.235, 2, strict: true), isNull);
+    expect(cellMinor(-1.23, 2, strict: true), -123);
+    expect(cellMinor(10.000, 2, strict: true), 1000);
+    expect(cellMinor(0.00000001, 8), 1);
+    expect(cellMinor(0.000000015, 8), isNull);
+    expect(cellMinor(0.1 + 0.2, 8), 30000000, reason: 'double noise is not a fraction');
+    expect(cellMinor(double.nan, 8), isNull);
+  });
+
+  test('minorIdText: the hundredths text of earlier builds where they could read the row, else the exact decimal', () {
+    expect(minorIdText(-1000, 0), '-1000.00');
+    expect(minorIdText(-1234, 2), '-12.34');
+    expect(minorIdText(2000, 3), '2.00');
+    expect(minorIdText(1234, 3), '1.234');
+    expect(minorIdText(1000000, 8), '0.01');
+    expect(minorIdText(-1, 8), '-0.00000001');
+  });
+
+  test('Revolut: a yen row is stored in hundredths as before, its id is the v1 one', () {
+    final yen = _revolut([_row('-1000', 'JPY', fee: '10', balance: '5000')]).transactions.single;
+    expect((yen.amountMinor, yen.currency, yen.balanceAfter), (-101000, 'JPY', 500000));
+    expect(yen.id, transactionId('2026-03-01', -101000, 'Synthetic shop', 0));
+  });
+
+  test('Revolut: a dinar amount with a non-zero third decimal is invalid, never rounded; bitcoin keeps its satoshis', () {
+    final b = _revolut([_row('-1.235', 'KWD'), _row('-1.230', 'KWD'), _row('0.00012345', 'BTC')]);
+    expect(b.invalid, 1);
+    expect([for (final t in b.transactions) t.amountMinor], [-123, 12345]);
+    expect(b.transactions.last.id, transactionId('2026-03-01', 0, 'Synthetic shop', 0), reason: 'v1 hashed the cents (0.00)');
+  });
+
+  test('mapped CSV ids: a yen row keeps the id an earlier build gave it (amount text 1000.00)', () {
+    const m = CsvMapping(
+        name: 'Test CSV',
+        headerRow: 0,
+        dateCol: 0,
+        dateFormat: CsvDateFormat.dmyDot,
+        amountCol: 2,
+        decimal: CsvDecimal.comma,
+        negate: false,
+        descriptionCols: [1],
+        currencyCol: 3,
+        headers: ['Datum', 'Opis', 'Iznos', 'Valuta']);
+    final b = parseMappedCsv(Uint8List.fromList(utf8.encode('Datum;Opis;Iznos;Valuta\n05.01.2026;Shop;-1000;JPY\n')), m);
+    final t = b.transactions.single;
+    expect(t.amountMinor, -100000);
+    expect(t.id, sourceTransactionId(t.source, '2026-01-05', -100000, 'Shop', 0));
+  });
+
+  test('e-invoice amounts use the stored scale: 1500 yen is 150000', () {
+    final xml = [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"',
+      ' xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"',
+      ' xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2">',
+      '<cbc:ID>INV-1</cbc:ID><cbc:IssueDate>2026-03-01</cbc:IssueDate><cbc:DocumentCurrencyCode>JPY</cbc:DocumentCurrencyCode>',
+      '<cac:LegalMonetaryTotal><cbc:PayableAmount currencyID="JPY">1500</cbc:PayableAmount></cac:LegalMonetaryTotal>',
+      '</Invoice>',
+    ].join();
+    final bill = readEInvoice(xml);
+    expect((bill?.total, bill?.currency), (150000, 'JPY'));
+  });
+}

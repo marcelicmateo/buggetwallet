@@ -68,7 +68,7 @@ void main() {
       expect(cz.categoryOf(_card('1', 'acme', -900)), 'Groceries');
       expect(cz.categoryOf(_card('2', 'acme', -1100)), 'Home & tools');
       expect(cz.ruleFor(_card('2', 'acme', -1100)), b);
-      expect(cz.ruleFor(_card('3', 'LIDL 123', -100)), 'builtIn:${builtInMerchantRules.indexWhere((r) => r.$1 == 'Groceries')}');
+      expect(cz.ruleFor(_card('3', 'LIDL 123', -100)), 'builtIn:lidl'); // UX-A: slug ids
     });
 
     test('ruleFor: payee rule wins over patterns; an override or hint has no rule', () {
@@ -289,7 +289,7 @@ void main() {
           tags,
           CategoryTable.builtIn);
       expect(v.map((r) => r.id).take(6),
-          ['payee:acme', 'payee:zed_shop', merchantPatternId('a'), merchantPatternId('b'), 'payeeTags:tags_only', 'builtIn:0']);
+          ['payee:acme', 'payee:zed_shop', merchantPatternId('a'), merchantPatternId('b'), 'payeeTags:tags_only', 'builtIn:wolt']);
       expect(v.length, 5 + builtInMerchantRules.length);
       expect((v[0].kind, v[0].text, v[0].category, v[0].categoryLabel, v[0].editable), (RuleKind.payee, 'acme', 'Rent', 'Rent', true));
       expect(v[0].tags, ['t000000000001']);
@@ -298,7 +298,7 @@ void main() {
       expect((v[2].kind, v[2].match, v[2].minCents, v[2].maxCents, v[2].order), (RuleKind.pattern, 'contains', 1, 2, 0));
       expect((v[4].kind, v[4].category), (RuleKind.payeeTags, null));
       expect(v[4].tags, ['t000000000001']);
-      expect((v[5].kind, v[5].editable, v[5].category), (RuleKind.builtIn, false, builtInMerchantRules[0].$1));
+      expect((v[5].kind, v[5].editable, v[5].category), (RuleKind.builtIn, true, builtInMerchantRules[0].$1)); // UX-A: editable
     });
 
     test('ruleHits counts live home-currency rows per rule; an edit preview is a second categorizer', () {

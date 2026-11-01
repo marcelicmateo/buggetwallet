@@ -4,6 +4,7 @@ import 'dart:convert';
 
 import 'package:logging/logging.dart';
 
+import '../currencies.dart';
 import '../log.dart';
 
 final _log = Logger('bw.importer');
@@ -73,6 +74,21 @@ int? cellCents(double x) {
   final c = x * 100;
   if (!c.isFinite || c.abs() > maxAmountCents) return null;
   return jsRound(c);
+}
+
+/// Amount in stored minor units of a currency with [digits] storage digits (`storageDigitsOf`: 2 for every fiat
+/// currency, BTC 8). 2 is [cellCents] (v1's rounding, unchanged) unless [strict]: then, as for any other count, a cell
+/// with a finer fraction (`1.235` dinar, `0.000000001` BTC) is refused (null), never rounded. Profiles pass [strict] for
+/// a currency with more ISO digits than it is stored with (KWD, BHD, …: the third decimal is not supported). Null also
+/// for what [cellCents] refuses, and beyond [maxAmountCents] minor units.
+int? cellMinor(double x, int digits, {bool strict = false}) {
+  if (digits == 2 && !strict) return cellCents(x);
+  final c = x * pow10(digits);
+  if (!c.isFinite || c.abs() > maxAmountCents) return null;
+  final r = c.roundToDouble();
+  // Doubles carry ~16 significant digits: only a difference above that noise is a real finer fraction.
+  if ((c - r).abs() > (r.abs() * 1e-12 > 1e-6 ? r.abs() * 1e-12 : 1e-6)) return null;
+  return r.toInt();
 }
 
 /// JavaScript's `Math.round`, which v1 used (`r2(x) = Math.round(x * 100) / 100`): nearest integer, exact halves

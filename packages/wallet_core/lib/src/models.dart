@@ -4,6 +4,7 @@ import 'dart:math' show min;
 import 'package:wallet_importer/wallet_importer.dart' show CsvMapping, TxKind;
 
 import 'categories.dart';
+import 'currencies.dart' show currencyInfo;
 import 'dates.dart';
 import 'logs.dart';
 import 'rules.dart' show MerchantPattern, merchantPatternId;
@@ -575,9 +576,35 @@ final _recurringLog = Logger('bw.recurring');
 /// [RecurringBill.instalmentsLeft] as a function.
 int? instalmentsLeft(RecurringBill b) => b.instalmentsLeft;
 
-/// One of the owner's accounts (N2, synced entity `account`, table `accounts`): a bank account ([source] = a bank
-/// profile id, `pbz` / `revolut`) or cash ([source] null). [opening] (signed cents) is the balance at the end of
-/// [openingDate]; `accountBalances` adds the rows after it. At most one live account per (source, currency).
+/// What an [Account] holds (UX-A, schema 20). The wire name ([name], column `accounts.kind`) is stable: never rename a
+/// value. Only [bank], [card] and [savings] take an import `source`; a [crypto] account is in a crypto currency (BTC).
+enum AccountKind {
+  cash,
+  bank,
+  card,
+  savings,
+  investment,
+  crypto,
+  other;
+
+  /// Whether an account of this kind may name an import format (`Account.source`).
+  bool get takesSource => this == bank || this == card || this == savings;
+
+  /// The kind of wire name [s], or null for none or one this build does not know (a newer build's).
+  static AccountKind? fromWire(Object? s) {
+    for (final k in values) {
+      if (k.name == s) return k;
+    }
+    return null;
+  }
+}
+
+/// One of the owner's accounts (N2, synced entity `account`, table `accounts`): its [kind] (UX-A), an optional
+/// [institution] (bank, provider or exchange name, free text) and for a bank, card or savings account the import
+/// format whose rows it counts ([source] = a bank profile id, `pbz` / `revolut`, or `csv:<shapeId>`). [opening] (signed
+/// minor units of [currency]) is the balance at the end of [openingDate]; `accountBalances` adds the rows after it (a
+/// cash account: the hand-added rows; one with a [source]: that source's rows; any other: none, its balance is set by
+/// hand). At most one live cash account per currency and one live account per (source, currency).
 class Account {
   final String id;
   final String name;
@@ -587,6 +614,10 @@ class Account {
   final String openingDate; // YYYY-MM-DD
   final bool deleted;
 
+  /// Stored, or for a row written before schema 20 (or by an older build) from [source]: none → cash, any → bank.
+  final AccountKind kind;
+  final String? institution;
+
   const Account({
     required this.id,
     required this.name,
@@ -595,12 +626,17 @@ class Account {
     required this.opening,
     required this.openingDate,
     this.deleted = false,
-  });
+    AccountKind? kind,
+    this.institution,
+  }) : kind = kind ?? (source == null ? AccountKind.cash : AccountKind.bank);
 
-  /// Longest accepted name (characters, after trimming).
+  /// Longest accepted name and institution (characters, after trimming).
   static const maxName = 60;
 
-  bool get isCash => source == null;
+  bool get isCash => kind == AccountKind.cash;
+
+  /// Whether rows count for it (`accountBalances`): cash (the hand-added rows) or an account with a [source].
+  bool get countsRows => isCash || source != null;
 
   static Account fromRow(Map<String, Object?> r) => Account(
         id: r['id'] as String,
@@ -610,6 +646,8 @@ class Account {
         opening: _int(r['opening']) ?? 0,
         openingDate: _str(r['opening_date']) ?? '',
         deleted: r['deleted'] == 1,
+        kind: AccountKind.fromWire(r['kind']),
+        institution: _str(r['institution']),
       );
 }
 
@@ -835,8 +873,10 @@ class ReviewState {
   }
 }
 
-/// An owner-set exchange rate (P15, setting row `fx:<CODE>`): [rate] = wallet-currency minor units per [scale]
-/// (1,000,000) minor units of the other currency, set on [date] (`YYYY-MM-DD`) against the wallet currency [home].
+/// An owner-set exchange rate (P15, setting row `fx:<CODE>`): [rate] = wallet-currency units per [scale] (1,000,000)
+/// units of the other currency (whole units: 1 USD = 0.924 EUR is 924000; 1 JPY = 0.0065 EUR is 6500), set on [date]
+/// (`YYYY-MM-DD`) against the wallet currency [home]. Stage UX-A: amounts convert with each currency's minor digits
+/// (`convertMinor`); before it every currency had 2 digits, so a stored rate keeps its meaning.
 class FxRate {
   final int rate;
   final String date;
@@ -849,9 +889,16 @@ class FxRate {
   /// The divisor of [rate] and the accepted range of a rate (at most 100 home units per foreign unit).
   static const scale = 1000000, minRate = 1, maxRate = 100000000;
 
+  /// The highest rate of a crypto currency (`CurrencyInfo.crypto`, BTC): 1,000,000 home units per coin.
+  static const maxCryptoRate = 1000000000000;
+
+  /// The highest rate [code] accepts: [maxCryptoRate] for a crypto currency, else [maxRate].
+  static int maxRateOf(String code) => currencyInfo(code)?.crypto ?? false ? maxCryptoRate : maxRate;
+
   /// A stored value `{"rate": int, "date": "YYYY-MM-DD", "home": "EUR"}`, or null when it is not a valid one (a row
-  /// without `home` included).
-  static FxRate? read(Object? v) {
+  /// without `home` included). [code]: the currency the rate is for (its range, [maxRateOf]).
+  static FxRate? read(Object? v, {String code = ''}) {
+    final maxRate = maxRateOf(code);
     if (v is! Map) return null;
     final r = v['rate'], d = v['date'], h = v['home'];
     if (h is! String || !WalletSettings.currencyCode.hasMatch(h)) return null;
@@ -871,6 +918,34 @@ class FxRate {
 
   @override
   int get hashCode => Object.hash(rate, date, home);
+}
+
+/// The owner's change to one built-in merchant rule (UX-A, setting row `builtInRule:<slug>`): another [pattern] and/or
+/// [category] (null = the built-in's), or [off] (the rule no longer matches). [edited] = pattern or category changed.
+class BuiltInRuleOverride {
+  final String? pattern;
+  final String? category;
+  final bool off;
+  const BuiltInRuleOverride({this.pattern, this.category, this.off = false});
+
+  bool get edited => pattern != null || category != null;
+
+  /// A stored value `{"pattern"?: String, "category"?: String, "off": bool}`, or null when it is not a valid one.
+  static BuiltInRuleOverride? read(Object? v) {
+    if (v is! Map) return null;
+    final (p, c, o) = (v['pattern'], v['category'], v['off'] ?? false);
+    if ((p != null && (p is! String || p.trim().isEmpty)) || (c != null && (c is! String || c.isEmpty)) || o is! bool) return null;
+    return BuiltInRuleOverride(pattern: p as String?, category: c as String?, off: o);
+  }
+
+  Map<String, Object> toJson() => {if (pattern != null) 'pattern': pattern!, if (category != null) 'category': category!, 'off': off};
+
+  @override
+  bool operator ==(Object other) =>
+      other is BuiltInRuleOverride && other.pattern == pattern && other.category == category && other.off == off;
+
+  @override
+  int get hashCode => Object.hash(pattern, category, off);
 }
 
 /// User settings. Money in minor units. Each field syncs on its own.
@@ -923,6 +998,11 @@ class WalletSettings {
   /// (logged once as `settings.invalid` under `csvmap`).
   final Map<String, CsvMapping> csvMappings;
 
+  /// The owner's changes to built-in merchant rules (UX-A): rule id (`builtIn:<slug>`) → [BuiltInRuleOverride]. One
+  /// row per rule, `builtInRule:<slug>` ([builtInRuleRowPrefix]), so two devices editing two rules both keep their edit.
+  /// A row for a rule this build does not know (a newer or older build's) is kept here and matches nothing.
+  final Map<String, BuiltInRuleOverride> builtInRuleOverrides;
+
   const WalletSettings({
     this.salary = 0,
     this.rent = 0,
@@ -953,6 +1033,7 @@ class WalletSettings {
     this.warrantyReminderDays = defaultWarrantyReminderDays,
     this.syncFolder,
     this.csvMappings = const {},
+    this.builtInRuleOverrides = const {},
   });
 
   /// Largest accepted amount (minor units) and wait (hours: a year) in a stored or synced value.
@@ -985,6 +1066,9 @@ class WalletSettings {
 
   /// Saved CSV layout rows (P12, [csvMappings]): `csvmap:<16 hex shape id>`, value = [CsvMapping.toJson].
   static const csvMapPrefix = 'csvmap:';
+
+  /// Built-in rule override rows (UX-A, [builtInRuleOverrides]): `builtInRule:<slug>`, value = [BuiltInRuleOverride.toJson].
+  static const builtInRuleRowPrefix = 'builtInRule:';
 
   /// A shape id as a `csvmap:` row key holds it: 16 lower-case hex characters.
   static final csvShapeIdPattern = RegExp(r'^[0-9a-f]{16}$');
@@ -1037,9 +1121,17 @@ class WalletSettings {
     final fxRows = <String, Object?>{};
     final patternRows = <MerchantPattern>[];
     final csvRows = <String, CsvMapping>{};
-    var badPatternRow = false, badRange = false, badCsvRow = false;
+    final builtInRows = <String, BuiltInRuleOverride>{};
+    var badPatternRow = false, badRange = false, badCsvRow = false, badBuiltIn = false;
     for (final MapEntry(:key, :value) in m.entries) {
-      if (key.startsWith(csvMapPrefix)) {
+      if (key.startsWith(builtInRuleRowPrefix)) {
+        final o = BuiltInRuleOverride.read(value);
+        if (o == null) {
+          badBuiltIn = true;
+        } else {
+          builtInRows['builtIn:${key.substring(builtInRuleRowPrefix.length)}'] = o;
+        }
+      } else if (key.startsWith(csvMapPrefix)) {
         final id = key.substring(csvMapPrefix.length);
         final mapping = _csvMapping(id, value);
         if (mapping == null) {
@@ -1064,6 +1156,7 @@ class WalletSettings {
       }
     }
     if (badCsvRow) logInvalidSetting('csvmap', 'row');
+    if (badBuiltIn) logInvalidSetting('builtInRules', 'row');
     if (badPatternRow) logInvalidSetting('merchantPatterns', 'row');
     if (badRange) logInvalidSetting('merchantPatterns', 'range');
     patternRows.sort((a, b) {
@@ -1114,6 +1207,7 @@ class WalletSettings {
       returnReminderDays: i('returnReminderDays', defaultReturnReminderDays, max: maxReturnReminderDays),
       warrantyReminderDays: i('warrantyReminderDays', defaultWarrantyReminderDays, max: maxWarrantyReminderDays),
       csvMappings: csvRows.isEmpty ? const {} : Map.unmodifiable(csvRows),
+      builtInRuleOverrides: builtInRows.isEmpty ? const {} : Map.unmodifiable(builtInRows),
     );
   }
 
@@ -1182,7 +1276,7 @@ class WalletSettings {
     final out = <String, FxRate>{}, stale = <String, FxRate>{};
     var bad = false;
     for (final MapEntry(:key, :value) in raw.entries) {
-      final r = FxRate.read(value);
+      final r = FxRate.read(value, code: key);
       if (r == null || !currencyCode.hasMatch(key) || r.home == key) {
         bad = true;
       } else if (key != currency) {
@@ -1253,6 +1347,8 @@ class WalletSettings {
           '$fxPrefix$key': FxRate(value.rate, value.date, home: value.home ?? currency).toJson(),
         // Saved CSV layouts as stored, one row each, so fromMap(toMap()) keeps them.
         for (final MapEntry(:key, :value) in csvMappings.entries) '$csvMapPrefix$key': value.toJson(),
+        for (final MapEntry(:key, :value) in builtInRuleOverrides.entries)
+          '$builtInRuleRowPrefix${key.substring('builtIn:'.length)}': value.toJson(),
         'reviewDay': reviewDay,
         'lastReview': lastReview,
         'reviewStreak': reviewStreak,

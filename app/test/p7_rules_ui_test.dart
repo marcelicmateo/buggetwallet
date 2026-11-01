@@ -105,11 +105,11 @@ void main() {
       expect(k('ruleCount:payeeTags:other_shop'), findsNothing);
 
       // Built-ins: folded until the toggle is tapped.
-      expect(k('rule:builtIn:0'), findsNothing);
+      expect(k('rule:builtIn:wolt'), findsNothing);
       expect(find.textContaining('Built in (read-only)'), findsOneWidget);
       await tapKey(t, 'builtInToggle');
-      expect(k('rule:builtIn:0'), findsOneWidget);
-      expect(find.descendant(of: k('rule:builtIn:0'), matching: find.byType(PopupMenuButton<Object?>)), findsNothing);
+      expect(k('rule:builtIn:wolt'), findsOneWidget);
+      expect(find.descendant(of: k('rule:builtIn:wolt'), matching: find.byType(PopupMenuButton<Object?>)), findsNothing);
       expect(t.takeException(), isNull);
       wc.dispose();
     });

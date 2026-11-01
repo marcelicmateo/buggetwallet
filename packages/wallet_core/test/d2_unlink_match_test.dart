@@ -420,7 +420,7 @@ void main() {
         r.close();
 
         r = WalletRepo.open(path, dbKey: dbKey, now: now);
-        expect(r.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'], '19');
+        expect(r.db.select("SELECT value FROM meta WHERE key = 'schema'").first['value'], '${WalletRepo.schemaVersion}');
         expect(_off(r, entry), isNull);
         expect(r.transaction(entry)!.matchedTo, bank, reason: 'the match is kept');
         r.unlinkMatch(entry);

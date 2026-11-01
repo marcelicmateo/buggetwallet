@@ -672,22 +672,30 @@ extension BillsDb on WalletController {
   int get returnReminderDays => settings.returnReminderDays;
   int get warrantyReminderDays => settings.warrantyReminderDays;
 
-  /// The reminder days of one bill's date: the bill's own value, else the wallet default. WIRE AT MERGE (1 of 2): core's per-bill fields
-  /// are not merged yet, so this returns the default; make it `(warranty ? b.warrantyReminderDays : b.returnReminderDays) ?? default`.
+  /// The reminder days of one bill's date: the bill's own value, else the wallet default (core's `effective*ReminderDays`).
   /// Used by the sheet's reminder line and by [_rescheduleBillRemindersNow] (per bill).
-  int billReminderDays(Bill b, {required bool warranty}) => warranty ? warrantyReminderDays : returnReminderDays;
+  int billReminderDays(Bill b, {required bool warranty}) =>
+      warranty ? effectiveWarrantyReminderDays(b, settings) : effectiveReturnReminderDays(b, settings);
 
   /// Saves this bill's reminder days (return-by and/or warranty; null leaves that one alone) and schedules the reminders again.
-  /// False when core refuses (outside 0..30 return, 0..90 warranty). WIRE AT MERGE (2 of 2): [_writeBillReminderDays] only.
+  /// False (nothing saved) when core refuses (outside 0..30 return, 0..90 warranty).
   bool setBillReminderDays(String id, {int? returnDays, int? warrantyDays}) {
     final ok = _writeBillReminderDays(id, returnDays, warrantyDays);
     if (ok) unawaited(rescheduleHeadsUps());
     return ok;
   }
 
-  /// The one write: `updateBill(id, returnReminderDays: returnDays, warrantyReminderDays: warrantyDays)` once core has it.
-  bool _writeBillReminderDays(String id, int? returnDays, int? warrantyDays) =>
-      throw UnimplementedError('Per-bill reminder days wait for core (schema 20): wire this to updateBill.');
+  bool _writeBillReminderDays(String id, int? returnDays, int? warrantyDays) {
+    try {
+      repo.updateBill(id, returnReminderDays: returnDays, warrantyReminderDays: warrantyDays);
+    } on ArgumentError {
+      logEvent(_billLog, Level.INFO, 'bill.reminderDays', {'ok': false});
+      return false;
+    }
+    logEvent(_billLog, Level.INFO, 'bill.reminderDays', {'return': returnDays != null, 'warranty': warrantyDays != null});
+    _changed();
+    return true;
+  }
 
   /// The wallet-wide default for both reminder spans (the value a bill without its own uses). Saves both; false (nothing saved) when one is outside 0..30 (return) or 0..90 (warranty).
   bool saveBillReminderDays({required int returnDays, required int warrantyDays}) {
@@ -701,7 +709,8 @@ extension BillsDb on WalletController {
     return true;
   }
 
-  /// Return-window and warranty reminders: 09:00 on (end date − days) for every confirmed bill with such a date still ahead.
+  /// Return-window and warranty reminders: 09:00 on (end date − days) for every confirmed bill with such a date still ahead
+  /// (days: the bill's own, else the wallet setting; core's `effectiveReturnReminderDays` / `effectiveWarrantyReminderDays`).
   /// The text has no payee, amount or item. Runs inside [rescheduleHeadsUps]'s chain, so it never overlaps another run.
   Future<void> _rescheduleBillRemindersNow() async {
     try {

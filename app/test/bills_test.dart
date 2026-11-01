@@ -1309,8 +1309,7 @@ void main() {
       expect(find.text('Reminder days'), findsNothing, reason: 'the Bills panel has no section of its own any more');
     });
 
-    testWidgets('Change saves this bill\'s reminder days only', (tester) async {
-      // Wire at merge: WalletController.setBillReminderDays -> core's updateBill(returnReminderDays:, warrantyReminderDays:).
+    tw('Change saves this bill\'s reminder days only', (tester) async {
       final wc = bw();
       final id = addBill(wc, syntheticBill('rem2'), confirm: true);
       wc.setBillDates(id, returnBy: '2026-11-01');
@@ -1323,7 +1322,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Reminder 1 day before'), findsOneWidget);
       expect(wc.returnReminderDays, 3, reason: 'the wallet default is not touched');
-    }, skip: true); // per-bill reminder days wait for core (schema 20): wire WalletController.setBillReminderDays at merge
+      expect(wc.bill(id)!.returnReminderDays, 1, reason: 'stored on this bill');
+      final other = addBill(wc, syntheticBill('rem3'), confirm: true);
+      expect(wc.billReminderDays(wc.bill(other)!, warranty: false), 3, reason: 'another bill keeps the default');
+    });
 
     test('saveBillReminderDays checks both ranges (0 is on the day)', () {
       final wc = bw();

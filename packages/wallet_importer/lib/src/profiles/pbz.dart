@@ -1,4 +1,5 @@
 // PBZ current account report (.xls, BIFF8). Layout: docs/context/IMPORT_FORMATS.md.
+import '../currencies.dart';
 import '../model.dart';
 import 'cells.dart';
 import 'profile.dart';
@@ -103,6 +104,11 @@ class PbzProfile extends BankProfile {
     final amount = cellCents(a);
     if (amount == null) return const RowResult.invalid();
     final currency = row.length > 4 && cellText(row[4]).isNotEmpty ? cellText(row[4]) : 'EUR';
+    // The amount in the currency's stored units (fiat hundredths as always, BTC satoshis; a 3-decimal currency's third
+    // decimal is refused); the id keeps v1's cents (`amount`).
+    final digits = storageDigitsOf(currency), strict = minorDigitsOf(currency) > digits;
+    final minor = cellMinor(a, digits, strict: strict);
+    if (minor == null) return const RowResult.invalid();
     final type = cellText(row[1]);
     final bc = ctx.column('balance');
     final balanceNum = bc >= 0 && bc < row.length && cellText(row[bc]).isNotEmpty ? cellNumber(row[bc]) : null;
@@ -110,13 +116,13 @@ class PbzProfile extends BankProfile {
       id: ctx.v1Id(d, amount, desc),
       source: id,
       date: d,
-      amountMinor: amount,
+      amountMinor: minor,
       currency: currency,
       bankType: type,
       description: desc,
       kindHint: _kind(type, desc),
       account: ctx.account,
-      balanceAfter: balanceNum == null ? null : cellCents(balanceNum),
+      balanceAfter: balanceNum == null ? null : cellMinor(balanceNum, digits, strict: strict),
     ));
   }
 

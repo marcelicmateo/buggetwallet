@@ -192,7 +192,8 @@ class _RuleRow extends StatelessWidget {
               Text(count == 1 ? 'used by 1 payment' : 'used by $count payments', key: ValueKey('ruleCount:$id'), style: meta),
           ]),
         ),
-        if (rule.editable)
+        // Built-ins are editable in core since UX-A; their own actions come with the UI half (until then no menu).
+        if (rule.editable && rule.kind != RuleKind.builtIn)
           PopupMenuButton<_Act>(
             key: ValueKey('ruleMenu:$id'),
             tooltip: 'Actions for ${rule.text}',

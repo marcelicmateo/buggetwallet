@@ -9,6 +9,7 @@ import 'package:logging/logging.dart';
 
 import 'csv_mapping.dart';
 import 'csv_reader.dart';
+import 'currencies.dart';
 import 'importer.dart' show ImportException, unknownLayoutMessage;
 import 'limits.dart';
 import 'log.dart';
@@ -368,9 +369,10 @@ final _amountRes = {
   CsvDecimal.point: RegExp(r'^(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?$'),
 };
 
-/// Exact cents of an amount cell in [decimal] style (thousands marks of the other kind, spaces allowed; a leading
-/// `+`, `-` or `−`). No doubles: at most 2 decimals, up to [maxRowAmountMinor].
-(int?, _AmountError?) _cents(String raw, CsvDecimal decimal) {
+/// Exact minor units of an amount cell in [decimal] style (thousands marks of the other kind, spaces allowed; a leading
+/// `+`, `-` or `−`) for a currency stored with [digits] digits (`storageDigitsOf`: 2 = cents for every fiat currency,
+/// BTC 8). No doubles: at most [digits] decimals (a finer fraction is refused, never rounded), up to [maxRowAmountMinor].
+(int?, _AmountError?) _cents(String raw, CsvDecimal decimal, [int digits = 2, bool zerosPast = false]) {
   var s = raw.replaceAll(_space, '');
   if (s.isEmpty) return (null, _AmountError.empty);
   var neg = false;
@@ -380,22 +382,27 @@ final _amountRes = {
   }
   final m = _amountRes[decimal]!.firstMatch(s);
   if (m == null) return (null, _AmountError.notAmount);
-  final frac = m[2] ?? '';
-  if (frac.length > 2) return (null, _AmountError.decimals);
+  var frac = m[2] ?? '';
+  // [zerosPast] (a currency with more ISO digits than it is stored with, KWD): `10,000` is 10.00; `1,235` is refused.
+  if (zerosPast && frac.length > digits && RegExp(r'^0+$').hasMatch(frac.substring(digits))) frac = frac.substring(0, digits);
+  if (frac.length > digits) return (null, _AmountError.decimals);
   final whole = m[1]!.replaceAll(decimal == CsvDecimal.comma ? '.' : ',', '').replaceFirst(RegExp(r'^0+(?=\d)'), '');
-  if (whole.length > 13) return (null, _AmountError.tooBig);
-  final cents = int.parse(whole) * 100 + int.parse(frac.padRight(2, '0'));
+  if (whole.length > 15 - digits) return (null, _AmountError.tooBig);
+  final cents = int.parse(whole) * pow10(digits) + int.parse(frac.padRight(digits, '0'));
   if (cents > maxRowAmountMinor) return (null, _AmountError.tooBig);
   return (neg ? -cents : cents, null);
 }
 
-/// Exact cents of an amount text in [decimal] style, or null when it is not one (see the Map columns rules).
-int? parseCsvCents(String s, CsvDecimal decimal) => _cents(s, decimal).$1;
+/// Exact cents of an amount text in [decimal] style, or null when it is not one (see the Map columns rules). [digits]:
+/// the minor digits of the amount's currency (2 = cents).
+int? parseCsvCents(String s, CsvDecimal decimal, {int digits = 2}) => _cents(s, decimal, digits).$1;
 
-String _amountProblem(int row, String what, String cell, _AmountError e) => switch (e) {
+String _amountProblem(int row, String what, String cell, _AmountError e, String currency) => switch (e) {
       _AmountError.empty => 'Row ${row + 1}: no $what',
       _AmountError.notAmount => 'Row ${row + 1}: the $what ${_q(cell)} is not an amount',
-      _AmountError.decimals => 'Row ${row + 1}: the $what ${_q(cell)} has more than 2 decimals',
+      _AmountError.decimals => minorDigitsOf(currency) > storageDigitsOf(currency)
+          ? 'Row ${row + 1}: the $what ${_q(cell)} has more than ${storageDigitsOf(currency)} decimals (the third decimal of $currency is not supported)'
+          : 'Row ${row + 1}: the $what ${_q(cell)} has more than ${storageDigitsOf(currency)} decimals',
       _AmountError.tooBig => 'Row ${row + 1}: the $what ${_q(cell)} is too large',
     };
 
@@ -410,34 +417,41 @@ CsvPreviewRow _mapRow(List<String> cells, int row, CsvMapping m, String walletCu
   final dateCell = cell(m.dateCol);
   final date = parseCsvDate(dateCell, m.dateFormat);
   if (date == null) return bad(dateCell.isEmpty ? 'Row ${row + 1}: no date' : 'Row ${row + 1}: the date ${_q(dateCell)} is not a date');
+  // The currency first: the amount is read with its minor digits (JPY 0, KWD 3, BTC 8). Its problem is reported after
+  // the amount's, as before.
+  var currency = m.currencyCode ?? walletCurrency;
+  String? currencyProblem;
+  if (m.currencyCol != null) {
+    final raw = cell(m.currencyCol);
+    final up = raw == '€' ? 'EUR' : raw.toUpperCase();
+    if (raw.isEmpty) {
+      currencyProblem = 'Row ${row + 1}: no currency';
+    } else if (!_code.hasMatch(up)) {
+      currencyProblem = 'Row ${row + 1}: the currency ${_q(raw)} is not a currency code';
+    } else {
+      currency = up;
+    }
+  }
+  final digits = storageDigitsOf(currency), zeros = minorDigitsOf(currency) > digits;
   int cents;
   if (m.amountCol != null) {
-    final (c, e) = _cents(cell(m.amountCol), m.decimal);
-    if (e != null) return bad(_amountProblem(row, 'amount', cell(m.amountCol), e), tooLarge: e == _AmountError.tooBig);
+    final (c, e) = _cents(cell(m.amountCol), m.decimal, digits, zeros);
+    if (e != null) return bad(_amountProblem(row, 'amount', cell(m.amountCol), e, currency), tooLarge: e == _AmountError.tooBig);
     cents = c!;
   } else {
     final debitCell = cell(m.debitCol), creditCell = cell(m.creditCol);
     if (debitCell.replaceAll(_space, '').isEmpty && creditCell.replaceAll(_space, '').isEmpty) return bad('Row ${row + 1}: no amount');
-    final (d, de) = debitCell.isEmpty ? (0, null) : _cents(debitCell, m.decimal);
-    if (de != null) return bad(_amountProblem(row, 'debit', debitCell, de), tooLarge: de == _AmountError.tooBig);
-    final (c, ce) = creditCell.isEmpty ? (0, null) : _cents(creditCell, m.decimal);
-    if (ce != null) return bad(_amountProblem(row, 'credit', creditCell, ce), tooLarge: ce == _AmountError.tooBig);
+    final (d, de) = debitCell.isEmpty ? (0, null) : _cents(debitCell, m.decimal, digits, zeros);
+    if (de != null) return bad(_amountProblem(row, 'debit', debitCell, de, currency), tooLarge: de == _AmountError.tooBig);
+    final (c, ce) = creditCell.isEmpty ? (0, null) : _cents(creditCell, m.decimal, digits, zeros);
+    if (ce != null) return bad(_amountProblem(row, 'credit', creditCell, ce, currency), tooLarge: ce == _AmountError.tooBig);
     if (d != 0 && c != 0) return bad('Row ${row + 1}: both debit and credit');
     // Exactly as written: credit − debit (a debit of −12,30 is a reversal, money in; a credit of −50,00 is money out).
     cents = c! - d!;
   }
+  if (currencyProblem != null) return bad(currencyProblem);
   if (m.negate) cents = -cents;
-  String currency;
-  if (m.currencyCol != null) {
-    final raw = cell(m.currencyCol);
-    final up = raw == '€' ? 'EUR' : raw.toUpperCase();
-    if (raw.isEmpty) return bad('Row ${row + 1}: no currency');
-    if (!_code.hasMatch(up)) return bad('Row ${row + 1}: the currency ${_q(raw)} is not a currency code');
-    currency = up;
-  } else {
-    currency = m.currencyCode ?? walletCurrency;
-  }
-  final balance = m.balanceCol == null ? null : _cents(cell(m.balanceCol), m.decimal).$1;
+  final balance = m.balanceCol == null ? null : _cents(cell(m.balanceCol), m.decimal, digits, zeros).$1;
   return CsvPreviewRow(row: row, date: date, amountMinor: cents, currency: currency, description: description, balanceAfter: balance);
 }
 
@@ -508,7 +522,7 @@ ImportBatch parseMappedCsv(Uint8List bytes, CsvMapping layout, {String? fileName
       if (r.tooLarge) tooLarge++;
     } else {
       out.add(NormalizedTransaction(
-        id: ctx.sourceId(source, r.date!, r.amountMinor!, r.description),
+        id: ctx.sourceId(source, r.date!, r.amountMinor!, r.description, digits: storageDigitsOf(r.currency!)),
         source: source,
         date: r.date!,
         amountMinor: r.amountMinor!,

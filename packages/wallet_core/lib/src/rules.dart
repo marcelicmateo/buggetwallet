@@ -146,7 +146,7 @@ enum MoveDirection { up, down }
 class RuleView {
   final RuleKind kind;
 
-  /// `payee:<key>`, the pattern row id `pattern:<16 hex>`, `builtIn:<index in builtInMerchantRules>`, or
+  /// `payee:<key>`, the pattern row id `pattern:<16 hex>`, `builtIn:<slug>` ([BuiltInRule.id]), or
   /// `payeeTags:<key>`. The first three are the ids [Categorizer.ruleFor] and [ruleHits] use.
   final String id;
 
@@ -164,11 +164,17 @@ class RuleView {
   /// The payee's live rule tags (resolved, in tag table order); empty for patterns and built-ins.
   final List<String> tags;
 
-  /// The stored order for patterns, the index for built-ins, 0 otherwise.
+  /// The stored order for patterns, the index in [builtInRules] for built-ins, 0 otherwise.
   final int order;
 
-  /// False only for built-in rules.
+  /// True for every rule (UX-A: built-ins too, through `WalletRepoSettings.editBuiltInRule`); kept for the app.
   final bool editable;
+
+  /// A built-in whose pattern or category the owner changed ([BuiltInRuleOverride.edited]); false for other kinds.
+  final bool edited;
+
+  /// A built-in the owner turned off (it matches nothing); false for other kinds.
+  final bool off;
 
   const RuleView(
       {required this.kind,
@@ -181,11 +187,14 @@ class RuleView {
       this.categoryLabel,
       this.tags = const [],
       this.order = 0,
-      this.editable = true});
+      this.editable = true,
+      this.edited = false,
+      this.off = false});
 }
 
 /// The Rules screen's list: payee rules by label, then patterns by order ([WalletSettings.patternRules]), then the
-/// payee tag rules of payees without a payee rule (by label), then the built-in rules (read-only). A payee with a rule
+/// payee tag rules of payees without a payee rule (by label), then the built-in rules (with the owner's edits, an off
+/// one flagged [RuleView.off]). A payee with a rule
 /// and tags is one payee row carrying the tags. [ruleTags] = payee key → tag ids ([WalletRepoTags.ruleTags]); tag ids
 /// resolve through [tags] (dead ones dropped). Category labels come from [table]. Pure.
 List<RuleView> rulesView(
@@ -238,17 +247,24 @@ List<RuleView> rulesView(
           categoryLabel: table.label(p.category),
           order: p.order),
     for (final k in tagOnly) RuleView(kind: RuleKind.payeeTags, id: 'payeeTags:$k', text: label(k), match: 'payee', tags: tagsFor(k)),
-    for (final (i, (c, re)) in builtInMerchantRules.indexed)
-      RuleView(
-          kind: RuleKind.builtIn,
-          id: 'builtIn:$i',
-          text: re.pattern,
-          match: MerchantPattern.regex,
-          category: c,
-          categoryLabel: table.label(c),
-          order: i,
-          editable: false),
+    for (final (i, r) in builtInRules.indexed) _builtInView(i, r, st.builtInRuleOverrides[r.id], table),
   ];
+}
+
+/// Built-in rule [r] (index [i]) as a row, with the owner's override [o]: its pattern, and its category when that is
+/// live in [table] (else the built-in's, as `Categorizer` does).
+RuleView _builtInView(int i, BuiltInRule r, BuiltInRuleOverride? o, CategoryTable table) {
+  final c = switch (o?.category) { final x? when table.isLive(x) => x, _ => r.category };
+  return RuleView(
+      kind: RuleKind.builtIn,
+      id: r.id,
+      text: o?.pattern ?? r.pattern,
+      match: MerchantPattern.regex,
+      category: c,
+      categoryLabel: table.label(c),
+      order: i,
+      edited: o?.edited ?? false,
+      off: o?.off ?? false);
 }
 
 /// How many live rows in [currency] each rule decided the main tag of ([Categorizer.ruleFor]): rule id → count. Rows

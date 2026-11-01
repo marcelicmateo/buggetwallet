@@ -284,8 +284,18 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `untaggedSpent`). `searchAll(tags:)`, `transactionsCsv(tags:)` (`tags` column after `category`, labels joined
   `; `). Name rules (1–40 chars, unique folded among live tags, not a live category label, ≤ 500 live) are checked on
   local writes only. Logs: counts only. Tests: `test/t1_tags_impl_test.dart`.
+- `currencies.dart` — UX-A (`docs/context/UX_SPEC.md`): re-exports the importer's table (`CurrencyInfo`, `allCurrencies` =
+  circulating ISO 4217 + BTC, `currencyInfo`, `minorDigitsOf` = ISO digits, `displayDigitsOf` = what is shown/typed: JPY
+  0, EUR/KWD 2, BTC 8) and **`storageDigitsOf`: the stored scale, 2 (hundredths) for every fiat currency exactly as every
+  earlier build, 8 for BTC** (lead rule 2026-11-01: no stored amount is ever read differently). `prevalentCurrency(txs,
+  wallet)` (≥ 10 rows, ≥ 80 % by count in one other code; offer only); repo `setWalletCurrency(code)` (one setting
+  write; unknown or crypto codes refused; rows keep their own currency). Typed input `parseMoneyCents(s, digits:)`
+  (digits = typed decimals, result in stored units), CSV `centsToDecimal(c, digits:)` at storage digits.
 - `fx.dart` — other currencies by an owner-set rate (P15, spec `docs/context/P15_SPEC.md`). Settings rows `fx:<CODE>`
-  = `{rate, date, home}` (`FxRate`: home minor units per 1,000,000; 1..10^8; `home` = the wallet currency it was set
+  = `{rate, date, home}` (`FxRate`: home units per 1,000,000 foreign units (UX-A: whole units; before it every currency
+  had 2 digits, so stored rates keep their meaning); 1..10^8, crypto codes to `maxCryptoRate` 10^12; `convertMinor(a, r,
+  fromDigits:, toDigits:)` scales by 10^(to − from) at storage digits (fiat ↔ fiat: the pre-20 math; BTC ↔ fiat 10^6); `setFxRate` takes codes of `allCurrencies`
+  only, `removeFxRate` also an older build's other code; `home` = the wallet currency it was set
   against, required; bad rows dropped, `settings.invalid` key `fx`; the wallet currency's own row left out),
   `WalletSettings.fxRates` (home = the wallet currency) / `fxStale` (set against another home: counts nowhere), repo
   `setFxRate(code, rate)` (dated today, home = wallet currency) / `removeFxRate(code)` (stale too). `convertMinor`
@@ -683,6 +693,12 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   paths or file names. Noisy per-render logs at FINER. `test/logs_impl_test.dart` checks core logs stay clean.
 
 ## Known limits (for the sync redesign)
+- Schema 20 (UX-A) amounts: every fiat currency is stored in hundredths as before; a currency with 3 ISO decimals (KWD,
+  BHD, JOD, OMR, TND, LYD, IQD) has no third decimal: the importer refuses a row whose third decimal is not zero (never
+  rounded), typed input allows 2. BTC is stored in satoshis from schema 20 on: a BTC row an older build imported (in
+  cents) reads 10^6 too small, and an older build shows and edits BTC amounts wrongly: update every device first.
+- Built-in rules (UX-A) are one rule per brand with stable slugs (`builtIn:lidl`); `builtIn:<index>` (the 10 grouped
+  rules before) resolves to that group's first brand. Overrides are rows `builtInRule:<slug>`; a slug is never reused.
 - D2 Unlink (`tx.match_off`, schema 19): a build older than 19 ignores the field, so it can match the unlinked pair
   again (its `matched_to` op then reaches the new builds, which reopen the match: a rewrite back and forth on every
   sync until that device updates). Every device updates together. The unlink does not undo what matching copied to the
@@ -861,7 +877,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   devices): `test/future_spending_test.dart` (+ `future_spending_spec_test.dart`, `ics_spec_test.dart`; F4a: content refs
   incl. two devices `calendar_ref_test.dart`; KL-A known limits fixed: `kl_1_auto_paid_test.dart`,
   `kl_2_search_rules_test.dart`, `kl_3_payee_alias_test.dart` (synced `payee_alias`, schema 19), `kl_4_calendar_ids_test.dart`,
-  `kl_5_copy_id_test.dart`, `kl_6_upcoming_today_test.dart`, RX8 `kl_compare_tag_test.dart`, parseIcs cost bounds + dismiss title `future_spending_fixes_test.dart`), CSV: `test/export_test.dart`, search: `test/search_test.dart`, clock stats (`WalletRepo.clockStats`, two devices): `test/clock_stats_test.dart`, data version: `test/data_version_test.dart`,
+  `kl_5_copy_id_test.dart`, UX-A (storage scale, currencies, account kinds, built-in rule overrides + oracle `ux_a_builtin_oracle_test.dart`, bill reminder days, schema 20): `ux_a_core_test.dart` +
+  spec tests `ux_a_currencies_test.dart`, `ux_a_accounts_test.dart`, `ux_a_builtin_rules_test.dart`, `kl_6_upcoming_today_test.dart`, RX8 `kl_compare_tag_test.dart`, parseIcs cost bounds + dismiss title `future_spending_fixes_test.dart`), CSV: `test/export_test.dart`, search: `test/search_test.dart`, clock stats (`WalletRepo.clockStats`, two devices): `test/clock_stats_test.dart`, data version: `test/data_version_test.dart`,
   web-safe core (`fromDatabase`, `backupBytes`/`restoreBackupBytes`, `MemoryLogSink`, gzip compatibility): `test/web_core_test.dart`,
   encrypted local database (new/convert/wrong key/WAL/interrupted conversion/perf numbers): `test/local_db_test.dart`
   (sqlite3mc proof tests: `test/encrypted_db_test.dart`);
