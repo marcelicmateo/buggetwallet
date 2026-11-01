@@ -89,3 +89,42 @@ Also: `lint_clean` expects `go-check` (host step, first, ok or failed) plus the 
 tolerated in `last-failed.txt`. `perf.jsonl` `ok` is masked, but any `ok:false` with exit 0 fails. `BW_SIGNING_DIR` is passed
 to the children so the build and the secret grep use the same key. `lint_unformatted` cleans up with `t.Cleanup`; `TestMain`
 removes a leftover `app/lib/zz_*unformatted*.dart` of a killed run.
+
+## GO4: helper ports (`go4_*_test.go`)
+
+Old script vs `dist/bin/wallet-build <cmd>` (or `BW_PARITY_BIN`; skipped with the reason when the binary is not built).
+A `g4` case (`go4_harness_test.go`) gives each side its own sandbox: HOME, `BW_DATA_DIR`, a work dir, optionally a copy
+of the repo layout (`sbRepo`: the listed `tools/` files, trees such as `relay/deploy/native`, a `git init` with one
+deterministic commit and a bare `origin`, and the binary copied to `<sandbox>/dist/bin` because the tool finds its root from
+its own location), and fake `podman` / `gh` on PATH (`gh` answers from JSON files through the real `jq`). Nothing of the
+owner's is read: no transcripts, logs, keys, relay data or wallet. `--upload` is refused by the harness. Compared: exit
+code, stdout, stderr (sandbox, repo and `/tmp/tmp.XXXX` paths masked), named files (`files`) and directory modes (`dirs`);
+`exitOnly` for usage texts that differ by design. `BW_PARITY_IMPL=bash` runs the old command on both sides (harness proof):
+
+    BW_PARITY_IMPL=bash GOTOOLCHAIN=local go test -tags parity -run GO4 -skip QuietDefault .
+
+Cheap: `TestGO4TokenUsage` (transcripts: main + subagents, duplicate requestIds with different output_tokens and a tie,
+non-assistant and garbage lines, requestedModel fallback, null output, 3 days, `--since`/`--until`, `--json`, commits on the
+day borders, no transcripts -> 1), `TestGO4LogSummary` (every section, percentiles for n=1/2/10/11/100, float formatting in
+re-dumped fields, stacks longer than 4 lines, >10 slow frames, >20 lifecycle states, two files, no records -> 1, usage -> 2),
+`TestGO4LspQuery` (usage, bad position, missing file), `TestGO4MutateList` (`--list` for two files each of importer, core,
+sync, seeds 1 and 7, paths in three spellings, usage; the Go side starts the container, so it needs `BW_PARITY_HEAVY=1`),
+`TestGO4Fixtures` (bills, generic, banks, all against the committed fixtures: byte-identical except PDFs, compared by
+decoded streams; the frozen Excel files never written by Go; the PDF normalizer has its own can-fail test),
+`TestGO4FixturesGoOnly` (usage -> 2, `fixtures embed` equals `app/integration_test/support/fixtures.dart`),
+`TestGO4Relay`, `TestGO4Web` (status, stop, usage, serve without a build, shot arguments; fake podman),
+`TestGO4RelayNativeCheck` (real files and 8 broken invariants), `TestGO4SigningKey` (temp `BW_SIGNING_DIR`; needs `keytool`;
+fresh key, refuses to overwrite, second run; the password never on stdout/stderr), `TestGO4HookNoPoll` (33 hook inputs,
+block/allow shape, `--self-test`), `TestGO4TimesTrend` (all flags; `--ci` against a temp bare origin with `ci-logs`),
+`TestGO4CIStatus` (green, failed, running, none yet, `--wait`, `--log`, unpushed note, log of another commit),
+`TestGO4QuietDefaultPath` (test_quiet.sh on the default path: silent lint, silent failing lint with the run-dir files,
+silent usage errors of build.sh and emulator.sh; needs podman).
+
+Heavy (`BW_PARITY_HEAVY=1`): `TestGO4RelayLifecycle` (start, status, start again, logs, stop, status on a free
+`BW_RELAY_PORT` and a temp data dir; skipped when a `bw-relay` container runs), `TestGO4WebServe` (serve on a free port:
+index.html and a .wasm file, same status, bytes and media type; serve twice; stop), `TestGO4WebShot` (PNG of the requested
+size; needs `dist/web/`), the `lsp_query_*_isoDate` cases (refs and def at `dates.dart:4:8`), and the mutate `--list` cases
+on the Go side.
+
+Masking added: `/tmp/tmp.XXXX` (mktemp in the scripts' messages), sandbox paths, the `~/.claude/projects/<dashed repo>`
+name, `SHA256: <fingerprint>` and the password values of `signing.env`.
