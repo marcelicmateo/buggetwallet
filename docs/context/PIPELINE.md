@@ -52,7 +52,7 @@ Theme waits for the owner's mockup pick; crypto rate by hand. Merge order A-core
 | F1 | field refactor pilot (Bill + Account), plan `FIELDS_PLAN.md` | scout → core + test-writer + ui | owner OK | F1-core 0416494 + review 56b7909 merged 06f728d; F1-ui running |
 | F2 | field refactor roll-out to the other entities | core + ui | F1, UX-B | planned |
 
-## Stage GO: build tools in Go (owner 2026-11-01, queued after Stage UX)
+## Stage GO: build tools in Go (owner 2026-11-01, queued after Stage UX; design + owner answers `STAGE_GO_DESIGN.md`)
 Replace the bash/Python build tooling (~4,400 lines: `build.sh` 751, `emulator.sh`, `live.sh`, `relay-deploy.sh`,
 `build_log.py`, `timing.sh`, `live_vm.py`, …) with one Go program (Go is on the owner's host; static binary, no container
 needed to build the tool). Built in from the start: quiet mode (exit code only), logging per step by default, timeouts
@@ -64,6 +64,7 @@ entry points). Agents: scout → devops (sonnet/high for the rewrite) + test-wri
 |---|---|---|---|---|
 | GO1 | Go build tool: build.sh commands, quiet, logs, status files, parity tests | devops + test-writer | Stage UX done | queued |
 | GO2 | emulator.sh, live.sh (+ live_vm.py) into the same tool | devops | GO1 | queued |
+| GO4 | all remaining tools/ helpers into wallet-build (owner: everything except relay-deploy.sh), golden/parity per helper; then the Makefile replaces the scripts | devops + test-writer | GO1, GO2 | queued |
 | GO3 | CI slimmed (owner 2026-11-01): one composite action `.github/actions/` for checkout + cache + container + log upload (each job ~8 lines, ci.yml ~356 → ~150), release.yml reuses ci.yml's apk/linux jobs via `workflow_call` instead of copies, the `log` job's merge script becomes one Go tool command; same jobs, same parallelism, same artifacts and `ci-logs` output | devops | GO1 | queued |
 
 ## Stages BP, WS, DK (owner picked 2026-10-28; plan `STAGE_Y_PLAN.md`; one at a time after Stage M)
