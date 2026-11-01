@@ -52,16 +52,8 @@ extension EcbDb on WalletController {
     if (newest == null || (currencyInfo(old)?.crypto ?? false) || (currencyInfo(code)?.crypto ?? false)) return false;
     // The device cache (not the wallet's fx_day rows, which hold only what the wallet uses now) must hold a rate of the newest day for both
     // currencies (EUR is 1): EUR to RSD has none, so that switch keeps the "set the rate" text.
-    // TODO(core): a repo method for this lookup (`ecbCachePairOn`); until then the cache table is read here.
-    final need = {
-      for (final c in [old, code])
-        if (c != 'EUR') c
-    };
-    if (need.isEmpty) return true;
     try {
-      final rows = repo.db.select(
-          'SELECT DISTINCT cur FROM ecb_rates WHERE date = ? AND cur IN (${List.filled(need.length, '?').join(', ')})', [newest, ...need]);
-      return rows.length == need.length;
+      return repo.ecbCacheHas([old, code], newest);
     } catch (e, st) {
       logError(_ecbLog, 'fx.coversSwitch.failed', e, st);
       return false;

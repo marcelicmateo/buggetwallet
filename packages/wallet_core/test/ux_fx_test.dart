@@ -302,6 +302,17 @@ void main() {
       expect(repo.ecbCacheInfo().importedOn, '2026-10-10');
     });
 
+    test('ecbCacheHas: every currency on that day, EUR always, an unpublished one never', () {
+      expect(repo.ecbCacheHas(['USD'], '1999-01-08'), isFalse, reason: 'empty cache');
+      expect(repo.ecbCacheHas(['EUR'], '1999-01-08'), isTrue);
+      repo.importEcbHistory(_zip('eurofxref-hist.csv', _csv));
+      expect(repo.ecbCacheHas(['EUR', 'GBP'], '1999-01-08'), isTrue);
+      expect(repo.ecbCacheHas(['USD', 'JPY'], '1999-01-04'), isTrue);
+      expect(repo.ecbCacheHas(['EUR', 'RSD'], '1999-01-08'), isFalse, reason: 'not in the file');
+      expect(repo.ecbCacheHas(['EUR', 'ISK'], '1999-01-08'), isFalse, reason: 'N/A in the file');
+      expect(repo.ecbCacheHas(['USD'], '1999-01-05'), isFalse, reason: 'no ECB day then');
+    });
+
     test('needs come from payments, bills, IOUs and openings; a damaged download writes nothing', () async {
       seed(repo);
       await repo.addAccount(name: 'US', source: 'revolut', currency: 'USD', opening: 100, openingDate: '1999-01-06');

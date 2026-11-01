@@ -337,7 +337,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   stored settings row `ecb` is ignored. Core never fetches: `ecbFetchPlan()` → `EcbFile` (`history` zip / `recent`
   90-day XML, once a day via `noteEcbAttempt`, only for a missing need a download could answer or a date newer than the
   cache answered by an older day; dates after today never; `force:` for "Get rates now"); app order `ecbFetchPlan` →
-  `noteEcbAttempt` → `fetchEcbFile` (wallet_sync) → `importEcbHistory`. `ecbCacheInfo`, `fxMissing` (dates up to
+  `noteEcbAttempt` → `fetchEcbFile` (wallet_sync) → `importEcbHistory`. `ecbCacheInfo`, `ecbCacheHas(currencies, date)` (the switch dialog's check), `fxMissing` (dates up to
   today). Tests: `test/ux_fx_test.dart`.
 - `splits.dart` + `repo_splits.dart` — split transactions (P6, schema 13, spec `docs/context/P6_SPEC.md`). Entity
   `split` (table `tx_splits`, id = the tx id, `parts` = one JSON field `[{a, c, t, n?}]`, so LWW keeps a whole split).

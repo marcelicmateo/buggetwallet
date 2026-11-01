@@ -181,6 +181,19 @@ extension WalletRepoFx on WalletRepo {
         attemptOn: localValue(_attemptKey));
   }
 
+  /// Whether the device-local ECB cache holds a rate on [date] for every one of [currencies] (EUR is always 1). The app asks it before
+  /// promising that a wallet currency switch converts old payments at their own days' rates (EUR to RSD: no).
+  bool ecbCacheHas(Iterable<String> currencies, String date) {
+    final need = {
+      for (final c in currencies)
+        if (c != 'EUR') c
+    };
+    if (need.isEmpty) return true;
+    final r = db.select(
+        'SELECT COUNT(DISTINCT cur) AS n FROM ecb_rates WHERE date = ? AND cur IN (${List.filled(need.length, '?').join(', ')})', [date, ...need]);
+    return r.first['n'] == need.length;
+  }
+
   /// Records a download attempt today (the app calls it before each fetch, whatever the outcome), so [ecbFetchPlan]
   /// asks at most once a day.
   void noteEcbAttempt() => setLocalValue(_attemptKey, _today());
