@@ -156,18 +156,11 @@ func (h *Host) Main(cmd string, rest []string) (code int) {
 			h.run.Finish(code)
 		}
 	}()
-	var err error
-	if h.flutter, err = image.FlutterVersion(c.Root); err != nil {
-		c.Eprintf("%v\n", err)
-		return 1
-	}
-	if h.Image, err = image.Tag(c.Root); err != nil {
+	if err := h.Init(); err != nil {
 		c.Eprintf("%v\n", err)
 		return 1
 	}
 	c.Setenv("BW_IMAGE", h.Image)
-	_, envFile := h.signingPaths()
-	c.Red = sys.NewRedactor(c.Env, sys.ReadSecretsFile(envFile)...) // the key's passwords never reach a log
 	switch {
 	case cmd == "image":
 		return h.buildImage(cmd)

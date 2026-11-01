@@ -16,7 +16,9 @@ import (
 	"syscall"
 
 	"wallet-build/internal/ci"
+	"wallet-build/internal/emulator"
 	"wallet-build/internal/host"
+	"wallet-build/internal/live"
 	"wallet-build/internal/report"
 	"wallet-build/internal/run"
 	"wallet-build/internal/steps"
@@ -88,7 +90,8 @@ func Run(args []string, environ []string, out, errw io.Writer, d Deps) int {
 	c := run.New(root, env, out, errw, d.R)
 	// Quiet: nothing on stdout or stderr, ours or any child's (the logs are written by the steps). lsp, mcp and
 	// image-name use stdout as their result.
-	if quiet && cmd != "lsp" && cmd != "mcp" && cmd != "image-name" {
+	// `live` has no quiet mode (tools/live.sh has none: -q is a usage error there and BW_QUIET is ignored).
+	if quiet && cmd != "lsp" && cmd != "mcp" && cmd != "image-name" && cmd != "live" {
 		c.SetQuiet()
 	}
 	usage := func() int {
@@ -148,12 +151,25 @@ func dispatch(c *run.Ctx, cmd string, rest []string, self string, usage func() i
 		}
 		return steps.SmokeRun(c.Out, rest[0], n, c.Getenv("SMOKE_OUT"), c.Env)
 	}
-	if c.Getenv("BW_NATIVE") == "1" {
+	native := c.Getenv("BW_NATIVE") == "1"
+	if native && cmd != "emulator" && cmd != "live" {
 		return steps.Container(c, append([]string{cmd}, rest...), self, usage)
+	}
+	switch {
+	case cmd == "emulator" && native:
+		return emulator.Container(c, rest)
+	case cmd == "live" && native:
+		return live.Container(c, rest)
 	}
 	h := host.New(c, self, usage)
 	if d.HostSetup != nil {
 		d.HostSetup(h)
+	}
+	switch cmd {
+	case "emulator":
+		return emulator.Host(h, rest)
+	case "live":
+		return live.Host(h, rest)
 	}
 	return h.Main(cmd, rest)
 }

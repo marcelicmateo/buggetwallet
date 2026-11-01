@@ -1,0 +1,27 @@
+Android emulator in a rootless Podman container (needs /dev/kvm). Image: dev/Containerfile.emulator (the build
+image plus the emulator's libraries).
+
+  tools/emulator.sh [-q|--quiet] <command> ...   -q or BW_QUIET=1: print nothing (stdout and stderr), only the exit code
+                                     comes back; the output goes to dist/logs/emulator-<command>.log as always, the outcome to
+                                     dist/logs/last.status and last-failed.txt (see tools/build.sh). Exit 0 ok, 1 failed, 2 usage.
+  tools/emulator.sh screens          boot, run the screenshot test with synthetic data, stop
+                                     -> dist/screens/*.png  (app/integration_test/screens_test.dart)
+  tools/emulator.sh test [name...]   boot once, run every app/integration_test/<name>_test.dart (or the named
+                                     ones: flows, flows_test or a path) with `flutter drive`, each on a freshly
+                                     installed app -> dist/screens/<name>/*.png, dist/logs/app-<name>.log (app log),
+                                     dist/logs/report-<name>.json (perf numbers, known bugs), drive-<name>.log and
+                                     tests-<name>-summary.txt (per-test times); exit 1 if any failed
+  tools/emulator.sh start [--window] boot an emulator that keeps running (--window: show it on the desktop)
+  tools/emulator.sh install [apk]    install an APK on it (default dist/BudgetWallet-android.apk)
+  tools/emulator.sh shot <name>      screenshot of the running emulator -> dist/screens/<name>.png
+  tools/emulator.sh adb <args...>    run adb against it
+  tools/emulator.sh stop             stop it
+  tools/emulator.sh reset            delete the emulator volumes; the next run downloads the latest emulator
+
+The emulator, the system image and the AVD live in Podman volumes (bw-emulator, bw-emulator-image,
+bw-emulator-avd), set up on first use (~2 GB download), so rebuilding the build image doesn't download them again.
+Setup ends with a cold boot of a wiped device and saves a snapshot of it; every run then starts from that
+snapshot in read-only mode (nothing is saved back), so each run sees the same clean device and nothing real is
+ever on it.
+Logs and phase timings (prepare, boot, build, install, test, total) go to the run dir and history like
+tools/build.sh (tools/timing.sh); the emulator's own log is saved as dist/logs/emulator.log, screenshots are copied.
