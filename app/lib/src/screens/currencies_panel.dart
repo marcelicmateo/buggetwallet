@@ -119,7 +119,7 @@ class _CurrencyRow extends StatelessWidget {
           Row(key: ValueKey('fxLine:$code'), children: [
             Icon(Icons.public, size: 16, color: context.c.muted),
             const SizedBox(width: 6),
-            const Expanded(child: Text('Counted at the ECB rate of each day', style: TextStyle(fontWeight: FontWeight.w500))),
+            Expanded(child: Text('$code — counted at the ECB rate of each day', style: const TextStyle(fontWeight: FontWeight.w500))),
           ]),
           Text('${wc.fxSourceText(u)} · $rows',
               key: ValueKey('fxSource:$code'), style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),

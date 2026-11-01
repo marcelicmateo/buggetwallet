@@ -644,7 +644,7 @@ void main() {
       await wc.getRatesNow();
       await pumpApp(t, _panel(() => CurrenciesPanel(wc: wc), wc), size: const Size(400, 1200));
       expect(find.text('ECB ${shortDate('2026-10-16')} · 1 payment'), findsOneWidget);
-      expect(find.text('Counted at the ECB rate of each day'), findsOneWidget);
+      expect(find.text('USD — counted at the ECB rate of each day'), findsOneWidget);
       expect(_key('fxNotCounted:USD'), findsNothing);
       await _tap(t, 'fxSet:USD');
       await t.enterText(_key('fxRateField'), '0.9');
