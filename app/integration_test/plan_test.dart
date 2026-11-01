@@ -129,8 +129,17 @@ void main() {
 
     // Currency.
     await edit(t);
-    await scrollTo(t, inPlan(find.byType(DropdownButtonFormField<String>)), BudgetScreen);
-    await pickDropdown(t, inPlan(find.byType(DropdownButtonFormField<String>)), 'USD');
+    // The wallet currency is chosen in the one currency picker; the switch sheet that follows writes it at once (not Save).
+    await scrollTo(t, inPlan(find.byKey(const ValueKey('planCurrency'))), BudgetScreen);
+    await tapVisible(t, inPlan(find.byKey(const ValueKey('planCurrency'))));
+    await t.enterText(find.byKey(const ValueKey('currencySearch')), 'usd');
+    await t.pumpAndSettle();
+    await tapVisible(t, find.byKey(const ValueKey('currency:USD')));
+    expect(find.byKey(const ValueKey('currencySwitchNote')), findsOneWidget);
+    expect(wc.settings.currency, 'EUR', reason: 'nothing is written before the switch is confirmed');
+    await tapVisible(t, find.byKey(const ValueKey('currencyOfferYes')));
+    await t.pumpAndSettle();
+    expect(wc.settings.currency, 'USD');
     await save(t);
     expect(wc.settings.currency, 'USD');
     await goTab(t, 'Today');

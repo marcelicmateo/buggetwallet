@@ -10,6 +10,7 @@ import 'package:budget_wallet/src/logging.dart';
 import 'package:budget_wallet/src/screens/accounts_panel.dart' show askBankBalance;
 import 'package:budget_wallet/src/screens/bill_sheet.dart';
 import 'package:budget_wallet/src/screens/bills_tab.dart';
+import 'package:budget_wallet/src/screens/budget.dart' show BudgetScreen;
 import 'package:budget_wallet/src/screens/import_preview_sheet.dart';
 import 'package:budget_wallet/src/screens/key_backup.dart';
 import 'package:budget_wallet/src/screens/review.dart';
@@ -347,8 +348,14 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
     await tester.pumpAndSettle();
+    final spendingSwitch = find.byKey(const ValueKey('budgetSpending')); // the Plan page may be showing, or Spending scrolled down
+    if (spendingSwitch.evaluate().isNotEmpty) await tester.tap(spendingSwitch);
+    await tester.pumpAndSettle();
+    tester.state<ScrollableState>(pageList(BudgetScreen)).position.jumpTo(0);
+    await tester.pumpAndSettle();
     final yenRow = find.textContaining('JPY SYNTHETIC RAMEN');
-    await tester.ensureVisible(yenRow.first);
+    // The payments list is lazy: on a phone the row is below the tiles and not built until it is scrolled to.
+    await tester.scrollUntilVisible(yenRow, 300, scrollable: pageList(BudgetScreen), maxScrolls: 60);
     await tester.pumpAndSettle();
     await binding.takeScreenshot('10-yen-row');
     await tester.tap(navTab('Settings'));

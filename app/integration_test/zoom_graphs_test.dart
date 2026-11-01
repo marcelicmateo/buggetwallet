@@ -51,6 +51,9 @@ void main() {
 
       // a list: the share panel, shorter
       await scrollTo(t, find.byKey(const ValueKey('insightPanel_share')), InsightsScreen);
+      // Three months, not the default month: a running month reaches past today, and on its first days its middle is a future
+      // window with no payments. Three months always has the past months' rows, whatever the date.
+      await tapVisible(t, find.byKey(const ValueKey('rangeChip_share_months3')));
       await tapVisible(t, find.byKey(const ValueKey('chartZoomIn_share')));
       await t.pumpAndSettle();
       await Harness.shot(t, 'zoom-6-share-shorter-$name');
