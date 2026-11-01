@@ -277,7 +277,9 @@ func TestHostMutateRefusesLeftoverMutant(t *testing.T) {
 		}
 		return 0
 	}
-	r := runCLI(t, opts{handle: h}, "mutate", "core", "lib/x.dart")
+	root := mkRepo(t)
+	write(t, filepath.Join(root, "packages/wallet_core/lib/x.dart"), "int f() => 1;\n")
+	r := runCLI(t, opts{handle: h, root: root}, "mutate", "core", "lib/x.dart")
 	if r.code != 1 || !strings.Contains(r.err, "mutate: lib files differ from HEAD") || len(podmanRuns(r)) != 0 {
 		t.Errorf("code %d err %q", r.code, r.err)
 	}

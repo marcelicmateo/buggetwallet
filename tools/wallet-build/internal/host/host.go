@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"wallet-build/internal/image"
+	"wallet-build/internal/mutate"
 	"wallet-build/internal/native"
 	"wallet-build/internal/run"
 	"wallet-build/internal/steps"
@@ -157,6 +158,13 @@ func (h *Host) Main(cmd string, rest []string) (code int) {
 			h.run.Finish(code)
 		}
 	}()
+	// A usage error needs neither the image nor a run: say it before any podman call (the old build.sh did; building the image
+	// first made `mutate` with no arguments wait for a 15-minute image build in a fresh worktree).
+	if cmd == "mutate" {
+		if rc, done := h.mutateArgs(rest); done {
+			return rc
+		}
+	}
 	if err := h.Init(); err != nil {
 		c.Eprintf("%v\n", err)
 		return 1
@@ -241,6 +249,29 @@ func (h *Host) Main(cmd string, rest []string) (code int) {
 			append([]string{filepath.Join(c.Root, "dist", "bin", "wallet-build"), "mcp"}, rest...))
 	}
 	return h.podRun(cmd, rest)
+}
+
+// mutateArgs checks the arguments of `mutate` on the host: too few (usage, 2), an argparse error (2), help (0) or a lib file that
+// does not exist (1). done is true when the command ends here.
+func (h *Host) mutateArgs(rest []string) (rc int, done bool) {
+	c := h.C
+	if len(rest) < 2 {
+		return h.Usage(), true
+	}
+	o, help, err := mutate.ParseArgs(rest)
+	if help {
+		c.Printf("%s", mutate.Usage)
+		return 0, true
+	}
+	if err != nil {
+		c.Eprintf("usage: mutate <importer|core|sync> <lib file>... [--max N] [--seed S] [--tests <test file>...] [--timeout SECS] [--list]\nmutate: error: %v\n", err)
+		return 2, true
+	}
+	if _, err := mutate.ResolveTargets(c.Root, o.Package, o.Files); err != nil {
+		c.Eprintf("%v\n", err)
+		return 1, true
+	}
+	return 0, false
 }
 
 // nested runs this binary again inside the current run (BW_RUN_DIR is set, so it joins it).

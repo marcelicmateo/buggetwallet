@@ -533,7 +533,7 @@ func TestUsageTextIsBuildShHeader(t *testing.T) {
 
 func TestUsageErrorsInsideContainerStillCreateRunDir(t *testing.T) {
 	// bash: run_begin happens on the host before the container sees the bad arguments
-	for _, args := range [][]string{{"mutate"}, {"relay-bin", "badarch"}} {
+	for _, args := range [][]string{{"relay-bin", "badarch"}} { // mutate checks its arguments on the host (TestMutateUsageErrorsNeverTouchPodman)
 		r := runCLI(t, opts{handle: func(c sys.Cmd) int { // the container prints the usage and exits 2
 			if len(c.Argv) > 1 && c.Argv[0] == "podman" && c.Argv[1] == "run" {
 				return 2
