@@ -245,6 +245,13 @@ func historyLines(s *side, file string) []jline {
 
 func compareHistory(t *testing.T, c Case, a, b *side) {
 	t.Helper()
+	for _, x := range []*side{a, b} { // ok is masked (timing), but a budget overrun must fail the run
+		for i, j := range historyLines(x, "perf.jsonl") {
+			if j.vals["ok"] == "false" && x.exit == 0 {
+				t.Errorf("parity[%s] %s history/perf.jsonl line %d: ok:false but the run exited 0", c.Name, x.impl, i+1)
+			}
+		}
+	}
 	for _, file := range []string{"steps.jsonl", "tests.jsonl", "perf.jsonl"} {
 		ja, jb := historyLines(a, file), historyLines(b, file)
 		na, nb := render(a, file, ja), render(b, file, jb)
