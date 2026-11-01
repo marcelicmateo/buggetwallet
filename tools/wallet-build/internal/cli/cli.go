@@ -299,7 +299,7 @@ func timesCmd(c *run.Ctx, cmd string, args []string, usage func() int) int {
 			tmp.Close()
 			x := ci.New(c)
 			if _, rc := x.Capture("fetch", "-q", "origin", "ci-logs:refs/remotes/origin/ci-logs"); rc == 0 {
-				if text, rc := x.Capture("show", "origin/ci-logs:history.jsonl"); rc == 0 {
+				if text, rc := x.CaptureQuiet("show", "origin/ci-logs:history.jsonl"); rc == 0 { // 2>/dev/null as in the script; M6: rename with the scripts
 					_ = os.WriteFile(tmp.Name(), []byte(text+"\n"), 0o644)
 				} else {
 					c.Eprintf("no history.jsonl on ci-logs yet\n")

@@ -259,10 +259,22 @@ func TestStopImageLogs(t *testing.T) {
 	}
 }
 
+// bash's read -p shows the question only when stdin is a terminal; the answer is read either way
+func TestResetQuestionOnlyOnATerminal(t *testing.T) {
+	f := newFixture(t, nil, true, 0)
+	f.r.In = strings.NewReader("n\n")
+	f.r.IsTTY = func() bool { return false }
+	if rc := f.r.Main([]string{"reset"}); rc != 1 || f.err.Len() != 0 || f.out.String() != "aborted\n" {
+		t.Errorf("rc %d err %q out %q", rc, f.err.String(), f.out.String())
+	}
+}
+
 func TestReset(t *testing.T) {
+	tty := true
 	setup := func(env sys.Env, in string) *fixture {
 		f := newFixture(t, env, true, 0)
 		f.r.In = strings.NewReader(in)
+		f.r.IsTTY = func() bool { return tty }
 		if err := os.MkdirAll(filepath.Join(f.data, "relay", "w"), 0o755); err != nil {
 			t.Fatal(err)
 		}
