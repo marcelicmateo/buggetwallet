@@ -27,6 +27,11 @@ String switchNote(int n, String old, String code) => switch (n) {
       _ => 'Your $n payments in $old keep their currency. They count in your totals only with a $old→$code rate.',
     };
 
+/// UX-FX: with ECB rates on this device, payments in the former currency count at the ECB rate of their own day, so nothing drops out.
+String switchEcbNote(int n, String old) => n == 1
+    ? 'Your 1 payment in $old keeps its currency. It counts at the ECB rate of its own day, so nothing drops out. A rate you set yourself wins.'
+    : 'Your $n payments in $old keep their currency. They count at the ECB rate of their own day, so nothing drops out. A rate you set yourself wins.';
+
 /// After an import: shows the offer once per currency when core's `prevalentCurrency` names one. Returns after it is settled.
 Future<void> offerWalletCurrency(BuildContext context, WalletController wc) async {
   final code = wc.walletCurrencyOffer();
@@ -74,19 +79,20 @@ class CurrencySwitchSheet extends StatelessWidget {
       for (final c in wc.settings.fxRates.keys)
         if (c != code) c
     ]..sort();
+    final ecb = n > 0 && wc.ecbCoversSwitch(old, code);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
       Heading(offered ? "Most payments are in $code. Use $code as your wallet's currency?" : "Use $code as your wallet's currency?",
           key: const ValueKey('currencyOffer')),
       const SizedBox(height: 8),
       Muted(currencyLabel(code)),
       const SizedBox(height: 6),
-      Text(switchNote(n, old, code), key: const ValueKey('currencySwitchNote')),
+      Text(ecb ? switchEcbNote(n, old) : switchNote(n, old, code), key: const ValueKey('currencySwitchNote')),
       if (rates.isNotEmpty) ...[
         const SizedBox(height: 6),
         Text(ratesNote(rates), key: const ValueKey('currencySwitchRates')),
       ],
       const SizedBox(height: 14),
-      if (n > 0) ...[
+      if (n > 0 && !ecb) ...[
         FilledButton(
             key: const ValueKey('currencySwitchRate'),
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(touchMin)),
@@ -94,7 +100,19 @@ class CurrencySwitchSheet extends StatelessWidget {
             child: Text('Switch and set the $old→$code rate')),
         const SizedBox(height: 8),
       ],
-      if (n > 0)
+      if (ecb) ...[
+        FilledButton(
+            key: const ValueKey('currencyOfferYes'),
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(touchMin)),
+            onPressed: () => Navigator.pop(context, SwitchChoice.switchOnly),
+            child: Text('Switch to $code')),
+        const SizedBox(height: 8),
+        OutlinedButton(
+            key: const ValueKey('currencySwitchRate'),
+            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(touchMin)),
+            onPressed: () => Navigator.pop(context, SwitchChoice.switchAndRate),
+            child: Text('Switch and set my own $old→$code rate')),
+      ] else if (n > 0)
         OutlinedButton(
             key: const ValueKey('currencyOfferYes'),
             style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(touchMin)),

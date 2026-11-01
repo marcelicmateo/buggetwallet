@@ -18,18 +18,41 @@ class FxCurrency {
 
   /// How many payments are in this currency.
   final int rows;
-  const FxCurrency(this.code, this.rate, this.rows, {this.stale});
+
+  /// UX-FX: without a rate of the owner's, the ECB rate that counts the newest payment in this currency (its day); null = none, so the
+  /// payments are not counted. Crypto coins never have one (hand-set only).
+  final FxUsed? ecb;
+  const FxCurrency(this.code, this.rate, this.rows, {this.stale, this.ecb});
 }
 
 extension FxDb on WalletController {
   /// A row per currency other than the wallet's that appears in the payments or has a rate, by code. Cached per data version.
   List<FxCurrency> fxCurrencies() => _cached(const MemoKey('fxCurrencies'), () {
         final seen = <String, int>{};
+        final newest = <String, Tx>{}; // the latest payment per currency: which ECB day counts it
         for (final t in wholeTxs) {
-          if (t.tx.currency != currency) seen[t.tx.currency] = (seen[t.tx.currency] ?? 0) + 1;
+          if (t.tx.currency == currency) continue;
+          seen[t.tx.currency] = (seen[t.tx.currency] ?? 0) + 1;
+          final have = newest[t.tx.currency];
+          if (have == null || t.tx.date.compareTo(have.date) > 0) newest[t.tx.currency] = t.tx;
+        }
+        for (final a in accountsAll()) {
+          if (a.currency == currency) continue;
+          seen.putIfAbsent(a.currency, () => 0); // an account in it needs a rate too
+          final have = newest[a.currency];
+          if (have == null || a.openingDate.compareTo(have.date) > 0) {
+            newest[a.currency] = Tx(id: '', source: '', date: a.openingDate, amount: 0, currency: a.currency);
+          }
         }
         final codes = {...seen.keys, ...settings.fxRates.keys, ...settings.fxStale.keys}.toList()..sort();
-        return [for (final c in codes) FxCurrency(c, settings.fxRates[c], seen[c] ?? 0, stale: settings.fxStale[c])];
+        return [
+          for (final c in codes)
+            FxCurrency(c, settings.fxRates[c], seen[c] ?? 0,
+                stale: settings.fxStale[c],
+                ecb: settings.fxRates[c] != null || newest[c] == null
+                    ? null
+                    : switch (fxUsed(newest[c]!, settings)) { final u? when u.ecb => u, _ => null })
+        ];
       });
 
   /// The payment behind [t] as the owner's row: from the raw whole payments by id, so a converted row (home currency, converted amount)

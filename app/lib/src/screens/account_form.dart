@@ -66,24 +66,31 @@ class AccountFormSheet extends StatefulWidget {
 
   /// The account to change; null adds a new one.
   final Account? account;
-  const AccountFormSheet({super.key, required this.wc, this.account});
+
+  /// UX-ACC: the question "Which account is this?" asked for a new account: a bank account of the file's bank and currency (both
+  /// fixed) that gets the export account's match key. The name is the owner's.
+  final ImportAccountQuestion? forImport;
+  const AccountFormSheet({super.key, required this.wc, this.account, this.forImport});
   @override
   State<AccountFormSheet> createState() => _AccountFormSheetState();
 }
 
 class _AccountFormSheetState extends State<AccountFormSheet> {
   Account? get _a => widget.account;
-  late AccountKind _kind = _a?.kind ?? AccountKind.cash;
+  late AccountKind _kind = _a?.kind ?? (widget.forImport == null ? AccountKind.cash : AccountKind.bank);
 
   /// The text columns being edited (a draft; Save writes them): name and institution.
   late final Map<Col, String?> _draft = {
-    AccountCols.name: _a?.name ?? accountKindLabel(_kind),
+    AccountCols.name: _a?.name ??
+        (widget.forImport == null
+            ? accountKindLabel(_kind)
+            : accountTypeLabel(widget.forImport!.source, csvMappings: widget.wc.settings.csvMappings)),
     AccountCols.institution: _a?.institution ?? ''
   };
   final _amount = TextEditingController();
   late final _rate = TextEditingController(text: _initialRate());
-  late String? _source = _a?.source;
-  late String _currency = _a?.currency ?? widget.wc.currency;
+  late String? _source = _a?.source ?? widget.forImport?.source;
+  late String _currency = _a?.currency ?? widget.forImport?.currency ?? widget.wc.currency;
   late String _date = widget.wc.today();
   late bool _nameEdited = _a != null;
   bool _negative = false;
@@ -121,6 +128,10 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
 
   void _pickKind(AccountKind k) {
     if (k == _kind) return;
+    if (widget.forImport != null && !k.takesSource) {
+      setState(() => _error = 'A file\'s account is a bank, card or savings account.');
+      return;
+    }
     _confirmedDrop = false;
     setState(() {
       _kind = k;
@@ -210,7 +221,8 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
           institution: inst,
           currency: _currency,
           opening: cents,
-          openingDate: _date);
+          openingDate: _date,
+          matchKey: widget.forImport?.accountKey);
       _saveRate();
       if (mounted) Navigator.pop(context, true);
     } on ArgumentError catch (e) {
@@ -223,7 +235,7 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
   List<Col> _fieldsOf(AccountKind k) => [
         AccountCols.name,
         if (k.takesSource || k == AccountKind.crypto) AccountCols.institution,
-        if (k.takesSource) AccountCols.source,
+        if (k.takesSource && widget.forImport == null) AccountCols.source,
       ];
 
   Widget _field(Col c) {
@@ -267,7 +279,8 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
   Widget build(BuildContext context) {
     final wc = widget.wc;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Heading(_editing ? 'Edit account' : 'Add an account', key: const ValueKey('accountFormHeading')),
+      Heading(_editing ? 'Edit account' : (widget.forImport == null ? 'Add an account' : 'New account'),
+          key: const ValueKey('accountFormHeading')),
       const SizedBox(height: 12),
       FieldEditor(AccountCols.kind,
           id: 'accountKind',
@@ -288,7 +301,7 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
         value: _currency,
         label: _isCrypto ? 'Coin' : 'Currency',
         choice: _isCrypto ? CurrencyChoice.crypto : CurrencyChoice.fiat,
-        enabled: !_editing,
+        enabled: !_editing && widget.forImport == null,
         onChanged: (c) => setState(() => _currency = c),
       ),
       if (_isCrypto) ...[
@@ -365,7 +378,9 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
       const SizedBox(height: 8),
       Muted(_editing
           ? 'To change the balance, use Correct balance. The currency cannot change.'
-          : 'Rows after this date are added to the balance. Cash counts only the expenses you add by hand.'),
+          : widget.forImport != null
+              ? 'Give the balance from before the first payment of the file, and that day. The file\'s payments are added to it.'
+              : 'Rows after this date are added to the balance. Cash counts only the expenses you add by hand.'),
     ]);
   }
 }

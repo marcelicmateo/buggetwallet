@@ -164,7 +164,7 @@ void main() {
       wc.setFxRate('GBP', 1150000);
       await pumpApp(t, panel(wc), size: const Size(400, 1200));
       expect(find.text('GBP — ${rateSentence('GBP', 1150000, 'EUR')}, set ${shortDate(wc.settings.fxRates['GBP']!.date)}'), findsOneWidget);
-      expect(find.text('no payments now'), findsOneWidget);
+      expect(find.text('your rate · no payments now'), findsOneWidget);
       await tapKey(t, 'fxRemove:GBP');
       expect(find.byKey(const ValueKey('fx:GBP')), findsNothing);
       await settle(t);
@@ -326,7 +326,7 @@ void main() {
       await tapKey(t, 'openTx');
       expect(find.text(money(-10000, 'USD', decimals: 2, signed: true)), findsOneWidget, reason: 'the header shows the bank amount, in \$');
       expect(find.byKey(const ValueKey('txCounted')), findsOneWidget);
-      expect(find.text('Counts as ${money(-9240, 'EUR', decimals: 2, signed: true)} at 0.9240'), findsOneWidget);
+      expect(find.text('Counts as ${money(-9240, 'EUR', decimals: 2, signed: true)} at 0.9240 · your rate'), findsOneWidget);
       await tapKey(t, 'splitOpen');
       expect(t.widget<TextField>(find.byKey(const ValueKey('splitAmount:0'))).controller!.text, '100',
           reason: 'the bank amount, not 92.40');

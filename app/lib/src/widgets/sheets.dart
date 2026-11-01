@@ -520,6 +520,38 @@ class _TxSheetState extends State<TxSheet> {
         ]));
   }
 
+  /// UX-ACC: which account counts this bank payment. Only when the wallet has more than one account of its bank and currency (a
+  /// hand-added payment is never offered); a pick is written at once (`setTxAccount`), it is not part of Save.
+  Widget? _accountSection(BuildContext context) {
+    final t = row.tx;
+    final wc = widget.wc;
+    final options = wc.accountsForRow(t);
+    if (t.manual || !t.live || options.length < 2) return null;
+    final now = wc.accountOfRow(t);
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: DropdownButtonFormField<String>(
+        key: const ValueKey('txAccount'),
+        initialValue: now?.id,
+        isExpanded: true,
+        decoration: const InputDecoration(labelText: 'Account'),
+        items: [for (final a in options) DropdownMenuItem(value: a.id, key: ValueKey('txAccount:${a.id}'), child: Text(a.name))],
+        onChanged: (id) {
+          if (id == null || id == now?.id) return;
+          try {
+            wc.setTxAccount(t.id, id);
+            setState(() => accountError = null);
+          } on ArgumentError catch (e) {
+            setState(() => accountError = e.message.toString());
+          }
+        },
+      ),
+    );
+  }
+
+  /// Core's refusal of an account move, shown inside the sheet.
+  String? accountError;
+
   /// Bank and hand-added payments can be split, transfers cannot (P6).
   bool get canSplit => row.kind != BudgetKind.transfer && row.tx.transferTo == null && row.tx.amount != 0 && row.tx.live;
 
@@ -616,10 +648,14 @@ class _TxSheetState extends State<TxSheet> {
         Padding(
           padding: const EdgeInsets.only(top: 2),
           child: Text(
-              // UX-FX: a row converted by an ECB rate has no hand-set rate (null-safe until the UI shows the ECB day).
-              'Counts as ${money(c.amount, c.tx.currency, decimals: 2, signed: true)} at ${switch (widget.wc.settings.fxRates[t.currency]) {
-                final r? => rateText(r.rate),
-                null => 'the ECB rate',
+              // UX-FX: the source of the rate that counts it: the owner's own, the ECB's rate of that day, or the bank's amount.
+              'Counts as ${money(c.amount, c.tx.currency, decimals: 2, signed: true)}${switch ((
+                widget.wc.settings.fxRates[t.currency],
+                fxUsed(t, widget.wc.settings)
+              )) {
+                (final r?, _) => ' at ${rateText(r.rate)} · your rate',
+                (_, final u?) => ' · ${widget.wc.fxSourceText(u)}',
+                _ => " · the bank's amount",
               }}',
               key: const ValueKey('txCounted'),
               textAlign: TextAlign.end,
@@ -638,6 +674,8 @@ class _TxSheetState extends State<TxSheet> {
         Padding(
             padding: const EdgeInsets.only(top: 8),
             child: SelectableText(t.description, style: const TextStyle(fontSize: BwType.metaSize))),
+      if (_accountSection(context) case final w?) w,
+      if (accountError != null) StatusLabel(key: const ValueKey('txAccountError'), good: false, text: accountError!),
       if (bill != null) ...[
         const SizedBox(height: 10),
         Align(

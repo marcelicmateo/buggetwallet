@@ -26,9 +26,17 @@ extension AccountsDb on WalletController {
       required int opening,
       required String openingDate,
       AccountKind? kind,
-      String? institution}) async {
+      String? institution,
+      String? matchKey}) async {
     final id = await repo.addAccount(
-        name: name, source: source, currency: currency, opening: opening, openingDate: openingDate, kind: kind, institution: institution);
+        name: name,
+        source: source,
+        currency: currency,
+        opening: opening,
+        openingDate: openingDate,
+        kind: kind,
+        institution: institution,
+        matchKey: matchKey);
     logEvent(_accLog, Level.INFO, 'accounts.add', {'cash': source == null, 'kind': (kind ?? AccountKind.cash).name});
     _changed();
     return id;
@@ -43,8 +51,10 @@ extension AccountsDb on WalletController {
       AccountKind? kind,
       String? institution,
       String? source,
-      bool clearSource = false}) async {
+      bool clearSource = false,
+      String? matchKey}) async {
     await repo.updateAccount(id,
+        matchKey: matchKey,
         name: name,
         opening: opening,
         openingDate: openingDate,
@@ -56,9 +66,49 @@ extension AccountsDb on WalletController {
     _changed();
   }
 
+  /// The owner moves bank row [txId] to account [accountId] (UX-ACC; null = back to the main account of its bank and currency).
+  /// An [ArgumentError] carries core's text (a hand-added row, another bank or currency).
+  void setTxAccount(String txId, String? accountId) {
+    repo.setTxAccount(txId, accountId);
+    logEvent(_accLog, Level.INFO, 'accounts.moveRow', {'toMain': accountId == null});
+    _changed();
+  }
+
+  /// The live accounts a bank row of [t] could belong to: same bank and currency, counting rows. Empty for a hand-added row. Only
+  /// worth offering when there are two or more.
+  List<Account> accountsForRow(Tx t) {
+    if (t.manual) return const [];
+    return [
+      for (final a in accountsAll())
+        if (!a.isCash && a.countsRows && a.source == t.source && a.currency == t.currency) a
+    ];
+  }
+
+  /// UX-ACC: the accounts that could take the rows of the export account [q] asks about: its bank and currency, counting rows, and not
+  /// already claiming another export account (a claim would be lost), read now (an earlier answer of the same file counts). The one
+  /// without a key (the main account) first. Empty when there is none: the owner makes a new account.
+  List<Account> freeAccountsFor(ImportAccountQuestion q) => [
+        for (final a in accountsAll())
+          if (!a.isCash && a.countsRows && a.source == q.source && a.currency == q.currency && a.matchKey == null) a
+      ]..sort((a, b) => a.id.compareTo(b.id));
+
+  /// The account that counts bank row [t] now (core's `RowAccounts`), or null (none).
+  Account? accountOfRow(Tx t) {
+    final id = RowAccounts(accountsAll()).accountOf(t);
+    return id == null ? null : accountsAll().where((a) => a.id == id).firstOrNull;
+  }
+
   /// [b]'s balance in the wallet currency (core's `balanceInHome`: itself when the account is in it, else at the owner's rate), or
   /// null when there is no rate.
   int? accountHomeValue(AccountBalance b) => balanceInHome(b, settings);
+
+  /// Where the rate behind [accountHomeValue] comes from: "your rate" (a hand-set one counts the whole balance) or the newest ECB day
+  /// used ("ECB 31 Oct"); null when none is needed or none exists.
+  String? accountRateSource(AccountBalance b) {
+    final a = b.account;
+    final at = Tx(id: '', source: '', date: b.lastRowDate ?? a.openingDate, amount: b.balance, currency: a.currency);
+    return fxSourceOf(at);
+  }
 
   // ---------- currencies ----------
 

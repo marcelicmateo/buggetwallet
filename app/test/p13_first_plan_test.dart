@@ -30,9 +30,18 @@ class _Chooser extends FileChooser {
 }
 
 /// These tests are about the plan sheet after an import: the import preview (Q4, `q_import_preview_test.dart`) is switched off.
-Future<void> _pumpImportButton(WidgetTester t, WalletController wc, FileChooser chooser) {
+Future<void> _pumpImportButton(WidgetTester t, WalletController wc, FileChooser chooser) async {
   wc.setImportPreviewAlways(false);
-  return pumpApp(
+  // The file names its pocket ("Current"): an account that already claims it, so "Which account is this?" (UX-ACC) is not asked here.
+  await t.runAsync(() async => wc.repo.addAccount(
+      name: 'Revolut',
+      source: 'revolut',
+      currency: 'EUR',
+      opening: 0,
+      openingDate: '2026-09-01',
+      matchKey: await accountMatchKey(wc.key!, 'Current')));
+  wc.reload();
+  await pumpApp(
       t,
       Scaffold(
           body: Builder(

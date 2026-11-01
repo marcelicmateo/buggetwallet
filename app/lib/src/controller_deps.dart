@@ -14,6 +14,7 @@ import 'device_relay.dart';
 import 'home_widget.dart';
 import 'ics_fetch.dart';
 import 'key_store.dart';
+import 'network_state.dart';
 import 'nudge_platform.dart';
 import 'nudges.dart' show NudgePlatform;
 import 'pdf_parse.dart';
@@ -54,6 +55,8 @@ class WalletControllerDeps {
     required this.clipboardWrite,
     required this.clipboardRead,
     required this.icsFetcher,
+    required this.ecbFetcher,
+    required this.isMetered,
     required this.pdfParser,
     required this.billCategorySuggester,
     required this.backupBytesReader,
@@ -70,6 +73,8 @@ class WalletControllerDeps {
     BillInputs? billInputs,
     KeyStore? keyStore,
     String? dbDir,
+    Future<List<int>> Function(EcbFile f)? ecbFetcher,
+    Future<bool> Function()? isMetered,
   }) {
     final ks = keyStore ?? KeyStore();
     return WalletControllerDeps(
@@ -102,6 +107,8 @@ class WalletControllerDeps {
       clipboardWrite: (t) => Clipboard.setData(ClipboardData(text: t)),
       clipboardRead: () async => (await Clipboard.getData(Clipboard.kTextPlain))?.text,
       icsFetcher: fetchIcs,
+      ecbFetcher: ecbFetcher ?? fetchEcbFile,
+      isMetered: isMetered ?? networkIsMetered,
       pdfParser: parsePdf,
       billCategorySuggester: (b, builtIn) => builtIn(),
       backupBytesReader: (r, bytes, opener, walletKey) => restoreBackupBytes(r, bytes, opener, walletKey: walletKey),
@@ -208,6 +215,12 @@ class WalletControllerDeps {
   /// Downloads the text of an `.ics` link.
   final Future<String> Function(Uri url) icsFetcher;
 
+  /// Downloads the ECB exchange rate file [f] (UX-FX: wallet_sync's `fetchEcbFile`; throws `EcbFetchException`).
+  final Future<List<int>> Function(EcbFile f) ecbFetcher;
+
+  /// Is the active network metered (mobile data)? The rates are not downloaded on their own then. Always false off Android.
+  final Future<bool> Function() isMetered;
+
   /// Reads a PDF's text layer and the bill in it: off the UI isolate on native (pdf_parse.dart).
   final PdfParser pdfParser;
 
@@ -253,6 +266,8 @@ class WalletControllerDeps {
     Future<void> Function(String text)? clipboardWrite,
     Future<String?> Function()? clipboardRead,
     Future<String> Function(Uri url)? icsFetcher,
+    Future<List<int>> Function(EcbFile f)? ecbFetcher,
+    Future<bool> Function()? isMetered,
     PdfParser? pdfParser,
     String? Function(Bill b, String? Function() builtIn)? billCategorySuggester,
     Future<int> Function(WalletRepo repo, Uint8List bytes, VaultKey opener, VaultKey walletKey)? backupBytesReader,
@@ -288,6 +303,8 @@ class WalletControllerDeps {
         clipboardWrite: clipboardWrite ?? this.clipboardWrite,
         clipboardRead: clipboardRead ?? this.clipboardRead,
         icsFetcher: icsFetcher ?? this.icsFetcher,
+        ecbFetcher: ecbFetcher ?? this.ecbFetcher,
+        isMetered: isMetered ?? this.isMetered,
         pdfParser: pdfParser ?? this.pdfParser,
         billCategorySuggester: billCategorySuggester ?? this.billCategorySuggester,
         backupBytesReader: backupBytesReader ?? this.backupBytesReader,

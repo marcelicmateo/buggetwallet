@@ -25,6 +25,7 @@ import 'insights_api.dart' show InsightRange, WalletInsights, insightGraphs;
 import 'key_store.dart';
 import 'logging.dart';
 import 'memo_key.dart';
+import 'network_state.dart' show noEcbFetch;
 import 'nudges.dart';
 import 'platform.dart' show isWeb;
 import 'sub_state.dart';
@@ -44,6 +45,7 @@ part 'controller_future.dart';
 part 'controller_home.dart';
 part 'controller_splits.dart';
 part 'controller_fx.dart';
+part 'controller_ecb.dart';
 part 'controller_sync.dart';
 part 'controller_devices.dart';
 part 'controller_import.dart';
@@ -174,6 +176,23 @@ typedef ConfirmRemoval = Future<bool> Function(int payments);
 /// Cancel, nothing is written. [canSkip] is false when per-row Skip cannot be offered honestly.
 typedef ConfirmPreview = Future<Set<String>?> Function(ImportPreview preview, String bank);
 
+/// The owner's answer to "Which account is this?" (UX-ACC) for one export account of a file.
+class AccountAnswer {
+  /// The existing account that now counts this export account (the controller sets its match key); null when [created].
+  final String? accountId;
+
+  /// The owner made a new account for it in the question (the form already wrote it with the match key).
+  final bool created;
+  const AccountAnswer.existing(String this.accountId) : created = false;
+  const AccountAnswer.created()
+      : accountId = null,
+        created = true;
+}
+
+/// Asked once per export account of a file that no account claims yet (`unknownImportAccounts`), before anything is written: null =
+/// Cancel, the file is not imported. The answer is kept as the account's match key, so the next file of that export account is not asked.
+typedef AskAccount = Future<AccountAnswer?> Function(ImportAccountQuestion question);
+
 /// Everything the Spending tab shows for one month, worked out in [WalletController.spending].
 class SpendingView {
   final String month;
@@ -286,6 +305,9 @@ class WalletController extends ChangeNotifier {
   final Map<MemoKey, Object?> _memo = {};
 
   bool _disposed = false;
+
+  /// An ECB download is running (UX-FX, `controller_ecb.dart`): one at a time; the Currencies panel shows it.
+  bool ecbFetching = false;
 
   /// The day [_memo] was filled for: a new day drops every cached value (old days would only pile up).
   String? _memoDay;
@@ -601,6 +623,7 @@ class WalletController extends ChangeNotifier {
     logEvent(_log, Level.INFO, 'app.start',
         {'phase': 'reload', 'ms': sw.elapsedMilliseconds, 'tx': c.wholeTxs.length, 'relay': c.relayUrl != null, 'logLevel': c.logLevel});
     c._startAutoSync();
+    scheduleMicrotask(() => c.fetchRatesAuto(trigger: 'start'));
     c.refreshRecurring();
     scheduleMicrotask(c.rescheduleNudges);
     scheduleMicrotask(() => c.readCalendars(trigger: 'start'));
@@ -707,6 +730,7 @@ class WalletController extends ChangeNotifier {
       WalletController._(repo, key,
           deps: (deps ??
                   WalletControllerDeps.platform(
+                      ecbFetcher: noEcbFetch, // a test never reaches the ECB; it injects its own
                       nudges: const NoNudges(),
                       calendars: const NoCalendars(),
                       homeWidget: const NoHomeWidget(),
@@ -1207,6 +1231,7 @@ class WalletController extends ChangeNotifier {
         'devices': r.devices.length,
       });
       if (r.received > 0 || r.sent > 0) reload();
+      if (r.received > 0) scheduleMicrotask(() => fetchRatesAuto(trigger: 'sync')); // rows from another device may need rates
     } catch (e, st) {
       logError(_sync, 'sync.failed', e, st, fields: {'trigger': trigger});
       if (relay != relayUrl) return; // the old relay's failure: not shown for the new address
@@ -1294,7 +1319,7 @@ class WalletController extends ChangeNotifier {
   /// A CSV no bank profile knows is read with its saved layout, else [askMapping] opens the Map columns sheet (null = the
   /// message "map its columns"); the chosen layout is saved, then the file is read with it.
   Future<List<ImportLine>> importFiles(List<(String, Uint8List)> files,
-      {AskMapping? askMapping, ConfirmRemoval? confirmRemoval, ConfirmPreview? confirmPreview}) async {
+      {AskMapping? askMapping, ConfirmRemoval? confirmRemoval, ConfirmPreview? confirmPreview, AskAccount? askAccount}) async {
     final all = PerfTimer('import.files', warnMs: 3000);
     final lines = <ImportLine>[];
     for (final (i, (name, bytes)) in files.indexed) {
@@ -1309,7 +1334,15 @@ class WalletController extends ChangeNotifier {
           lines.add(ImportLine(name, 'Not imported. Map its columns to read it.', false));
           continue;
         }
-        final batch = read.batch, usedMapping = read.mapping;
+        final usedMapping = read.mapping;
+        // UX-ACC: each row names its export account by a keyed fingerprint (never the IBAN itself); an unknown one is asked about now,
+        // before anything is written, because rows imported before the answer would stay on the main account.
+        final batch = await _withAccountKeys(read.batch);
+        if (askAccount != null && !await _askAccounts(batch, askAccount, f)) {
+          read.revert?.call();
+          lines.add(ImportLine(name, 'Not imported. You chose Cancel.', false));
+          continue;
+        }
         final mapped = usedMapping != null;
         // Payments a forced layout edit removed come back exactly once when the same file is read the new way (`csvRevive:<shape id>`).
         final reviveKey = batch.source.startsWith(csvSourcePrefix) ? batch.source.substring(csvSourcePrefix.length) : null;
@@ -1396,6 +1429,7 @@ class WalletController extends ChangeNotifier {
     lastImport = lines;
     refreshRecurring();
     _changed();
+    if (lines.any((l) => l.ok && l.added > 0)) scheduleMicrotask(() => fetchRatesAuto(trigger: 'import')); // new foreign rows need rates
     return lines;
   }
 

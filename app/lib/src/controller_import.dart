@@ -208,6 +208,40 @@ extension ImportAndBackup on WalletController {
     logEvent(_import, Level.INFO, 'import.layoutSaved', {'columns': need.shape.headers.length, 'removed': removed.length});
   }
 
+  // ---------- which account is this (UX-ACC) ----------
+
+  /// [batch] with each row's export account fingerprinted ([withAccountKeys]); as it is without a wallet key (a test) or on a failure.
+  Future<ImportBatch> _withAccountKeys(ImportBatch batch) async {
+    final k = key;
+    if (k == null) return batch;
+    try {
+      return await withAccountKeys(k, batch);
+    } catch (e, st) {
+      logError(_import, 'import.accountKeys.failed', e, st); // the rows then count for the main account, as before
+      return batch;
+    }
+  }
+
+  /// Asks [ask] about every export account of [batch] no account claims yet; false = the owner cancelled (nothing of this file is
+  /// written; an answer already given stays, it is the owner's own write). An existing account answers with its match key here; a new
+  /// one is already written by the form. Logs counts only, never the account, the IBAN or the names.
+  Future<bool> _askAccounts(ImportBatch batch, AskAccount ask, Map<String, Object?> f) async {
+    final unknown = repo.unknownImportAccounts(batch);
+    if (unknown.isEmpty) return true;
+    logEvent(_import, Level.INFO, 'import.accountQuestion', {...f, 'accounts': unknown.length});
+    for (final q in unknown) {
+      final a = await ask(q);
+      if (a == null) {
+        logEvent(_import, Level.INFO, 'import.accountCancelled', f);
+        return false;
+      }
+      final id = a.accountId;
+      if (id != null) await updateAccount(id, matchKey: q.accountKey);
+      logEvent(_import, Level.INFO, 'import.accountAnswered', {'new': a.created, 'rows': q.rows});
+    }
+    return true;
+  }
+
   // ---------- bank balance after an import (Q5) ----------
 
   /// The result-line text for the balances a file stated: "PBZ matches the bank" / "PBZ is off by 12 €: see rows since 3 Oct" (payments may

@@ -7,6 +7,7 @@ import '../controller.dart';
 import '../file_chooser.dart';
 import '../logging.dart';
 import '../widgets/common.dart';
+import 'account_question.dart';
 import 'accounts_panel.dart' show askBankBalance;
 import 'csv_layouts_panel.dart';
 import 'csv_map_sheet.dart';
@@ -55,6 +56,8 @@ Future<void> pickAndImport(BuildContext context, WalletController wc, FileChoose
         return openMapColumns(context, wc, need.shape, bytes);
       },
       confirmRemoval: (n) async => context.mounted && await confirmRemovePayments(context, n),
+      // UX-ACC: "Which account is this?" once per export account no account claims yet (before anything is written).
+      askAccount: (q) async => context.mounted ? askWhichAccount(context, wc, q) : null,
       // Q4: the owner sees what the file will do first (Settings › Import › Always show; off = files go straight in).
       confirmPreview: wc.importPreviewAlways
           ? (preview, bank) async =>

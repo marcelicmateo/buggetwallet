@@ -38,7 +38,7 @@ import kotlin.concurrent.thread
 
 /**
  * Small channels: `budget_wallet/calendar` (read-only calendar access, READ_CALENDAR only), `budget_wallet/widget` (the home-screen widget's
- * three words), `budget_wallet/shortcut` (the launcher shortcut's action), and `bw/secure` (FLAG_SECURE while the wallet key is shown), the time zone name (for reminders), and the bills helpers (no PDF package): `renderPdf` draws the pages of a
+ * three words), `budget_wallet/shortcut` (the launcher shortcut's action), and `bw/secure` (FLAG_SECURE while the wallet key is shown), `budget_wallet/network` (is the network metered), the time zone name (for reminders), and the bills helpers (no PDF package): `renderPdf` draws the pages of a
  * PDF with the platform's PdfRenderer, `toJpeg` sizes a picture down (both on a background thread) and `takePhoto` lets the
  * phone's own camera app take one full-size picture into the app's cache (returns its path; null when cancelled).
  */
@@ -184,6 +184,20 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "budget_wallet/timezone").setMethodCallHandler { call, result ->
             when (call.method) {
                 "getTimeZone" -> result.success(java.util.TimeZone.getDefault().id)
+                else -> result.notImplemented()
+            }
+        }
+        // `isMetered`: whether the active network is metered (mobile data, a hotspot), so the app does not download the exchange
+        // rates on its own there (UX-FX). Any failure answers false: the owner can still tap "Get rates now".
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "budget_wallet/network").setMethodCallHandler { call, result ->
+            when (call.method) {
+                "isMetered" -> result.success(
+                    try {
+                        (getSystemService(CONNECTIVITY_SERVICE) as android.net.ConnectivityManager).isActiveNetworkMetered
+                    } catch (e: Throwable) {
+                        false
+                    }
+                )
                 else -> result.notImplemented()
             }
         }
