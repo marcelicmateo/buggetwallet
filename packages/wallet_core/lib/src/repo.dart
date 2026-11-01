@@ -660,7 +660,8 @@ class WalletRepo {
   /// them), so older ids stay valid.
   String _newId(String prefix) {
     final r = Random.secure();
-    String part() => r.nextInt(1 << 32).toRadixString(36).padLeft(7, '0');
+    // 2^32 as a literal: on the web `1 << 32` is 0 (JS shifts are 32-bit) and nextInt(0) throws (web-test caught it).
+    String part() => r.nextInt(0x100000000).toRadixString(36).padLeft(7, '0');
     return '$prefix${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}${part()}${part()}';
   }
 

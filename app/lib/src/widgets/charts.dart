@@ -353,7 +353,7 @@ class CategoryBars extends StatelessWidget {
     final maxV = cats
         .map((k) => [values[k] ?? 0, average[k] ?? 0].reduce((a, b) => a > b ? a : b))
         .reduce((a, b) => a > b ? a : b)
-        .clamp(1, 1 << 60);
+        .clamp(1, 0x1FFFFFFFFFFFFF); // 2^53 − 1 (web shifts are 32-bit: 1 << 60 is not 2^60)
     final total = budget;
     return Column(children: [
       for (final k in cats)
