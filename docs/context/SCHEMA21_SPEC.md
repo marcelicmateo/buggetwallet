@@ -1,6 +1,13 @@
 # Schema 21 — payments know their account (draft)
 
-Status: **draft for the owner**, not built. Builds on schema 20 (UX-A core: `accounts.kind`, `accounts.institution`,
+**Owner decisions 2026-11-01:** build it now, **folded into schema 20** (not pushed yet, so devices update once; no
+`schemaVersion` 21), columns declared as F1 `Col`s (`RefCol`/`TextCol` in `BillCols`-style holders, not `ColumnDef`).
+Open question 1 → **ask once**: at the first import from an unknown export account the app asks "Which account is this?"
+(main or a new one); later files from it match silently. Open question 2 → settled before this draft landed: there is no
+`tx.digits`; the stored scale is fixed per currency (fiat 2, BTC 8, `storageDigitsOf`), i.e. the code-table option.
+Queued in PIPELINE as UX-ACC (one core builder with UX-FX, after F1-core merges).
+
+Status (original draft): Builds on schema 20 (UX-A core: `accounts.kind`, `accounts.institution`,
 `tx.digits`, bill reminder days), which is not on `v2` yet; this draft only adds to it.
 
 ## Why
