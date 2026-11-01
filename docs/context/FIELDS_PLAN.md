@@ -45,8 +45,10 @@ abstract final class BillF {
   chips from UX-A, int → stepper with unit, enum → choice chips, money → amount field in the row's currency, text) and
   shows the field's own refusal message. A sheet lists its fields: `for (final f in [BillF.warrantyUntil, BillF.returnBy]) FieldEditor(...)`
   — **adding the field to that list is the one line that puts it on screen**. Conflict text reads `field.label`.
-- **Schema version:** still bumped by hand when a column is added (older peers must replay ops), but checked by a test
-  that fails when `entitySchema` changes without a bump and a new `vNN.sql` fixture (so it cannot be forgotten).
+- **Schema version:** still bumped by hand when a column is added (older peers must replay ops). The guard already
+  exists: `test/schema_upgrade_test.dart:101` fails when `schemaSql` differs from `fixtures/schema/v<schemaVersion>.sql`,
+  so a new column without a bump and a new snapshot cannot pass (F0 scout, 2026-11-01). `test/support/sim.dart` keeps
+  its hand-written column lists on purpose (independent oracle): that is the one deliberate second line per field.
 
 ## What does not change
 Wire format and sync semantics (op = entity, id, field, value, HLC; per-field last-writer-wins): the refactor is internal,
@@ -57,7 +59,7 @@ independent oracle (it must not be generated from the same declarations, or it w
 | # | Item | Agent (model/effort) | Worktree | Depends on | Output |
 |---|---|---|---|---|---|
 | F0 | Context pack: every model's `fromRow`, update methods, app forms per entity | scout (haiku/low) | no | UX-A-core merged | pack for F1 |
-| F1-core | `Field` types, `entitySchema` from fields, `Row` base, `repo.patch` + `Field.clear`; pilot **Bill + Account** (the two UX-A just changed); schema-bump guard test | core-builder (Opus/high) | yes | F0 | API + tests, no wire change |
+| F1-core | `Field` types, `entitySchema` from fields, `Row` base, `repo.patch` + `Field.clear`; pilot **Bill + Account** (the two UX-A just changed) | core-builder (Opus/high) | yes | F0 | API + tests, no wire change |
 | F1-tests | Wire-compat tests: ops written by old and new code for the same edits are identical; patch refusals per field type | test-writer (sonnet/medium) | yes | F0, parallel to F1-core | tests from this spec |
 | F1-ui | `FieldEditor` (date/int/enum/money/text), bill sheet and account form built from field lists | ui-builder (sonnet/high) | yes | F0, parallel to F1-core (API fixed here) | UI + widget tests |
 | F1-review | Reviewer on the merged pilot (sync safety, money fields, refusals shown) | reviewer (Opus/high) | no | F1 merged | findings → same builders |
