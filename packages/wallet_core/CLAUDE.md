@@ -330,9 +330,10 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `homeAmount`/`inHomeCurrency`: hand rate (`fxRates`) wins, else `ecbConvert` (BigInt, half away from zero once);
   `fxUsed` says which. `balanceInHome` (owner 2026-11-01): hand rate on the whole balance, else the opening at its date
   + each counted row (`AccountBalance.rows`) at its own date; any part without a rate → null. `fillFxDays` also
-  replaces an older day by a newer cached one (an early fetch), and runs by itself after every commit that touches a
-  row/bill/IOU/account currency, date or deletion, the wallet currency or a hand rate (`_fxRelevant` → `_tx`;
-  local or from a sync), so the app needs no fill rule. `WalletSettings.toMap` carries `ecb` (`EcbRates.toJson`); a
+  replaces an older day by a newer cached one (an early fetch), and runs by itself after every commit that can add a
+  need: a row/bill/IOU/account currency, date or undelete not in the wallet currency, the wallet currency or a hand
+  rate (`_fxRelevant` → `_tx`; local or from a sync; never after a dry run), so the app needs no fill rule. One cache
+  read per fill (the open needs' range, days looked up in memory); `fxCacheReads`/`fxAutoFills` pin the cost in tests. `WalletSettings.toMap` carries `ecb` (`EcbRates.toJson`); a
   stored settings row `ecb` is ignored. Core never fetches: `ecbFetchPlan()` → `EcbFile` (`history` zip / `recent`
   90-day XML, once a day via `noteEcbAttempt`, only for a missing need a download could answer or a date newer than the
   cache answered by an older day; dates after today never; `force:` for "Get rates now"); app order `ecbFetchPlan` →

@@ -3,6 +3,7 @@
 library;
 
 import 'dart:async';
+import 'dart:typed_data' show BytesBuilder;
 
 import 'package:http/http.dart' as http;
 import 'package:wallet_core/wallet_core.dart';
@@ -36,33 +37,48 @@ Future<List<int>> fetchEcbFile(EcbFile f, {http.Client? client, Duration timeout
   if (uri.scheme != 'https' || uri.hasQuery) throw ArgumentError('Not the ECB address.');
   final c = client ?? http.Client();
   final sw = Stopwatch()..start();
-  void log(String outcome, {int? status, int bytes = 0}) => logEvent(_log, outcome == 'ok' ? Level.INFO : Level.WARNING, 'fx.ecbFetch',
-      {'file': f.name, 'outcome': outcome, if (status != null) 'status': status, 'bytes': bytes, 'ms': sw.elapsedMilliseconds});
+  // Once the timeout fired, the abandoned download logs nothing more (its later errors are only the closed client).
+  var timedOut = false;
+  void log(String outcome, {int? status, int bytes = 0, Object? error}) {
+    if (timedOut) return;
+    logEvent(_log, outcome == 'ok' ? Level.INFO : Level.WARNING, 'fx.ecbFetch', {
+      'file': f.name,
+      'outcome': outcome,
+      if (status != null) 'status': status,
+      'bytes': bytes,
+      'ms': sw.elapsedMilliseconds,
+      // Only the type: a client error's text names the address.
+      if (error != null) 'error': error.runtimeType.toString(),
+    });
+  }
+
+  // The rest of an answer that is not used: read to the end so the connection is freed; a failure there is logged only.
+  void drain(http.StreamedResponse r) => unawaited(r.stream.drain<void>().catchError((Object e) {
+        if (!timedOut) logEvent(_log, Level.FINE, 'fx.ecbFetch.drain', {'file': f.name, 'error': e.runtimeType.toString()});
+      }));
+
   Future<List<int>> run() async {
     final http.StreamedResponse r;
     try {
       r = await c.send(http.Request('GET', uri));
-    } on TimeoutException {
-      rethrow;
     } on Object catch (e) {
-      // Only the type: a client error's text names the address.
-      logEvent(_log, Level.WARNING, 'fx.ecbFetch', {'file': f.name, 'outcome': 'unreachable', 'error': e.runtimeType.toString()});
+      log('unreachable', error: e);
       throw const EcbFetchException(EcbFetchFailure.unreachable, 'The exchange rates could not be downloaded: no connection.');
     }
     if (r.statusCode != 200) {
-      unawaited(r.stream.drain<void>().catchError((_) {}));
+      drain(r);
       log('status', status: r.statusCode);
       throw const EcbFetchException(EcbFetchFailure.status, 'The ECB did not send the exchange rates. Try again later.');
     }
     if ((r.contentLength ?? 0) > maxEcbDownloadBytes) {
-      unawaited(r.stream.drain<void>().catchError((_) {}));
+      drain(r);
       log('tooLarge', status: 200, bytes: r.contentLength!);
       throw const EcbFetchException(EcbFetchFailure.tooLarge, 'The exchange rates download is too large.');
     }
-    final out = <int>[];
+    final out = BytesBuilder(copy: false);
     try {
       await for (final chunk in r.stream) {
-        out.addAll(chunk);
+        out.add(chunk);
         if (out.length > maxEcbDownloadBytes) {
           log('tooLarge', status: 200, bytes: out.length);
           throw const EcbFetchException(EcbFetchFailure.tooLarge, 'The exchange rates download is too large.');
@@ -70,20 +86,19 @@ Future<List<int>> fetchEcbFile(EcbFile f, {http.Client? client, Duration timeout
       }
     } on EcbFetchException {
       rethrow;
-    } on TimeoutException {
-      rethrow;
     } on Object catch (e) {
-      logEvent(_log, Level.WARNING, 'fx.ecbFetch', {'file': f.name, 'outcome': 'unreachable', 'error': e.runtimeType.toString()});
+      log('unreachable', status: 200, bytes: out.length, error: e);
       throw const EcbFetchException(EcbFetchFailure.unreachable, 'The exchange rates download was cut off.');
     }
     log('ok', status: 200, bytes: out.length);
-    return out;
+    return out.takeBytes();
   }
 
   try {
     return await run().timeout(timeout);
   } on TimeoutException {
     log('timeout');
+    timedOut = true;
     throw const EcbFetchException(EcbFetchFailure.timeout, 'The exchange rates download took too long. Try again later.');
   } finally {
     if (client == null) c.close();

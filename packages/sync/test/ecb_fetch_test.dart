@@ -88,4 +88,32 @@ void main() {
       expect(all, isNot(contains(s)));
     }
   });
+
+  test('after a timeout the abandoned download logs nothing more; a failed drain is logged with its type', () async {
+    final lines = <String>[];
+    final was = Logger.root.level;
+    Logger.root.level = Level.ALL;
+    final sub = Logger.root.onRecord.listen((r) => lines.add(formatLogRecord(r)));
+    try {
+      final late =
+          MockClient((_) => Future<http.Response>.delayed(const Duration(milliseconds: 120), () => throw http.ClientException('closed')));
+      await expectLater(
+          fetchEcbFile(EcbFile.recent, client: late, timeout: const Duration(milliseconds: 20)), _fails(EcbFetchFailure.timeout));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(lines.where((l) => l.contains('fx.ecbFetch')).length, 1, reason: 'the timeout line only');
+      expect(lines.join('\n'), isNot(contains('unreachable')));
+
+      Stream<List<int>> broken() async* {
+        throw http.ClientException('reset');
+      }
+
+      final bad = MockClient.streaming((_, __) async => http.StreamedResponse(broken(), 404));
+      await expectLater(fetchEcbFile(EcbFile.recent, client: bad), _fails(EcbFetchFailure.status));
+      await Future<void>.delayed(Duration.zero);
+      expect(lines.where((l) => l.contains('fx.ecbFetch.drain')).join('\n'), contains('ClientException'));
+    } finally {
+      await sub.cancel();
+      Logger.root.level = was;
+    }
+  });
 }

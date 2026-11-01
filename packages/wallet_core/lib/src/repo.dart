@@ -298,17 +298,33 @@ class WalletRepo {
   /// UX-FX: set by [_apply] when a committed field can add or answer an ECB need ([_fxRelevant]); [_tx] then runs
   /// [WalletRepoFx._fillFxAfterChange] once after the commit. [_fxFilling]: that fill is running.
   bool _fxPending = false, _fxFilling = false;
+  int _fxCacheReads = 0, _fxAutoFills = 0;
 
-  static const _fxFields = {'currency', 'date', 'due_date', 'opening_date', 'deleted'};
+  /// The wallet currency as [_fxRelevant] knows it (read once; dropped when a `currency` setting applies and when a
+  /// transaction rolls back, as it may have read an uncommitted value).
+  String? _fxHome;
 
-  /// Whether a change of [fields] of `entity`/`id` can change what the wallet converts by an ECB rate
-  /// ([WalletRepoFx.walletFxNeeds]): a payment, bill, IOU or account's currency, date or deletion, the wallet currency,
-  /// or a hand rate.
-  static bool _fxRelevant(String entity, String id, Iterable<String> fields) => switch (entity) {
-        'tx' || 'bill' || 'iou' || 'account' => fields.any(_fxFields.contains),
-        'setting' => id == 'currency' || id.startsWith(WalletSettings.fxPrefix),
-        _ => false,
-      };
+  static const _fxFields = {'currency', 'date', 'due_date', 'opening_date'};
+
+  /// Whether the [accepted] fields of [op] can add or answer an ECB need ([WalletRepoFx.walletFxNeeds]): the wallet
+  /// currency or a hand rate; a payment, bill, IOU or account's currency, date or undelete, unless the op says its
+  /// currency is the wallet's (a home-currency row never needs a rate). A deletion only removes needs.
+  bool _fxRelevant(Op op, Map<String, Object?> accepted) {
+    switch (op.entity) {
+      case 'setting':
+        if (op.id == 'currency') {
+          _fxHome = null;
+          return true;
+        }
+        return op.id.startsWith(WalletSettings.fxPrefix);
+      case 'tx' || 'bill' || 'iou' || 'account':
+        if (!accepted.keys.any(_fxFields.contains) && accepted['deleted'] != 0) return false;
+        final c = accepted['currency'];
+        return c is! String || c != (_fxHome ??= _readSettings(db).currency);
+      default:
+        return false;
+    }
+  }
 
   /// Goes up by one on every committed transaction that wrote wallet data: a local write ([_write]) or ops applied from
   /// another device or a backup ([applyRemote], snapshots, restore and merge), whatever their clocks. Never on sync
@@ -382,6 +398,7 @@ class WalletRepo {
     } catch (e, st) {
       _dataPending = false;
       _fxPending = false;
+      _fxHome = null;
       // Marked first: on SQLITE_FULL / IOERR / NOMEM / BUSY SQLite may have rolled back already, and the original error is
       // what the app must see (a ROLLBACK error would replace it).
       if (e is SqliteException) _writeErrors[e] = true;

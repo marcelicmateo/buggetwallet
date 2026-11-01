@@ -98,7 +98,7 @@ extension WalletRepoSyncApply on WalletRepo {
     }
     assert(!db.autocommit, 'data is written inside a transaction');
     _dataPending = true;
-    if (!_fxPending && WalletRepo._fxRelevant(op.entity, op.id, accepted.keys)) _fxPending = true;
+    if (_fxRelevant(op, accepted)) _fxPending = true;
     db.execute('INSERT OR IGNORE INTO $table(id) VALUES(?)', [op.id]);
     for (final k in accepted.keys) {
       db.execute('INSERT OR REPLACE INTO clocks(entity, id, field, hlc) VALUES(?, ?, ?, ?)', [op.entity, op.id, k, op.hlc]);
@@ -213,6 +213,8 @@ extension WalletRepoSyncApply on WalletRepo {
       } finally {
         if (!db.autocommit) db.execute('ROLLBACK');
         _dataPending = false;
+        _fxPending = false; // nothing was committed: no fill
+        _fxHome = null;
       }
       t.done({'ops': ops.length, 'changed': changed, 'dryRun': true});
       return byEntity;

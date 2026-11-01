@@ -59,49 +59,78 @@ extension WalletRepoFx on WalletRepo {
   /// refused for the clock); returns how many rows it wrote. A row the wallet holds with the same value is not written
   /// again. Runs by itself after every change that can add a need (`_fillFxAfterChange`: rows, bills, IOUs, accounts,
   /// the wallet currency or a hand rate, here or from a sync) and after [importEcbHistory]. Logs counts only.
+  ///
+  /// Cost: the needs (four indexed scans), then one read of the cache range the open needs span (`fxCacheReads`), and
+  /// the days are looked up in memory; needs already on their own ECB day cost nothing more.
   int fillFxDays() {
     if (db.select('SELECT 1 FROM ecb_rates LIMIT 1').isEmpty) return 0;
     final t = PerfTimer('fx.fill');
     final st = settings();
     final w = st.currency;
+    final all = walletFxNeeds(st);
+    // Open: no rate yet, or one from an older day than the need's own.
+    final open = <(FxNeed, String?)>[];
+    for (final n in all) {
+      final have = st.ecb.pairOn(n.currency, w, n.date)?.day;
+      if (have != n.date) open.add((n, have));
+    }
     final planned = <String, int>{};
     final changes = <(String, String, Map<String, Object?>)>[];
-    var needs = 0, unanswered = 0, newer = 0;
-    for (final n in walletFxNeeds(st)) {
-      needs++;
-      final have = st.ecb.pairOn(n.currency, w, n.date)?.day;
-      if (have == n.date) continue; // its own day: nothing can be better
-      final curs = {n.currency, w}..remove('EUR');
-      final byDay = <String, Map<String, int>>{};
-      for (final r in db.select(
-          'SELECT cur, date, per_eur FROM ecb_rates WHERE cur IN (${List.filled(curs.length, '?').join(', ')}) AND date <= ? AND date >= ?',
-          [...curs, n.date, addDays(n.date, -ecbMaxGapDays)])) {
-        (byDay[r['date'] as String] ??= {})[r['cur'] as String] = r['per_eur'] as int;
+    var unanswered = 0, newer = 0;
+    if (open.isNotEmpty) {
+      final curs = {for (final (n, _) in open) n.currency, w}..remove('EUR');
+      var lo = open.first.$1.date, hi = lo;
+      for (final (n, _) in open) {
+        if (n.date.compareTo(lo) < 0) lo = n.date;
+        if (n.date.compareTo(hi) > 0) hi = n.date;
       }
-      final day = (byDay.keys.where((d) => byDay[d]!.length == curs.length).toList()..sort()).lastOrNull;
-      if (day == null) {
-        if (have == null) unanswered++;
-        continue;
+      final cache = <String, Map<String, int>>{}; // cur -> date -> per EUR
+      if (curs.isNotEmpty) {
+        _fxCacheReads++;
+        for (final r in db.select(
+            'SELECT cur, date, per_eur FROM ecb_rates WHERE cur IN (${List.filled(curs.length, '?').join(', ')}) AND date >= ? AND date <= ?',
+            [...curs, addDays(lo, -ecbMaxGapDays), hi])) {
+          (cache[r['cur'] as String] ??= {})[r['date'] as String] = r['per_eur'] as int;
+        }
       }
-      if (have != null && have.compareTo(day) >= 0) continue;
-      if (have != null) newer++;
-      for (final c in curs) {
-        final per = byDay[day]![c]!, id = fxDayId(c, day);
-        if (st.ecb.perEurOn(c, day) == per || planned[id] == per) continue;
-        planned[id] = per;
-        changes.add(('fx_day', id, {'cur': c, 'date': day, 'per_eur': per, 'source': 'ecb'}));
+      for (final (n, have) in open) {
+        final need = {n.currency, w}..remove('EUR');
+        String? day;
+        for (var k = 0; k <= ecbMaxGapDays && day == null; k++) {
+          final d = addDays(n.date, -k);
+          if (need.every((c) => cache[c]?[d] != null)) day = d;
+        }
+        if (day == null) {
+          if (have == null) unanswered++;
+          continue;
+        }
+        if (have != null && have.compareTo(day) >= 0) continue;
+        if (have != null) newer++;
+        for (final c in need) {
+          final per = cache[c]![day]!, id = fxDayId(c, day);
+          if (st.ecb.perEurOn(c, day) == per || planned[id] == per) continue;
+          planned[id] = per;
+          changes.add(('fx_day', id, {'cur': c, 'date': day, 'per_eur': per, 'source': 'ecb'}));
+        }
       }
     }
     if (changes.isNotEmpty) _writeInternal(changes);
-    t.done({'needs': needs, 'written': changes.length, 'unanswered': unanswered, 'newer': newer});
+    t.done({'needs': all.length, 'open': open.length, 'written': changes.length, 'unanswered': unanswered, 'newer': newer});
     return changes.length;
   }
+
+  /// How many cache range reads [fillFxDays] made on this connection (at most one per fill; tests pin the cost).
+  int get fxCacheReads => _fxCacheReads;
+
+  /// How many times a committed change started the automatic fill (`_fillFxAfterChange`; tests pin when it runs).
+  int get fxAutoFills => _fxAutoFills;
 
   /// [fillFxDays] after a committed change that can add or answer a need (`_tx`, `_fxPending`): never fails the change
   /// itself (an error is logged), never runs inside itself, and costs one query when the cache is empty.
   void _fillFxAfterChange() {
     if (_fxFilling) return;
     _fxFilling = true;
+    _fxAutoFills++;
     try {
       fillFxDays();
     } catch (e, st) {

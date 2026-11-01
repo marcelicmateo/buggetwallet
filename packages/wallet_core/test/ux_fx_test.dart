@@ -388,6 +388,52 @@ void main() {
       });
     });
 
+    group('cost of the automatic fill', () {
+      test('one cache read per fill, however many needs stay open; a home-currency commit runs no fill', () {
+        repo.importEcbHistory(utf8.encode(_csv));
+        // 500 needs that never settle: RSD is not an ECB currency.
+        repo.importBatch(ImportBatch(source: 'pbz', transactions: [
+          for (var i = 0; i < 500; i++) _bank(addDays('2020-01-01', i), -100 - i, 'r$i', 'RSD'),
+        ]));
+        expect(repo.fxMissing().length, 500);
+        final reads = repo.fxCacheReads, fills = repo.fxAutoFills;
+        repo.addTransaction(date: '2021-06-01', amount: 100, category: 'Groceries', currency: 'RSD');
+        expect((repo.fxAutoFills - fills, repo.fxCacheReads - reads), (1, 1));
+        repo.addTransaction(date: '2021-06-01', amount: 100, category: 'Groceries'); // EUR, the wallet currency
+        repo.updateSettings({'subs': 1000});
+        final g = repo.transactions().firstWhere((t) => t.currency == 'EUR');
+        repo.deleteTransaction(g.id);
+        expect((repo.fxAutoFills - fills, repo.fxCacheReads - reads), (1, 1), reason: 'nothing that can add a need');
+      });
+
+      test('a 20k-row wallet with 500 open needs: 20 foreign commits in reasonable time', () {
+        repo.importEcbHistory(utf8.encode(_csv));
+        repo.importBatch(ImportBatch(source: 'pbz', transactions: [
+          for (var i = 0; i < 20000; i++) _bank(addDays('2018-01-01', i % 2000), -1 - i, 'e$i', 'EUR'),
+          for (var i = 0; i < 500; i++) _bank(addDays('2020-01-01', i), -100 - i, 'r$i', 'RSD'),
+        ]));
+        final reads = repo.fxCacheReads;
+        final sw = Stopwatch()..start();
+        for (var i = 0; i < 20; i++) {
+          repo.addTransaction(date: addDays('2022-01-01', i), amount: 100 + i, category: 'Groceries', currency: 'RSD');
+        }
+        expect(repo.fxCacheReads - reads, 20);
+        expect(sw.elapsedMilliseconds, lessThan(10000));
+      }, timeout: _t);
+    });
+
+    test('a dry run (merge preview) with a foreign row leaves no fill behind for the next commit', () {
+      repo.importEcbHistory(utf8.encode(_csv));
+      final other = WalletRepo.inMemory(now: () => _now);
+      addTearDown(other.close);
+      other.addTransaction(date: '1999-01-10', amount: 10000, category: 'Groceries', currency: 'USD');
+      final fills = repo.fxAutoFills;
+      expect(repo.applyRemoteByEntity([for (final (_, op) in other.pendingOps()) op], dryRun: true), {'tx': 1});
+      repo.updateSettings({'subs': 1000});
+      expect(repo.fxAutoFills, fills);
+      expect(_count(repo, 'fx_days'), 0);
+    });
+
     test('an early rate is replaced by the day\'s own once the cache has it; then nothing more', () {
       repo.addTransaction(date: '1999-01-08', amount: 10000, category: 'Groceries', currency: 'USD');
       expect(repo.importEcbHistory(utf8.encode(_earlyCsv)).written, 1);
