@@ -413,6 +413,31 @@ void main() {
     }, timeout: _timeout);
   });
 
+  group('lists: zooming the running month', () {
+    // UX-BUG2: the middle of a running month is in the future in its first half; the zoom ended there with no rows at all.
+    for (final day in [1, 10]) {
+      testWidgets('on the $day of the month: + keeps the window on or before today and the month so far in it', (t) async {
+        final today = DateTime(2026, 11, day, 12);
+        final wc = WalletController.forTest(WalletRepo.inMemory(), key: VaultKey.generate(), clock: () => today);
+        wc.repo.addTransaction(date: '2026-10-15', amount: 7000, category: 'Groceries', note: 'Lidl');
+        wc.repo.addTransaction(date: '2026-11-01', amount: 5000, category: 'Groceries', note: 'Spar');
+        if (day == 10) wc.repo.addTransaction(date: '2026-11-10', amount: 3000, category: 'Groceries', note: 'Spar');
+        wc.reload();
+        await pump(t, InsightsScreen(wc: wc), size: const Size(400, 9000));
+        final m = wc.insightRange('share');
+        expect(m.range, wc.monthRange('2026-11'), reason: 'the running month, which ends after today');
+        await show(t, 'chartZoomIn_share');
+        await t.tap(find.byKey(const ValueKey('chartZoomIn_share')));
+        await t.pump();
+        expect(m.isFree, isTrue);
+        expect(m.range.days, lessThan(30));
+        expect(m.range.end.compareTo(isoDate(today)) <= 0, isTrue, reason: 'never past today: ${m.range.start} to ${m.range.end}');
+        expect(wc.shareFor(m.range).total, day == 10 ? 8000 : 5000, reason: 'every payment of the month so far is still in it');
+        expect(find.byKey(const ValueKey('shareRow_Groceries')), findsOneWidget);
+      }, timeout: _timeout);
+    }
+  });
+
   group('what a bar opens', () {
     int sum(Iterable<CategorizedTx> rows) => rows.fold<int>(0, (a, t) => a - t.amount);
 
