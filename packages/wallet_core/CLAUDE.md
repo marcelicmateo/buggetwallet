@@ -33,6 +33,21 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   text/integer/flag, nullable, searchable, default, indexes). The DDL (`schemaSql`), the column migration on open,
   `_apply`'s type check, the snapshot writer, `isEmpty` and `searchRows` derive from it; `test/schema_test.dart` pins
   the generated DDL to the hand-written v7 text and checks it against `test/support/sim.dart`'s independent list.
+  `addTestEntity` (tests only) adds a throwaway entity on top (`entitySchema` is a read-only view; `schemaSql` a getter).
+- `cols.dart` — typed columns (F1, `docs/context/FIELDS_PLAN.md`): `sealed class Col<T>` extends `ColumnDef` (`entity`,
+  `column`, `label`, `defaultValue`, `read` lenient = bad/missing → default, `encode`, `problem(v, today:)` = reason
+  without the label, `accepts` = Dart type); kinds `TextCol(maxLength)`, `DateCol(notAfterToday)`, `IntCol(min, max,
+  unit)`, `MoneyCol(cap = maxAmount, positive, currencyCol)` (its cap is the sync cap, not `_amountCaps`), `FlagCol`,
+  `EnumCol(values, wire)`, `RefCol(target)`, `JsonCol(check)`; `clearValue`; `RowModel` (`row`, `model[col]`).
+  Holders `BillCols` (bills.dart) and `AccountCols` (models.dart) are `entitySchema['bill'/'account']`; `Bill`/`Account`
+  are `RowModel`s whose getters read through them. `repo_patch.dart` (`WalletRepoPatch.patch(entity, id, {col: v})`):
+  type + `problem` for every value first (`ArgumentError('<label>: <reason>')`, nothing written), null/`clearValue` =
+  none, one op in the map's order; bill hook = `_liveBill` + `_billWrites` (status, links, file, source, currency,
+  unsure, deleted refused: their own actions), account hook = `updateAccount`'s rules and texts (trim, "Give the account
+  a name.", shape, unique, opening pair, diff; currency/deleted refused); other entities: the row must exist.
+  `updateBill`/`updateAccount` are wrappers over it. Incoming ops keep the old check (type, nullability, cap only).
+  Tests: `test/f1_cols_test.dart` (kinds, patch, done check with a test-only entity), spec tests `f1_wire_test.dart`,
+  `f1_mixed_test.dart`, `f1_refusals_test.dart`.
 - `repo.dart` — `WalletRepo`: open/migrate, change log, reads, and every write. Writes go through `_write(...)` so each one
   becomes a sync op; never `db.execute` an INSERT/UPDATE on a data table directly. `_apply` reads the row's clocks once
   and checks each field's type (`_fieldValue` by its `ColumnDef`): a wrong-typed one is ignored (`repo.badField`, entity +
@@ -676,8 +691,9 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
 
 ## Rules
 - Amounts are `int` cents; expenses negative. Dates are `YYYY-MM-DD` strings.
-- New table or field: add it to `entitySchema` in `schema.dart` (DDL, sync, type check and migration follow) and to
-  `entityTables` in `test/support/sim.dart`;
+- New table or field: add it to `entitySchema` in `schema.dart` (for bill/account: one `Col` line in `BillCols` /
+  `AccountCols`; DDL, sync, type check, migration, search and `patch` follow), bump `schemaVersion` with a new
+  `test/fixtures/schema/vNN.sql` (the guard test asks), and add it to `entityTables` in `test/support/sim.dart`;
   existing devices must still open old databases (add columns, never rename).
 - Pure functions for new calculations (inputs → result object), so tests need no database.
 - **Money is never reclassified on amount alone** (owner rule). Hiding a row as a transfer, or moving it to another

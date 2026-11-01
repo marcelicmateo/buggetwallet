@@ -4,6 +4,7 @@ import 'dart:math' show min;
 import 'package:wallet_importer/wallet_importer.dart' show CsvMapping, TxKind;
 
 import 'categories.dart';
+import 'cols.dart';
 import 'currencies.dart' show currencyInfo;
 import 'dates.dart';
 import 'logs.dart';
@@ -599,36 +600,73 @@ enum AccountKind {
   }
 }
 
+/// The columns of the synced entity `account` (table `accounts`), in table order ([Col]; see [BillCols]).
+abstract final class AccountCols {
+  static const entity = 'account';
+  static const name = TextCol(entity, 'name', label: 'Name', searchable: true, maxLength: Account.maxName);
+  static const source = TextCol(entity, 'source', label: 'Bank file', nullable: true);
+  static const currency = TextCol(entity, 'currency', label: 'Currency', defaultValue: 'EUR');
+  static const opening = MoneyCol(entity, 'opening', label: 'Opening balance', defaultValue: 0);
+  static const openingDate = DateCol(entity, 'opening_date', label: 'Opening date', notAfterToday: true);
+  static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
+  // v20 (UX-A): `AccountKind` wire name (null = from `source`: none → cash, any → bank) and free-text institution.
+  static const kind = EnumCol(entity, 'kind', label: 'Kind', values: AccountKind.values, nullable: true);
+  static const institution =
+      TextCol(entity, 'institution', label: 'Institution', nullable: true, searchable: true, maxLength: Account.maxName);
+
+  static const all = <Col>[name, source, currency, opening, openingDate, deleted, kind, institution];
+}
+
 /// One of the owner's accounts (N2, synced entity `account`, table `accounts`): its [kind] (UX-A), an optional
 /// [institution] (bank, provider or exchange name, free text) and for a bank, card or savings account the import
 /// format whose rows it counts ([source] = a bank profile id, `pbz` / `revolut`, or `csv:<shapeId>`). [opening] (signed
 /// minor units of [currency]) is the balance at the end of [openingDate]; `accountBalances` adds the rows after it (a
 /// cash account: the hand-added rows; one with a [source]: that source's rows; any other: none, its balance is set by
 /// hand). At most one live cash account per currency and one live account per (source, currency).
-class Account {
-  final String id;
-  final String name;
-  final String? source;
-  final String currency;
-  final int opening;
-  final String openingDate; // YYYY-MM-DD
-  final bool deleted;
+/// Backed by its stored row ([AccountCols], [RowModel]); each typed field is decoded once, on first use.
+class Account extends RowModel {
+  Account._(super.row);
 
-  /// Stored, or for a row written before schema 20 (or by an older build) from [source]: none → cash, any → bank.
-  final AccountKind kind;
-  final String? institution;
-
-  const Account({
-    required this.id,
-    required this.name,
-    this.source,
-    required this.currency,
-    required this.opening,
-    required this.openingDate,
-    this.deleted = false,
+  factory Account({
+    required String id,
+    required String name,
+    String? source,
+    required String currency,
+    required int opening,
+    required String openingDate,
+    bool deleted = false,
     AccountKind? kind,
-    this.institution,
-  }) : kind = kind ?? (source == null ? AccountKind.cash : AccountKind.bank);
+    String? institution,
+  }) =>
+      Account._({
+        'id': id,
+        'name': name,
+        'source': source,
+        'currency': currency,
+        'opening': opening,
+        'opening_date': openingDate,
+        'deleted': deleted ? 1 : 0,
+        'kind': kind?.name,
+        'institution': institution,
+      });
+
+  /// A stored row (a map as `SELECT *` gives it); copied into the read-only [row].
+  static Account fromRow(Map<String, Object?> r) => Account._(r);
+
+  late final String id = row['id'] as String;
+  late final String name = AccountCols.name.read(row) ?? '';
+  late final String? source = AccountCols.source.read(row);
+  late final String currency = AccountCols.currency.read(row)!;
+  late final int opening = AccountCols.opening.read(row)!;
+
+  /// `YYYY-MM-DD`; '' for a damaged row.
+  late final String openingDate = AccountCols.openingDate.read(row) ?? '';
+  late final bool deleted = AccountCols.deleted.read(row)!;
+
+  /// Stored, or for a row written before schema 20 (or by an older build, or a kind this build does not know) from
+  /// [source]: none → cash, any → bank.
+  late final AccountKind kind = AccountCols.kind.read(row) ?? (source == null ? AccountKind.cash : AccountKind.bank);
+  late final String? institution = AccountCols.institution.read(row);
 
   /// Longest accepted name and institution (characters, after trimming).
   static const maxName = 60;
@@ -637,18 +675,6 @@ class Account {
 
   /// Whether rows count for it (`accountBalances`): cash (the hand-added rows) or an account with a [source].
   bool get countsRows => isCash || source != null;
-
-  static Account fromRow(Map<String, Object?> r) => Account(
-        id: r['id'] as String,
-        name: _str(r['name']) ?? '',
-        source: _str(r['source']),
-        currency: _str(r['currency']) ?? 'EUR',
-        opening: _int(r['opening']) ?? 0,
-        openingDate: _str(r['opening_date']) ?? '',
-        deleted: r['deleted'] == 1,
-        kind: AccountKind.fromWire(r['kind']),
-        institution: _str(r['institution']),
-      );
 }
 
 /// Which way an [Iou]'s money went: the owner lent it to the person (they owe the owner) or borrowed it from them.

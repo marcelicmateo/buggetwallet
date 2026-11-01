@@ -115,16 +115,15 @@ extension WalletRepoSyncApply on WalletRepo {
   /// cap [maxAmountCents], which every build checked when typed. Goals' `target`/`saved` and contributions have none
   /// here: `goalTotal` already clamps each contribution and the total (`test/goal_contrib_test.dart`). Other integer
   /// columns (dates in ms, sort keys, sizes, counts) have none. New local writes stay at [maxAmountCents]
-  /// ([isSafeCents]: `addTransaction`, `importBatch`).
+  /// ([isSafeCents]: `addTransaction`, `importBatch`). A [MoneyCol] (a bill's total, an account opening) carries its
+  /// own cap ([MoneyCol.cap], the same [maxAmountCents]) and is not listed here.
   static const _amountCaps = <(String, String), int>{
     ('tx', 'amount'): legacyRowCapCents,
     ('planned', 'amount'): maxAmountCents,
-    ('bill', 'total'): maxAmountCents,
     ('recurring', 'expected_amount'): legacyRowCapCents,
     ('recurring', 'min_amount'): legacyRowCapCents,
     ('recurring', 'max_amount'): legacyRowCapCents,
     ('wish', 'price'): maxAmountCents,
-    ('account', 'opening'): maxAmountCents,
     ('goal', 'monthly'): maxAmountCents,
     ('iou', 'amount'): maxAmountCents,
     ('iou_part', 'amount'): maxAmountCents,
@@ -150,7 +149,7 @@ extension WalletRepoSyncApply on WalletRepo {
           _ => null,
         };
         if (v == null) return _bad;
-        final cap = _amountCaps[(entity, col.name)];
+        final cap = col is MoneyCol ? col.cap : _amountCaps[(entity, col.name)];
         // Both bounds, never `abs()`: the smallest int's abs() is itself (negative) and would pass.
         return cap != null && (v > cap || v < -cap) ? _bad : v;
       case ColumnType.text:

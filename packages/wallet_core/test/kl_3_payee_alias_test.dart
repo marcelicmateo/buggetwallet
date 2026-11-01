@@ -29,7 +29,7 @@ void main() {
       expect(billPayeeKey(bare('Synth Power Co Ltd'), payeeAliases: {power: energy}), isNot(energy), reason: 'no similar-name guessing');
       expect(resolvePayeeAlias('a', {'a': 'b', 'b': 'c'}), 'b', reason: 'never a chain');
       expect(resolvePayeeAlias(null, {'a': 'b'}), isNull);
-      expect(billPayeeKey(const Bill(id: 'x')), isNull);
+      expect(billPayeeKey(Bill(id: 'x')), isNull);
     });
 
     test('payeeAliasId is pa: + 16 hex of the key, the same on every device', () {

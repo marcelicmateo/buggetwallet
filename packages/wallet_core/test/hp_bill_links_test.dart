@@ -179,7 +179,7 @@ void main() {
                 transferTo: transferTo),
             'Shopping',
             kind);
-    const slip = Bill(id: 'b1', payee: 'Lumen Power', date: '2026-03-10', dueDate: '2026-03-20', total: 4500);
+    final slip = Bill(id: 'b1', payee: 'Lumen Power', date: '2026-03-10', dueDate: '2026-03-20', total: 4500);
 
     test('window date - 3 .. due + 30 inclusive; only live, non-transfer expenses', () {
       List<String> ids(List<CategorizedTx> rows, [Bill? b]) => billCandidates(b ?? slip, rows, [b ?? slip]).map((t) => t.tx.id).toList();
@@ -202,21 +202,19 @@ void main() {
             row('ok', '2026-03-10', -100, 'x'),
           ]),
           ['hand', 'ok']);
-      expect(billCandidates(const Bill(id: 'n', total: 100), [row('a', '2026-03-10', -100, 'x')], const []), isEmpty,
-          reason: 'no date: none');
+      expect(billCandidates(Bill(id: 'n', total: 100), [row('a', '2026-03-10', -100, 'x')], const []), isEmpty, reason: 'no date: none');
       expect(
-          billCandidates(
-              const Bill(id: 'n', date: '2026-03-10', source: BillSource.attachment), [row('a', '2026-03-10', -100, 'x')], const []),
+          billCandidates(Bill(id: 'n', date: '2026-03-10', source: BillSource.attachment), [row('a', '2026-03-10', -100, 'x')], const []),
           isEmpty);
     });
 
     test('rows paid to another bill are out, its own is not', () {
-      const other = Bill(id: 'b2', linkedTx: 'a');
-      const mine = Bill(id: 'b1', payee: 'Lumen Power', date: '2026-03-10', total: 4500, linkedTx: 'a');
+      final other = Bill(id: 'b2', linkedTx: 'a');
+      final mine = Bill(id: 'b1', payee: 'Lumen Power', date: '2026-03-10', total: 4500, linkedTx: 'a');
       final rows = [row('a', '2026-03-10', -4500, 'x'), row('b', '2026-03-10', -4500, 'x')];
       expect(billCandidates(slip, rows, [slip, other]).map((t) => t.tx.id), ['b']);
       expect(billCandidates(mine, rows, [mine]).map((t) => t.tx.id), ['a', 'b']);
-      expect(billCandidates(slip, rows, [slip, const Bill(id: 'b2', linkedTx: 'a', deleted: true)]).map((t) => t.tx.id), ['a', 'b']);
+      expect(billCandidates(slip, rows, [slip, Bill(id: 'b2', linkedTx: 'a', deleted: true)]).map((t) => t.tx.id), ['a', 'b']);
     });
 
     test('order: payee word first (3+ letters only), then closest date, closest amount, date, id', () {
@@ -229,10 +227,10 @@ void main() {
       ];
       expect(billCandidates(slip, rows, [slip]).map((t) => t.tx.id), ['n3', 'n4', 'n2', 'n1', 'z']);
       // two-letter words never name a payee
-      const tiny = Bill(id: 'b3', payee: 'AB CD', date: '2026-03-10', total: 100);
+      final tiny = Bill(id: 'b3', payee: 'AB CD', date: '2026-03-10', total: 100);
       expect(billCandidates(tiny, [row('a', '2026-03-10', -100, 'xx'), row('b', '2026-03-13', -100, 'AB CD')], [tiny]).map((t) => t.tx.id),
           ['a', 'b']);
-      const three = Bill(id: 'b4', payee: 'ABC', date: '2026-03-10', total: 100);
+      final three = Bill(id: 'b4', payee: 'ABC', date: '2026-03-10', total: 100);
       expect(
           billCandidates(three, [row('a', '2026-03-10', -100, 'xx'), row('b', '2026-03-13', -100, 'my abc shop')], [three])
               .map((t) => t.tx.id),
@@ -241,7 +239,7 @@ void main() {
   });
 
   group('plannedCoverage', () {
-    final key = billPayeeKey(const Bill(id: 'x', payee: 'Lumen Power'))!;
+    final key = billPayeeKey(Bill(id: 'x', payee: 'Lumen Power'))!;
     RecurringBill rec({int interval = 30, String status = 'confirmed', String? direction, String? payee, String due = '2026-04-10'}) =>
         RecurringBill(
             id: 'rec:$key',
@@ -303,7 +301,7 @@ void main() {
             {bool manual = false, BudgetKind kind = BudgetKind.flex}) =>
         CategorizedTx(
             Tx(id: id, source: manual ? 'manual' : 'pbz', date: date, amount: cents, description: desc, manual: manual), cat, kind);
-    const slip = Bill(id: 'b1', payee: 'Lumen Power', date: '2026-03-10', total: 4500);
+    final slip = Bill(id: 'b1', payee: 'Lumen Power', date: '2026-03-10', total: 4500);
 
     test('the latest named bank expense gives its category (date, then id); hand-added, income and transfers never', () {
       expect(
@@ -323,7 +321,7 @@ void main() {
               txs: [row('b', '2026-02-10', -100, 'LUMEN POWER', 'Shopping'), row('a', '2026-02-10', -100, 'LUMEN POWER', 'Eating out')]),
           'Shopping');
       expect(suggestBillCategory(slip, recurring: const [], txs: const []), isNull);
-      expect(suggestBillCategory(const Bill(id: 'n'), recurring: const [], txs: [row('a', '2026-01-10', -100, 'x', 'Shopping')]), isNull);
+      expect(suggestBillCategory(Bill(id: 'n'), recurring: const [], txs: [row('a', '2026-01-10', -100, 'x', 'Shopping')]), isNull);
     });
   });
 }

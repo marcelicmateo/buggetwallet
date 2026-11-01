@@ -217,8 +217,8 @@ void main() {
         _slip('bin', date: '2026-06-09', total: 100, deleted: true),
         _slip('usd', date: '2026-06-09', total: 200, currency: 'USD'),
         _slip('other', date: '2026-06-09', total: 400, payee: 'Other Co'),
-        const Bill(id: 'att', source: BillSource.attachment, payee: 'Lumen Power', date: '2026-06-09', total: 800),
-        const Bill(id: 'nopayee', date: '2026-06-09', total: 1600),
+        Bill(id: 'att', source: BillSource.attachment, payee: 'Lumen Power', date: '2026-06-09', total: 800),
+        Bill(id: 'nopayee', date: '2026-06-09', total: 1600),
       ];
       expect(_h([], slips: slips).single.slips.map((s) => s.id).toList()..sort(), ['ok1', 'ok2']);
       expect(_h([], slips: slips).single.billed, 15);

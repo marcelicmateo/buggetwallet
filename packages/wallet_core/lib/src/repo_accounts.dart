@@ -114,7 +114,7 @@ extension WalletRepoAccounts on WalletRepo {
   /// ([clearSource] drops it), checked like [addAccount] on the result (a cash account with a source, or a crypto one
   /// in a fiat currency, is refused: change the kind and clear the source in one call). The currency never changes:
   /// delete the account and add a new one. Unknown id or a bad value: [ArgumentError], nothing written; no change: no
-  /// write.
+  /// write. A thin wrapper over [patch] (F1).
   Future<void> updateAccount(String id,
       {String? name,
       int? opening,
@@ -123,30 +123,14 @@ extension WalletRepoAccounts on WalletRepo {
       String? institution,
       String? source,
       bool clearSource = false}) async {
-    final stored = Account.fromRow(_accountRow(id));
-    final n = name == null ? null : _checkName(name);
-    if (opening != null) _checkAmount(opening);
-    if (openingDate != null) _checkDate(openingDate);
-    final k = kind ?? stored.kind;
-    final src = clearSource ? null : source ?? stored.source;
-    final inst = institution == null ? stored.institution : _checkInstitution(institution);
-    if (k != stored.kind || src != stored.source) {
-      _checkShape(k, src, stored.currency);
-      if (!stored.deleted) _checkUnique(src, stored.currency, exceptId: id, kind: k);
-    }
-    final pair = opening != null || openingDate != null;
-    final fields = {
-      if (n != null && n != stored.name) 'name': n,
-      if (pair) 'opening': opening ?? stored.opening,
-      if (pair) 'opening_date': openingDate ?? stored.openingDate,
-      // The kind is written whenever the source changes too: a row from before schema 20 derives it from the source.
-      if (k != stored.kind || src != stored.source) 'kind': k.name,
-      if (src != stored.source) 'source': src,
-      if (inst != stored.institution) 'institution': inst,
-    };
-    if (fields.isEmpty) return;
-    _write([('account', id, fields)]);
-    logEvent(_log, Level.INFO, 'account.update', {'fields': fields.length});
+    patch(AccountCols.entity, id, {
+      if (name != null) AccountCols.name: name,
+      if (opening != null) AccountCols.opening: opening,
+      if (openingDate != null) AccountCols.openingDate: openingDate,
+      if (kind != null) AccountCols.kind: kind,
+      if (institution != null) AccountCols.institution: institution,
+      if (clearSource) AccountCols.source: clearValue else if (source != null) AccountCols.source: source,
+    });
   }
 
   /// "The real balance is [balance] on [date]": the opening becomes that balance at the end of [date], so only rows

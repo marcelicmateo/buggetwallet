@@ -140,7 +140,7 @@ void main() {
         expectedAmount: 4599,
         nextDue: '2026-03-05',
         status: 'confirmed');
-    const bill = Bill(id: 'b1', payee: 'Synth Energy', total: 4599, date: '2026-02-27', dueDate: '2026-03-10');
+    final bill = Bill(id: 'b1', payee: 'Synth Energy', total: 4599, date: '2026-02-27', dueDate: '2026-03-10');
 
     test('a confirmed recurring bill with the same payee key gives its category', () {
       expect(billPayeeKey(bill), 'synth_energy');
@@ -171,7 +171,7 @@ void main() {
     test('never by amount: an equal amount at another payee suggests nothing', () {
       final txs = [ct('t1', '2026-02-10', -4599, 'OTHER SHOP', 'Shopping')];
       expect(suggestBillCategory(bill, recurring: const [], txs: txs), isNull);
-      expect(suggestBillCategory(const Bill(id: 'np', total: 4599), recurring: const [rec], txs: txs), isNull);
+      expect(suggestBillCategory(Bill(id: 'np', total: 4599), recurring: const [rec], txs: txs), isNull);
     });
   });
 
@@ -287,12 +287,12 @@ void main() {
 
   group('4. short invoice tokens', () {
     test('B5a bug: digits-only invoice numbers need 6 digits (no card mask or year matches)', () {
-      expect(billLinkTokens(const Bill(id: 'a', externalId: 'inv:SUP:1234')), isEmpty);
-      expect(billLinkTokens(const Bill(id: 'a', externalId: 'inv:SUP:2026')), isEmpty);
-      expect(billLinkTokens(const Bill(id: 'a', externalId: 'inv:SUP:12345')), isEmpty);
-      expect(billLinkTokens(const Bill(id: 'a', externalId: 'inv:SUP:123456')), ['123456']);
-      const card = Bill(id: 'c', status: BillStatus.confirmed, externalId: 'inv:SUP:1234', date: '2026-02-27', total: 4599);
-      const year = Bill(id: 'y', status: BillStatus.confirmed, externalId: 'inv:SUP:2026', date: '2026-02-27', total: 1200);
+      expect(billLinkTokens(Bill(id: 'a', externalId: 'inv:SUP:1234')), isEmpty);
+      expect(billLinkTokens(Bill(id: 'a', externalId: 'inv:SUP:2026')), isEmpty);
+      expect(billLinkTokens(Bill(id: 'a', externalId: 'inv:SUP:12345')), isEmpty);
+      expect(billLinkTokens(Bill(id: 'a', externalId: 'inv:SUP:123456')), ['123456']);
+      final card = Bill(id: 'c', status: BillStatus.confirmed, externalId: 'inv:SUP:1234', date: '2026-02-27', total: 4599);
+      final year = Bill(id: 'y', status: BillStatus.confirmed, externalId: 'inv:SUP:2026', date: '2026-02-27', total: 1200);
       const txs = [
         Tx(id: 't1', source: 'pbz', date: '2026-03-01', amount: -4599, description: 'KARTICA ****1234 SYNTH SHOP'),
         Tx(id: 't2', source: 'pbz', date: '2026-03-01', amount: -1200, description: 'PRETPLATA 2026'),
@@ -301,10 +301,10 @@ void main() {
     });
 
     test('mixed invoice numbers: 4+ characters with a letter and a digit; letters alone never', () {
-      expect(billLinkTokens(const Bill(id: 'a', externalId: 'inv:SUP:R-12')), isEmpty);
-      expect(billLinkTokens(const Bill(id: 'a', externalId: 'inv:SUP:R-123')), ['R123']);
-      expect(billLinkTokens(const Bill(id: 'a', externalId: 'inv:SUP:RACUN')), isEmpty);
-      const b = Bill(id: 'm', status: BillStatus.confirmed, externalId: 'inv:SUP:R-123', date: '2026-02-27', total: 900);
+      expect(billLinkTokens(Bill(id: 'a', externalId: 'inv:SUP:R-12')), isEmpty);
+      expect(billLinkTokens(Bill(id: 'a', externalId: 'inv:SUP:R-123')), ['R123']);
+      expect(billLinkTokens(Bill(id: 'a', externalId: 'inv:SUP:RACUN')), isEmpty);
+      final b = Bill(id: 'm', status: BillStatus.confirmed, externalId: 'inv:SUP:R-123', date: '2026-02-27', total: 900);
       const t = Tx(id: 't', source: 'pbz', date: '2026-03-01', amount: -900, description: 'PLACANJE R123');
       expect(planBillLinks([b], [t]), {'m': 't'});
     });
@@ -312,7 +312,7 @@ void main() {
 
   group('6. billCandidates', () {
     test('B5a bug: own transfers are never "Paid by this?" candidates', () {
-      const b = Bill(id: 'b', payee: 'Synth Energy', date: '2026-02-27', total: 4599);
+      final b = Bill(id: 'b', payee: 'Synth Energy', date: '2026-02-27', total: 4599);
       const txs = [
         CategorizedTx(Tx(id: 'pay', source: 'pbz', date: '2026-03-01', amount: -4599, description: 'SYNTH ENERGY'), 'Bills & one-offs',
             BudgetKind.flex),

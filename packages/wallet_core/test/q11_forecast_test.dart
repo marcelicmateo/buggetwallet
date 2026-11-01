@@ -206,7 +206,7 @@ void main() {
     test('below zero now; cash, other currencies, duplicates and deleted accounts get no warning', () {
       final usd = _acc('u', 'revolut', currency: 'USD');
       final dup = _acc('a9', 'pbz');
-      const gone = Account(id: 'g', name: 'S', source: 'pbz', currency: 'EUR', opening: 0, openingDate: '2026-01-10', deleted: true);
+      final gone = Account(id: 'g', name: 'S', source: 'pbz', currency: 'EUR', opening: 0, openingDate: '2026-01-10', deleted: true);
       final out = w([_bal(pbz, -1), _bal(cash, -500), _bal(usd, -100), _bal(dup, -100, duplicateOf: 'a1'), _bal(gone, -100)]);
       expect([for (final x in out) (x.account.id, x.kind)], [('a1', BalanceWarningKind.belowNow)]);
     });
