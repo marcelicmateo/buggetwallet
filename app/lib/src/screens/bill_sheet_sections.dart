@@ -195,7 +195,7 @@ class _BillItems extends StatelessWidget {
   Widget build(BuildContext context) {
     final b = v.b;
     if (b.items.isEmpty) return const SizedBox.shrink();
-    final cur = v.wc.currency;
+    final cur = b.currency.isEmpty ? v.wc.currency : b.currency;
     return _sectionColumn([
       const SizedBox(height: 14),
       const SectionHead('Items'),

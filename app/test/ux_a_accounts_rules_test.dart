@@ -12,6 +12,7 @@ import 'package:budget_wallet/src/widgets/import_problems.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_importer/wallet_importer.dart';
 
 import 'support/seams.dart';
 import 'support/wallet.dart';
@@ -217,6 +218,65 @@ void main() {
       await tap(t, 'accountSave');
       expect(find.textContaining('There is already a cash account in EUR.'), findsOneWidget);
       expect(wc.accountsAll().firstWhere((a) => a.id == id).kind, AccountKind.other);
+      await settle(t);
+    });
+
+    Future<String> bankWithRows(WalletController wc) async {
+      final id = await wc.addAccount(name: 'Main', source: 'pbz', currency: 'EUR', opening: 10000, openingDate: '2026-10-01');
+      wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [
+        syntheticTx('2026-10-05', -1000, 'POS', 'SYNTHETIC SHOP A'),
+        syntheticTx('2026-10-06', -2000, 'POS', 'SYNTHETIC SHOP B'),
+      ]));
+      wc.reload();
+      return id;
+    }
+
+    testWidgets('a change that stops counting imported rows asks first; the second Save goes through', (t) async {
+      final wc = wallet();
+      final id = await bankWithRows(wc);
+      expect(wc.accountBalanceList().single.rowsCounted, 2);
+      await pumpApp(t, panel(wc), size: const Size(400, 1600));
+      await tap(t, 'accountEdit:$id');
+      await tap(t, 'accountKind:other');
+      await tap(t, 'accountSave');
+      expect(find.textContaining('2 imported payments will no longer count in this balance.', findRichText: true), findsOneWidget);
+      expect(wc.accountsAll().single.kind, AccountKind.bank, reason: 'nothing is written before the second tap');
+      expect(find.text('Save anyway'), findsOneWidget);
+      await tap(t, 'accountSave');
+      expect(wc.accountsAll().single.kind, AccountKind.other);
+      expect(wc.accountsAll().single.source, isNull);
+      await settle(t);
+    });
+
+    testWidgets('another import format asks too; changing only the name or keeping the format does not', (t) async {
+      final wc = wallet();
+      final id = await bankWithRows(wc);
+      await pumpApp(t, panel(wc), size: const Size(400, 1600));
+      await tap(t, 'accountEdit:$id');
+      await tap(t, 'accountKind:savings'); // the format stays: the rows still count
+      await t.enterText(k('accountName'), 'Rainy day');
+      await tap(t, 'accountSave');
+      expect(k('accountDropNote'), findsNothing);
+      expect(wc.accountsAll().single.kind, AccountKind.savings);
+      await tap(t, 'accountEdit:$id');
+      await tap(t, 'accountSource');
+      await t.tap(find.text('Revolut').last);
+      await t.pump(const Duration(milliseconds: 400));
+      await tap(t, 'accountSave');
+      expect(find.textContaining('2 imported payments will no longer count', findRichText: true), findsOneWidget);
+      expect(wc.accountsAll().single.source, 'pbz');
+      await settle(t);
+    });
+
+    testWidgets('an account with no counted rows changes without asking', (t) async {
+      final wc = wallet();
+      final id = await wc.addAccount(name: 'Main', source: 'pbz', currency: 'EUR', opening: 10000, openingDate: '2026-10-01');
+      await pumpApp(t, panel(wc), size: const Size(400, 1600));
+      await tap(t, 'accountEdit:$id');
+      await tap(t, 'accountKind:other');
+      await tap(t, 'accountSave');
+      expect(k('accountDropNote'), findsNothing);
+      expect(wc.accountsAll().single.kind, AccountKind.other);
       await settle(t);
     });
 

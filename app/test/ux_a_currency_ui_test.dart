@@ -60,6 +60,21 @@ void main() {
     numberStyle = NumberStyle.point;
   });
 
+  test('a JPY wallet reads yen from its first frame: the controller sets the wallet currency when it is built and reloads', () {
+    final repo = WalletRepo.inMemory();
+    repo.setWalletCurrency('JPY');
+    expect(walletCurrencyCode, 'EUR');
+    final wc = seamedController(repo, key: VaultKey.generate(), clock: () => day);
+    expect(walletCurrencyCode, 'JPY', reason: 'before any notification');
+    expect(parseMoney('10.5'), isNull);
+    expect(parseMoney('1000'), 100000);
+    wc.repo.setWalletCurrency('USD'); // another device changed it, then a reload
+    wc.reload();
+    expect(walletCurrencyCode, 'USD');
+    expect(parseMoney('10.5'), 1050);
+    wc.dispose();
+  });
+
   group('picker', () {
     testWidgets('the wallet currency is on top, then the ones in use, then all; each with code and name', (t) async {
       final wc = wallet();
@@ -167,6 +182,31 @@ void main() {
       await tap(t, 'fxSave');
       expect(wc.settings.fxRates['EUR']!.rate, 1080000);
       expect(wc.period().foreignByCurrency, isEmpty, reason: 'counted now');
+      await settle(t);
+    });
+
+    testWidgets('the sheet lists the rates that need setting again; none when there are none', (t) async {
+      final wc = wallet();
+      addRows(wc, 'EUR', 2, start: 16);
+      await pumpHome(t, panel(wc));
+      await tap(t, 'walletCurrency');
+      await t.enterText(k('currencySearch'), 'jpy');
+      await t.pump();
+      await t.tap(k('currency:JPY'));
+      await t.pump(const Duration(milliseconds: 400));
+      await t.pump(const Duration(milliseconds: 400));
+      expect(k('currencySwitchRates'), findsNothing);
+      await tap(t, 'currencyOfferNo');
+      wc.setFxRate('USD', 920000);
+      wc.setFxRate('GBP', 1150000);
+      await tap(t, 'walletCurrency');
+      await t.enterText(k('currencySearch'), 'jpy');
+      await t.pump();
+      await t.tap(k('currency:JPY'));
+      await t.pump(const Duration(milliseconds: 400));
+      await t.pump(const Duration(milliseconds: 400));
+      expect(find.text('Your rates for GBP, USD need setting again.'), findsOneWidget);
+      await tap(t, 'currencyOfferNo');
       await settle(t);
     });
 

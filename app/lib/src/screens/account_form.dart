@@ -82,6 +82,9 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
   late String _date = widget.wc.today();
   late bool _nameEdited = _a != null;
   bool _negative = false;
+
+  /// The owner saw "N payments will no longer count" and pressed Save again.
+  bool _confirmedDrop = false;
   String? _nameError, _amountError, _dateError, _rateError, _error;
 
   bool get _editing => _a != null;
@@ -101,8 +104,21 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
     super.dispose();
   }
 
+  /// How many payments count in the balance now but would not after this change (kind or import format): cash counts the rows added
+  /// by hand, a bank, card or savings account with a format its file's rows, any other none. 0 when nothing is lost.
+  int _lostRows() {
+    final a = _a;
+    if (a == null) return 0;
+    final before = a.countsRows, after = _kind == AccountKind.cash || _source != null;
+    final rowsChange = a.isCash != (_kind == AccountKind.cash) || _source != a.source;
+    if (!before || !rowsChange) return 0;
+    final b = widget.wc.accountBalanceList().where((x) => x.account.id == a.id).firstOrNull;
+    return b?.rowsCounted ?? 0;
+  }
+
   void _pickKind(AccountKind k) {
     if (k == _kind) return;
+    _confirmedDrop = false;
     setState(() {
       _kind = k;
       if (!_nameEdited) _name.text = accountKindLabel(k);
@@ -155,6 +171,11 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
     if (!_rateOk()) return;
     if (_editing) {
       final a = _a!;
+      final lost = _lostRows();
+      if (lost > 0 && !_confirmedDrop) {
+        setState(() => _confirmedDrop = true); // the note under the form asks; the next Save goes through
+        return;
+      }
       try {
         final srcChanged = _source != a.source;
         await wc.updateAccount(a.id,
@@ -241,6 +262,7 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
           ],
           onChanged: (v) => setState(() {
             _source = v;
+            _confirmedDrop = false;
             if (!_nameEdited && v != null) _name.text = accountTypeLabel(v, csvMappings: csv);
           }),
         ),
@@ -324,13 +346,22 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
           StatusLabel(key: const ValueKey('accountDateError'), good: false, text: _dateError!)
         ],
       ],
+      if (_confirmedDrop && _editing) ...[
+        const SizedBox(height: 10),
+        StatusLabel(
+            key: const ValueKey('accountDropNote'),
+            good: false,
+            text: _lostRows() == 1
+                ? '1 ${_a!.isCash ? '' : 'imported '}payment will no longer count in this balance.'
+                : '${_lostRows()} ${_a!.isCash ? '' : 'imported '}payments will no longer count in this balance.'),
+      ],
       if (_error != null) ...[const SizedBox(height: 10), StatusLabel(key: const ValueKey('accountError'), good: false, text: _error!)],
       const SizedBox(height: 14),
       FilledButton(
           key: const ValueKey('accountSave'),
           style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(touchMin)),
           onPressed: _save,
-          child: Text(_editing ? 'Save' : 'Add account')),
+          child: Text(!_editing ? 'Add account' : (_confirmedDrop ? 'Save anyway' : 'Save'))),
       const SizedBox(height: 8),
       Muted(_editing
           ? 'To change the balance, use Correct balance. The currency cannot change.'

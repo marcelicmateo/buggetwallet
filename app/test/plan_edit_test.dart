@@ -97,23 +97,40 @@ void main() {
     await tester.pump(const Duration(seconds: 4));
   });
 
-  testWidgets('Cancel also puts the currency back', (tester) async {
+  testWidgets('the wallet currency here opens the same switch sheet; money fields then read that currency', (tester) async {
     final wc = demoWallet();
     await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 3000));
     await openPlanEdit(tester);
-    await tester.ensureVisible(_key('planCurrency'));
-    await tester.tap(_key('planCurrency'));
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.enterText(_key('currencySearch'), 'usd');
-    await tester.pump();
-    await tester.tap(_key('currency:USD'));
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(find.descendant(of: _key('planCurrency'), matching: find.text('USD · US Dollar')), findsOneWidget);
-    await _tapKey(tester, 'planCancel');
-    await openPlanEdit(tester);
-    expect(find.descendant(of: _key('planCurrency'), matching: find.text('EUR · Euro')), findsOneWidget);
+    Future<void> pick(String code) async {
+      await tester.ensureVisible(_key('planCurrency'));
+      await tester.tap(_key('planCurrency'));
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.enterText(_key('currencySearch'), code.toLowerCase());
+      await tester.pump();
+      await tester.tap(_key('currency:$code'));
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+
+    // Cancel in the sheet: nothing changed, and Save never writes a currency.
+    await pick('USD');
+    expect(find.textContaining('keep their currency'), findsOneWidget);
+    await _tapKey(tester, 'currencyOfferNo');
     expect(wc.settings.currency, 'EUR');
+    expect(find.descendant(of: _key('planCurrency'), matching: find.text('EUR · Euro')), findsOneWidget);
+    // Switch: it is written at once (setWalletCurrency), not by Save, and the fields read yen.
+    await pick('JPY');
+    await _tapKey(tester, 'currencyOfferYes');
+    expect(wc.settings.currency, 'JPY');
+    expect(find.descendant(of: _key('planCurrency'), matching: find.text('JPY · Yen')), findsOneWidget);
+    expect(_key('planSave'), findsOneWidget, reason: 'still editing');
+    final before = wc.settings.toMap();
+    await tester.enterText(_field('Loan'), '10.5');
+    await _tapKey(tester, 'planSave');
+    expect(_key('planSave'), findsOneWidget, reason: 'a decimal of a yen is refused: still editing');
+    expect(wc.settings.toMap(), before);
+    await tester.pump(const Duration(seconds: 4));
   });
 
   testWidgets('a validation error keeps edit mode open and saves nothing', (tester) async {

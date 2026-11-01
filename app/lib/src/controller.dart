@@ -771,6 +771,7 @@ class WalletController extends ChangeNotifier {
     final t = PerfTimer('wc.reload');
     _applyNumberStyle(); // the repo may have been switched
     settings = repo.settings();
+    walletCurrencyCode = settings.currency; // before the first frame parses a field
     categorizer = repo.categorizer();
     final raw = repo.transactions(); // logs repo.transactions
     final whole = <CategorizedTx>[];

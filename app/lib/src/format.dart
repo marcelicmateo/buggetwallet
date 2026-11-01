@@ -216,23 +216,33 @@ String rateText(int rate) {
   return '${_group(rate ~/ 1000000)}${numberStyle.decimal}$frac';
 }
 
-/// Parses a typed rate ("0.9240", "0,924", "1.08", or "62,000.5" for a coin) into the integer rate `round(value × 1,000,000)`,
-/// exactly from the digits (no floating point). Both separators are read as the decimal mark; with both present the last one is.
-/// Null when it is not a plain number, has more than six decimals (nothing is rounded away) or is above [FxRate.maxRateOf]
-/// [code] (a coin's rate may be in the millions; a currency's up to 100). With [code] omitted the range is core's to check.
+/// Parses a typed rate into the integer rate `round(value × 1,000,000)`, exactly from the digits (no floating point). The separators
+/// are read by [numberStyle] like [parseMoney] does: the style's decimal mark starts the decimals (up to six, nothing is rounded
+/// away) and its group mark is allowed only in proper groups of three ("62,000" is 62000 in the point style and 62 in the comma
+/// style; "1.234,5678" is 1234.5678 in the comma style). The other mark is read as a decimal only when it stands alone and 1, 2 or 4 to 6 digits follow it
+/// ("0,92"); a group that starts with 0 ("0,924"), a misplaced group or any other shape is refused (null), never guessed. Also null
+/// when above [FxRate.maxRateOf] [code] (a currency's rate up to 1,000,000, a coin's up to 1,000,000,000). With [code] omitted the
+/// range is core's to check.
 int? parseFxRate(String input, {String? code}) {
   final t = input.trim().replaceAll(RegExp(r'\s'), '');
   if (t.isEmpty) return null;
-  final last = t.lastIndexOf(RegExp(r'[.,]'));
-  var whole = t, frac = '';
-  if (last >= 0) {
-    whole = t.substring(0, last).replaceAll(RegExp(r'[.,]'), '');
-    frac = t.substring(last + 1);
+  final g = RegExp.escape(numberStyle.group), d = RegExp.escape(numberStyle.decimal);
+  String whole, frac;
+  final own = RegExp('^(\\d{1,3}(?:$g\\d{3})+|\\d*)(?:$d(\\d{1,6}))?\$').firstMatch(t);
+  if (own != null && (own.group(1)!.isNotEmpty || own.group(2) != null)) {
+    final w = own.group(1)!;
+    if (w.contains(numberStyle.group) && w.startsWith('0')) return null; // "0,924": a group cannot follow a zero
+    whole = w.replaceAll(numberStyle.group, '');
+    frac = own.group(2) ?? '';
+  } else {
+    // The other mark as a decimal ("0,92", "0,9240" in the point style); exactly 3 digits after it could be a group: refused.
+    final other = RegExp('^(\\d+)$g(\\d{1,6})\$').firstMatch(t);
+    if (other == null || other.group(2)!.length == 3) return null;
+    whole = other.group(1)!;
+    frac = other.group(2)!;
   }
-  final digits = RegExp(r'^\d+$');
   if (whole.isEmpty) whole = '0';
-  if (!digits.hasMatch(whole) || (frac.isNotEmpty && !digits.hasMatch(frac))) return null;
-  if (frac.length > 6 || whole.length > 10) return null;
+  if (whole.length > 10) return null;
   final rate = int.parse(whole) * 1000000 + int.parse(frac.padRight(6, '0'));
   if (code != null && rate > FxRate.maxRateOf(code)) return null;
   return rate;

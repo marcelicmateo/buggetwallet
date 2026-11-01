@@ -178,7 +178,7 @@ class _BillHistoryScreenState extends State<BillHistoryScreen> {
             Text(part ? 'Part' : 'Payment', style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
             Text(shortDateOrRaw(t.date)),
           ]),
-          end: MoneyText(moneyExact(-t.amount, cur), textAlign: TextAlign.end, style: numStyle),
+          end: MoneyText(moneyExact(-t.amount, t.tx.currency), textAlign: TextAlign.end, style: numStyle),
         ),
       ),
     );
@@ -202,7 +202,8 @@ class _BillHistoryScreenState extends State<BillHistoryScreen> {
           ]),
           end: s.total == null
               ? Text('No total', textAlign: TextAlign.end, style: TextStyle(fontSize: BwType.metaSize, color: c.muted))
-              : MoneyText('${moneyExact(s.total!, cur)}${slipToCheck(s) ? _toCheck : ''}', textAlign: TextAlign.end, style: numStyle),
+              : MoneyText('${moneyExact(s.total!, s.currency.isEmpty ? cur : s.currency)}${slipToCheck(s) ? _toCheck : ''}',
+                  textAlign: TextAlign.end, style: numStyle),
         ),
       ),
     );

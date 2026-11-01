@@ -17,6 +17,10 @@ enum SwitchChoice { switchOnly, switchAndRate, notNow }
 
 /// The sentence about the payments that stay in [old]: "Your 12 payments in EUR keep their currency. They count in your totals only
 /// with a EUR→JPY rate."
+/// "Your rate for USD needs setting again." / "Your rates for USD, GBP need setting again.": the rates set against the old wallet currency.
+String ratesNote(List<String> codes) =>
+    codes.length == 1 ? 'Your rate for ${codes.single} needs setting again.' : 'Your rates for ${codes.join(', ')} need setting again.';
+
 String switchNote(int n, String old, String code) => switch (n) {
       0 => 'Payments you add from now on are in $code.',
       1 => 'Your 1 payment in $old keeps its currency. It counts in your totals only with a $old→$code rate.',
@@ -65,6 +69,11 @@ class CurrencySwitchSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final old = wc.currency, n = wc.paymentCountIn(old);
+    // Rates the owner set against the old wallet currency stop counting (core's fxStale): they need setting again.
+    final rates = [
+      for (final c in wc.settings.fxRates.keys)
+        if (c != code) c
+    ]..sort();
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
       Heading(offered ? "Most payments are in $code. Use $code as your wallet's currency?" : "Use $code as your wallet's currency?",
           key: const ValueKey('currencyOffer')),
@@ -72,6 +81,10 @@ class CurrencySwitchSheet extends StatelessWidget {
       Muted(currencyLabel(code)),
       const SizedBox(height: 6),
       Text(switchNote(n, old, code), key: const ValueKey('currencySwitchNote')),
+      if (rates.isNotEmpty) ...[
+        const SizedBox(height: 6),
+        Text(ratesNote(rates), key: const ValueKey('currencySwitchRates')),
+      ],
       const SizedBox(height: 14),
       if (n > 0) ...[
         FilledButton(

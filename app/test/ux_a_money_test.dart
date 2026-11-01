@@ -121,6 +121,35 @@ void main() {
       expect(parseFxRate('1.1234567', code: 'USD'), isNull, reason: 'seven decimals are refused');
     });
 
+    test('separators are read by the number style, never guessed', () {
+      // Point style: "," groups, "." is the decimal mark.
+      expect(parseFxRate('62,000'), 62000000000, reason: 'a proper group is a group, not 62');
+      expect(parseFxRate('62.000'), 62000000, reason: 'the decimal mark: 62.000');
+      expect(parseFxRate('62,000.5'), 62000500000);
+      expect(parseFxRate('1,234.5678'), 1234567800);
+      expect(parseFxRate('1.234,5678'), isNull, reason: 'the wrong order for this style');
+      expect(parseFxRate('0,924'), isNull, reason: 'a group cannot follow a zero: not 924, not 0.924');
+      expect(parseFxRate('0,92'), 920000, reason: 'the other mark with one or two digits is a decimal');
+      expect(parseFxRate('1,5'), 1500000);
+      expect(parseFxRate('1,2345'), 1234500, reason: 'four digits cannot be a group: a decimal');
+      expect(parseFxRate('1,23456789'), isNull);
+      expect(parseFxRate('62,00,000'), isNull);
+      expect(parseFxRate('1,2,3'), isNull);
+      expect(parseFxRate('.5'), 500000);
+      expect(parseFxRate('.'), isNull);
+      expect(parseFxRate('27,000', code: 'USD'), 27000000000, reason: 'a 27,000 rate (a yen-like wallet) is read as 27,000');
+      // Comma style: "." groups, "," is the decimal mark.
+      numberStyle = NumberStyle.comma;
+      expect(parseFxRate('62.000'), 62000000000);
+      expect(parseFxRate('62,000'), 62000000);
+      expect(parseFxRate('62.000,5'), 62000500000);
+      expect(parseFxRate('1.234,5678'), 1234567800);
+      expect(parseFxRate('1,234.5678'), isNull);
+      expect(parseFxRate('0.924'), isNull);
+      expect(parseFxRate('0.92'), 920000);
+      expect(parseFxRate('0,9240'), 924000);
+    });
+
     test('written with grouping when large', () {
       expect(rateText(924000), '0.9240');
       expect(rateText(62000500000), '62,000.5000');

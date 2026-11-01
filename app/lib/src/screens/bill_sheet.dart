@@ -386,7 +386,7 @@ class _CashSheetState extends State<_CashSheet> {
   @override
   Widget build(BuildContext context) {
     final b = widget.bill;
-    final cur = widget.wc.currency;
+    final cur = b.currency.isEmpty ? widget.wc.currency : b.currency;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       const Heading('Add as expense'),
       const SizedBox(height: 4),
