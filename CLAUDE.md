@@ -35,6 +35,10 @@ The release APK is 64-bit only: `--target-platform` plus `packaging.jniLibs.excl
 The scripts assume a Linux host: Bash 5, GNU tools (`grep -P`, `sha256sum`, `base64 -w0`), Python 3, Podman.
 Mac, iPhone, Windows and web are out of scope for now (owner's decision): don't spend effort on them.
 - **Mutation testing:** `tools/build.sh mutate <importer|core|sync> <lib file>… [--max N --seed S --tests <test file>…]` (`tools/mutate.py`) runs a seeded sample of one-token mutants against the package tests (core: also the whole `packages/sync` suite unless `--tests`) and lists survivors; results in `dist/mutation/`. `--tests` paths are package-relative (`test/x_test.dart`); a repo-root path makes the baseline fail. Pass every test file that covers the target (a missing one leaves its lines unjudged). Run one mutate at a time: parallel runs share `dist/mutation/work` and clobber each other.
+- **Quiet mode:** `tools/build.sh -q <cmd> …` (or `BW_QUIET=1`; also `tools/emulator.sh -q`) prints nothing, stdout or stderr, and returns only the
+  exit code (0 ok, 1 a step failed, 2 usage). Logs are written as without it: `dist/logs/<step>.log` + `.status`, `dist/logs/last.status`
+  (`<step> ok|failed <seconds>`) and `dist/logs/last-failed.txt` (`<step> <log path>`, empty when green), so
+  `tools/build.sh -q test || cat dist/logs/last-failed.txt` needs no tail/grep. `tools/test_quiet.sh` tests it.
 - **One test file:** `tools/build.sh core|sync|importer|app <test file or dir>…` runs only those tests (paths relative to the package or repo root; no analyze; step `<pkg>:one`, kept apart from full-suite medians); `tools/build.sh shell -c '<command>'` runs a command non-interactively in the container.
 - **Logs and timings** are kept outside the repo in `~/.local/share/budget-wallet/` (`BW_DATA_DIR`), shared by all
   worktrees and never committed: `runs/<time>-<cmd>-<commit>/` (step logs, image build logs, emulator log, test

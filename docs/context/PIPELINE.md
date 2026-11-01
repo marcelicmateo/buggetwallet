@@ -14,9 +14,10 @@ suites stay serialized (one Haiku run per stage); builders run only targeted che
   context pack (files, line ranges, APIs, tests, helpers); the lead pastes it into the brief. Builders read code by
   `grep -n` + line ranges, never whole files, build output by result line + failures, screenshots downscaled to 540 px.
   **Build output: no pipes** (owner 2026-11-01). A pipe reports the last command's status (`build | tail` says 0
-  when tests fail). Redirect to a file and branch on the build's own exit code:
-  `tools/build.sh app > "$LOG" 2>&1 && echo ok || { echo FAILED; tail -n 30 "$LOG"; }` (or read
-  `dist/logs/<step>.status`). Never judge a run by a piped command's exit code.
+  when tests fail). Use quiet mode and branch on the build's own exit code:
+  `tools/build.sh -q <cmd> || cat dist/logs/last-failed.txt` (also `tools/emulator.sh -q`): nothing is printed when it is green,
+  the failed steps with their log paths when not; read the named log's tail only if needed. Never judge a run by a piped
+  command's exit code.
   Measure with `python3 -I tools/token-usage.py` (baseline in memory: ~2.9M tokens/commit before 2026-10-21).
 - One targeted check per agent at the end, one Haiku full run per stage, one reviewer pass per stage on the whole diff.
   Live-mode screenshots only for visual changes.

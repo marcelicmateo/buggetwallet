@@ -64,7 +64,7 @@ run_begin() {
   BW_RUN_DIR=$dir; BW_RUN_ID=$(basename "$dir")
   : > "$dir/.running"  # in progress: prune_runs keeps it (until 24 h old); removed when this script exits
   # shellcheck disable=SC2064
-  trap "rm -f '$dir/.running'" EXIT
+  trap "write_last '$dir' \$?; rm -f '$dir/.running'" EXIT
   prune_runs
   export BW_RUN_DIR BW_RUN_ID
   [[ -d "$ROOT/dist/logs" && ! -L "$ROOT/dist/logs" ]] && rm -rf "$ROOT/dist/logs"  # pre-symlink layout
@@ -88,17 +88,56 @@ log_history() {  # <step> <seconds> <ok|FAILED> [cold: true|false] [started: iso
     "${5:-$(now_iso)}" "${BW_RUN_ID:-$BW_RUN}" "$BW_SOURCE" "$BW_WORKTREE" "$BW_COMMIT" "$BW_CMD" "$1" "$2" "$3" \
     "${BW_IMAGE:-}" "$cold" >> "$BW_DATA/history/steps.jsonl"
 }
+# write_last <run dir> [exit code]: last.status (one line per step: "<step> ok|failed <seconds>", in start order) and
+# last-failed.txt ("<step> <log path>" per failed step, empty when green) from the run's <step>.status files, so a caller reads
+# the outcome without parsing logs. A non-zero exit without a failed step (e.g. podman itself failed) is listed as "run".
+write_last() {
+  local dir=$1 code=${2:-0} f n rc secs started failed=0 lines=()
+  [[ -d $dir ]] || return 0
+  shopt -s nullglob
+  for f in "$dir"/*.status; do
+    read -r secs rc started < "$f" || continue
+    n=$(basename "$f" .status)
+    lines+=("$started $n $([[ $rc == 0 ]] && echo ok || echo failed) $secs")
+  done
+  shopt -u nullglob
+  { ((${#lines[@]})) && printf '%s\n' "${lines[@]}" | sort | cut -d' ' -f2-; true; } > "$dir/last.status"
+  {
+    while read -r n rc _; do
+      if [[ $rc == failed ]]; then failed=1; echo "$n $ROOT/dist/logs/$n.log"; fi
+    done < "$dir/last.status"
+    if [[ $failed == 0 && $code != 0 ]]; then echo "run $dir (exit $code, no failed step recorded)"; fi
+  } > "$dir/last-failed.txt"
+}
+# fail_host <step> <message>: a failure before any container step ran (missing key, unpinned wasm, ...): message to stderr
+# and, in a run, to <step>.log with a failed status so last-failed.txt names it. Exits 1.
+fail_host() {
+  echo "$2" >&2
+  if [[ -n ${BW_RUN_DIR:-} ]]; then
+    printf '# %s: started %s\n%s\n# %s: finished %s, 0.0 s, exit 1\n' "$1" "$(now_iso)" "$2" "$1" "$(now_iso)" > "$BW_RUN_DIR/$1.log"
+    echo "0.0 1 $(now_iso)" > "$BW_RUN_DIR/$1.status"
+  fi
+  exit 1
+}
 # timed_log <name> <logfile> <cmd...>: run cmd, output to the terminal (stderr) and to logfile with start/end
-# stamps, then a history line (cold). For image builds and other host-side work.
+# stamps, then a .status next to the log (same name) and a history line (cold; BW_TIMED_COLD=false for other work, BW_TIMED_HISTORY=0 for none). For image
+# builds and other host-side work. BW_TIMED_SPLIT=1 keeps stdout on stdout and stderr on stderr (both go to the log).
 timed_log() {
-  local name=$1 log=$2 start started rc=0 secs
+  local name=$1 log=$2 start started rc=0 secs rcf
   shift 2
   mkdir -p "$(dirname "$log")"
   start=$(now_us); started=$(now_iso)
   echo "# $name: started $started" > "$log"
-  "$@" 2>&1 | tee -a "$log" >&2 || rc=$?
+  if [[ ${BW_TIMED_SPLIT:-} == 1 ]]; then
+    rcf=$(mktemp)
+    { { "$@" && echo 0 > "$rcf" || echo $? > "$rcf"; } 2>&1 1>&3 | tee -a "$log" >&2; } 3>&1 | tee -a "$log"
+    rc=$(cat "$rcf"); rm -f "$rcf"
+  else
+    "$@" 2>&1 | tee -a "$log" >&2 || rc=$?
+  fi
   secs=$(secs_since "$start")
   echo "# $name: finished $(now_iso), $secs s, exit $rc" >> "$log"
-  log_history "$name" "$secs" "$([[ $rc == 0 ]] && echo ok || echo FAILED)" true "$started"
+  echo "$secs $rc $started" > "${log%.log}.status"  # named like the log, so last-failed.txt finds it
+  [[ ${BW_TIMED_HISTORY:-1} == 0 ]] || log_history "$name" "$secs" "$([[ $rc == 0 ]] && echo ok || echo FAILED)" "${BW_TIMED_COLD:-true}" "$started"
   return "$rc"
 }

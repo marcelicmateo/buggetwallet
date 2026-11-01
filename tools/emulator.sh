@@ -2,6 +2,9 @@
 # Android emulator in a rootless Podman container (needs /dev/kvm). Image: dev/Containerfile.emulator (the build
 # image plus the emulator's libraries).
 #
+#   tools/emulator.sh [-q|--quiet] <command> ...   -q or BW_QUIET=1: print nothing (stdout and stderr), only the exit code
+#                                      comes back; the output goes to dist/logs/emulator-<command>.log as always, the outcome to
+#                                      dist/logs/last.status and last-failed.txt (see tools/build.sh). Exit 0 ok, 1 failed, 2 usage.
 #   tools/emulator.sh screens          boot, run the screenshot test with synthetic data, stop
 #                                      -> dist/screens/*.png  (app/integration_test/screens_test.dart)
 #   tools/emulator.sh test [name...]   boot once, run every app/integration_test/<name>_test.dart (or the named
@@ -26,13 +29,15 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
+case "${1:-}" in -q|--quiet) BW_QUIET=1; shift ;; esac
+[[ ${BW_QUIET:-} == 1 ]] && exec >/dev/null 2>&1  # podman and the helpers inherit it; the logs are written as without -q
 CMD=${1:-screens}
 NAME=bw-emulator
 SERIAL=emulator-5554
 SYSIMG="system-images;android-35;google_apis;x86_64"
 # Change this (or the AVD settings in setup) to set the volumes up again on the next run.
 SETUP_ID="1 $SYSIMG pixel_6 hw.keyboard=yes hw.ramSize=3072 disk.dataPartition.size=6G lavapipe"
-usage() { sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 # shellcheck source=tools/timing.sh
 source "$ROOT/tools/timing.sh"
 
@@ -196,9 +201,10 @@ case "$CMD" in
     t0=$(now_us)
     with_run
     prepare
-    tty=(); [[ -t 0 && -t 1 ]] && tty=(-it)
     rc=0
-    podman run --rm "${tty[@]}" "${common[@]}" "$img" tools/emulator.sh "$@" || rc=$?
+    # output to the terminal and to dist/logs/emulator-<cmd>.log (+ .status), no history line (the phases and total are there)
+    BW_TIMED_SPLIT=1 BW_TIMED_HISTORY=0 timed_log "emulator-$CMD" "$BW_RUN_DIR/emulator-$CMD.log" \
+      podman run --rm "${common[@]}" "$img" tools/emulator.sh "$@" || rc=$?
     if [[ $CMD == screens ]]; then
       cp "$ROOT"/dist/screens/*.png "$BW_RUN_DIR/" 2>/dev/null || true
     else
@@ -233,7 +239,9 @@ case "$CMD" in
     need_running
     apk=${2:-dist/BudgetWallet-android.apk}
     [[ "$apk" = /* ]] || apk="/work/$apk"
-    podman exec "$NAME" adb install -r "$apk" ;;
+    run_begin install
+    BW_TIMED_SPLIT=1 BW_TIMED_COLD=false timed_log emulator-install "$BW_RUN_DIR/emulator-install.log" \
+      podman exec "$NAME" adb install -r "$apk" ;;
   shot)
     need_running
     [[ -n "${2:-}" ]] || usage
