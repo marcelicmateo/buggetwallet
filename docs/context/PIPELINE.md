@@ -30,6 +30,18 @@ suites stay serialized (one Haiku run per stage); builders run only targeted che
 Agent models: scout haiku/low; test-writer, devops sonnet/medium; ui-builder sonnet/high; core-builder, reviewer Fable/high.
 Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the lead from the branch named in "Base".
 
+## Stage UX: user-experience rework (owner 2026-11-01, spec `UX_SPEC.md`)
+Theme waits for the owner's mockup pick; crypto rate by hand. Merge order A-core → A-ui → A-ui2 → B → C.
+| # | Item | Agent | Depends on | Status |
+|---|---|---|---|---|
+| UX-A-core | currencies + digits, prevalentCurrency, account kinds (schema 20), built-in rule overrides | core-builder (worktree) | – | running |
+| UX-A-ui | bill dates (calendar, chips, length), inline reminder, Today hero wide, Month → Period sheet | ui-builder (worktree) | – | running |
+| UX-A-tests | spec tests for A-core money/migration edges | test-writer (worktree) | – | running |
+| UX-C-mock | 3 theme mockups (Today + Plan, light/dark) published for the owner | general-purpose (sonnet) | – | running |
+| UX-A-ui2 | currency picker + offer, account form by kind, editable built-ins | ui-builder | A-core merged | queued |
+| UX-B | Plan window, Tags window, Settings = setup, Today tiles | ui-builder (+ core if needed) | UX-A | queued |
+| UX-C | theme + tightening pass | ui-builder | owner pick, UX-B | queued |
+
 ## Stages BP, WS, DK (owner picked 2026-10-28; plan `STAGE_Y_PLAN.md`; one at a time after Stage M)
 | # | Item | Agent | Depends on | Status |
 |---|---|---|---|---|
