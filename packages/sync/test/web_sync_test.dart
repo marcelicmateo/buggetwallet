@@ -23,7 +23,8 @@ void main() {
         'sync.dart',
         'sync_problems.dart',
         'sync_blocked.dart',
-        'blob_store.dart'
+        'blob_store.dart',
+        'ecb_fetch.dart'
       ]) {
         expect(File('lib/src/$f').readAsStringSync(), isNot(contains("import 'dart:io'")), reason: f);
       }

@@ -252,7 +252,7 @@ extension ImportAndBackup on WalletController {
         final last = repo.lastBankCheck(a.id);
         if (last != null && last.date.compareTo(e.value) >= 0) continue;
         if (e.value.compareTo(a.openingDate) <= 0) continue;
-        final c = checkBankBalance(a, rows, date: e.value, bankCents: 0);
+        final c = checkBankBalance(a, rows, date: e.value, bankCents: 0, accounts: accountsAll());
         out.add(BankQuestion(accountId: a.id, name: a.name, currency: a.currency, date: e.value, appCents: c.appCents));
       }
     }

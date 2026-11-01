@@ -35,21 +35,21 @@ void main() {
     ];
 
     test('counts like accountBalances, up to and including the date', () {
-      final c = checkBankBalance(_pbz, rows, date: '2026-01-10', bankCents: 8500);
+      final c = checkBankBalance(_pbz, accounts: [_pbz], rows, date: '2026-01-10', bankCents: 8500);
       expect((c.appCents, c.diff, c.rowsSince, c.since, c.matches), (8500, 0, 2, '2026-01-01', true));
-      final all = checkBankBalance(_pbz, rows, date: '2026-01-31', bankCents: 8000);
+      final all = checkBankBalance(_pbz, accounts: [_pbz], rows, date: '2026-01-31', bankCents: 8000);
       expect(all.appCents, accountBalances([_pbz], rows).single.balance);
       expect((all.diff, all.rowsSince), (-700, 3));
     });
 
     test('a date before any row, and an empty list: the opening only', () {
-      expect(checkBankBalance(_pbz, rows, date: '2026-01-02', bankCents: 10000).appCents, 10000);
-      expect(checkBankBalance(_pbz, const [], date: '2026-01-31', bankCents: 0).diff, -10000);
+      expect(checkBankBalance(_pbz, accounts: [_pbz], rows, date: '2026-01-02', bankCents: 10000).appCents, 10000);
+      expect(checkBankBalance(_pbz, accounts: [_pbz], const [], date: '2026-01-31', bankCents: 0).diff, -10000);
     });
 
     test('a negative balance on both sides', () {
       final od = Account(id: 'a2', name: 'Synthetic', source: 'pbz', currency: 'EUR', opening: -5000, openingDate: '2026-01-01');
-      final c = checkBankBalance(od, [_t('r', '2026-01-02', -1000)], date: '2026-01-02', bankCents: -6000);
+      final c = checkBankBalance(od, accounts: [od], [_t('r', '2026-01-02', -1000)], date: '2026-01-02', bankCents: -6000);
       expect((c.appCents, c.diff), (-6000, 0));
     });
   });
@@ -62,43 +62,60 @@ void main() {
     test('the opening date (a new account or a correction) exactly 35 days old is trusted, 36 is not', () {
       expect(
           balanceTrusted(Account(id: 'a', name: 'S', source: 'pbz', currency: 'EUR', opening: 0, openingDate: '2026-01-01'),
-              today: today, rows: const []),
+              today: today, rows: const [], accounts: const []),
           isTrue); // 35 days
       expect(
           balanceTrusted(Account(id: 'a', name: 'S', source: 'pbz', currency: 'EUR', opening: 0, openingDate: '2025-12-31'),
-              today: today, rows: const []),
+              today: today, rows: const [], accounts: const []),
           isFalse); // 36 days
     });
 
     test('a matching check exactly 35 days old is trusted, 36 is not; one that is off never is', () {
-      expect(balanceTrusted(old, today: today, rows: rows, last: const BankCheck(date: '2026-01-01', bankCents: 5, appCents: 5)), isTrue);
-      expect(balanceTrusted(old, today: today, rows: rows, last: const BankCheck(date: '2025-12-31', bankCents: 5, appCents: 5)), isFalse);
-      expect(balanceTrusted(old, today: today, rows: rows, last: const BankCheck(date: '2026-02-05', bankCents: 6, appCents: 6)), isFalse,
+      expect(
+          balanceTrusted(old,
+              accounts: [old], today: today, rows: rows, last: const BankCheck(date: '2026-01-01', bankCents: 5, appCents: 5)),
+          isTrue);
+      expect(
+          balanceTrusted(old,
+              accounts: [old], today: today, rows: rows, last: const BankCheck(date: '2025-12-31', bankCents: 5, appCents: 5)),
+          isFalse);
+      expect(
+          balanceTrusted(old,
+              accounts: [old], today: today, rows: rows, last: const BankCheck(date: '2026-02-05', bankCents: 6, appCents: 6)),
+          isFalse,
           reason: 'off against the rows now, whatever was stored');
-      expect(balanceTrusted(old, today: today, rows: rows), isFalse);
+      expect(balanceTrusted(old, accounts: [old], today: today, rows: rows), isFalse);
     });
 
     // Review fix 1: trust is decided from the rows now, never from the stored appCents/diff.
     test('a stored match goes stale when a row up to its date is deleted later', () {
       const check = BankCheck(date: '2026-01-20', bankCents: 5, appCents: 5);
-      expect(balanceTrusted(old, today: today, rows: rows, last: check), isTrue);
+      expect(balanceTrusted(old, accounts: [old], today: today, rows: rows, last: check), isTrue);
       final deleted = [_t('r1', '2025-12-20', 5, deleted: true)];
-      expect(balanceTrusted(old, today: today, rows: deleted, last: check), isFalse);
+      expect(balanceTrusted(old, accounts: [old], today: today, rows: deleted, last: check), isFalse);
       // A stored "off" that the rows now match (a missing row arrived by sync) is trusted.
-      expect(balanceTrusted(old, today: today, rows: rows, last: const BankCheck(date: '2026-01-20', bankCents: 5, appCents: 0)), isTrue);
+      expect(
+          balanceTrusted(old,
+              accounts: [old], today: today, rows: rows, last: const BankCheck(date: '2026-01-20', bankCents: 5, appCents: 0)),
+          isTrue);
     });
 
     test('a check that was off, then corrected by the owner (the opening moves to it), is trusted', () {
       final corrected = Account(id: 'a1', name: 'Synthetic', source: 'pbz', currency: 'EUR', opening: 5, openingDate: '2026-02-01');
-      expect(balanceTrusted(corrected, today: today, rows: const [], last: const BankCheck(date: '2026-02-01', bankCents: 5, appCents: 9)),
+      expect(
+          balanceTrusted(corrected,
+              accounts: [corrected], today: today, rows: const [], last: const BankCheck(date: '2026-02-01', bankCents: 5, appCents: 9)),
           isTrue);
     });
 
     test('a date after today counts as recent; a bad date never', () {
-      expect(balanceTrusted(old, today: today, rows: rows, last: const BankCheck(date: '2026-02-07', bankCents: 5, appCents: 5)), isTrue);
+      expect(
+          balanceTrusted(old,
+              accounts: [old], today: today, rows: rows, last: const BankCheck(date: '2026-02-07', bankCents: 5, appCents: 5)),
+          isTrue);
       expect(
           balanceTrusted(Account(id: 'a', name: 'S', source: 'pbz', currency: 'EUR', opening: 0, openingDate: ''),
-              today: today, rows: const []),
+              today: today, rows: const [], accounts: const []),
           isFalse);
     });
   });
@@ -194,10 +211,12 @@ void main() {
       final a = _n('2026-01-05', -1000, 'Synthetic a', balance: 9000);
       r.importBatch(ImportBatch(source: 'revolut', transactions: [a]));
       final acc = r.accounts().single;
-      expect(balanceTrusted(acc, today: '2026-01-20', last: r.lastBankCheck(id), rows: r.transactions()), isTrue);
+      expect(balanceTrusted(acc, accounts: [acc], today: '2026-01-20', last: r.lastBankCheck(id), rows: r.transactions()), isTrue);
       r.deleteTransaction(a.id);
       expect(r.lastBankCheck(id)!.diff, 0, reason: 'the stored numbers are for display only');
-      expect(balanceTrusted(acc, today: '2026-01-20', last: r.lastBankCheck(id), rows: r.transactions(includeHidden: true)), isFalse);
+      expect(
+          balanceTrusted(acc, accounts: [acc], today: '2026-01-20', last: r.lastBankCheck(id), rows: r.transactions(includeHidden: true)),
+          isFalse);
     });
 
     test('the preview records nothing', () async {

@@ -160,8 +160,9 @@ void main() {
       expect(byAmount[-1500]!.kindHint, TxKind.card);
       expect(byAmount[-2000]!.kindHint, isNull);
       expect(r.db.select('SELECT kind_hint FROM tx WHERE amount = -299').first['kind_hint'], 'fee');
-      final cols = {for (final c in r.db.select('PRAGMA table_info(tx)')) c['name'] as String};
-      expect(cols, isNot(contains('account')));
+      // UX-ACC: tx.account exists since schema 20, but it holds an app account id (none here: no keys), never the
+      // export's account name.
+      expect(r.db.select('SELECT account FROM tx').map((row) => row['account']), everyElement(isNull));
       final everything = r.db.select('SELECT * FROM tx').map((row) => row.values.join(' ')).join(' ');
       expect(everything, isNot(contains('LT00')));
       final ops = r.pendingOps().map((o) => o.$2.fields.keys).expand((k) => k).toSet();
