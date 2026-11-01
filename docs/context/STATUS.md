@@ -7,6 +7,17 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 
 **Sync:** relay (stage R, 2026-10-22); Syncthing is no longer used. Hosting: owner chose a Hetzner Cloud server (2026-10-24, guide docs/setup.md §6; not set up yet), home server (§5) stays documented.
 
+**2026-11-01 evening (Stage GO, v2 not pushed; only branch `go3` pushed for the owner's CI run):** the build tools
+run on `wallet-build` (Go, `tools/wallet-build/`, root `Makefile`): `tools/build.sh` hands every command with a green
+bash-vs-Go parity case to it, `live.sh` all, `emulator.sh` all but `reset`; CI stays bash until `go3` is proven.
+`BW_IMPL=bash` = the old path for one run. Two stage runs through it, the second fully green (test, desktop-test,
+web-test, emulator-screens, perf). Bugs found and fixed on the way: the web build threw on every new row id and in the
+chart clamps (`1 << 32` / `1 << 60` in JS), 3 integration tests stale after the UX merges, zoom on a running month
+landed past today (+ pinch jump), relay_sync test race, emulator drive hung on an all-skipped file (600 s drive
+limit), stale AVD locks, skipped drives counted as failed. **Owner:** run `gh workflow run ci --ref go3 -f tests=true`,
+`gh workflow run ci --ref go3`, `gh workflow run release --ref go3`; the lead then reads ci-logs and merges go3 into v2.
+Next: GO4 (remaining helpers into Go, Makefile replaces the scripts), then back to Stage UX (PIPELINE "Resume here").
+
 **2026-11-01 (end of day, not pushed):** Stage UX in progress after the owner's UX feedback (13 points + "UX is
 really bad, theme heavy"): Clean neutral theme (owner picked from mockups), bill dates with calendar/chips/lengths and
 per-bill reminders, Today hero one row on wide, Month → pay-period page, all currencies (fiat stored in hundredths as
