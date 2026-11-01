@@ -251,7 +251,7 @@ func (h *Host) execStdio(kind string, podArgs, mounts, inner []string) int {
 		d.Finish(0)
 		h.run = nil
 	}
-	argv := []string{"podman", "run", "--rm", "--init", "--name", image.ContainerName(filepath.Base(c.Root), fmt.Sprintf("%s-%d", kind, c.Clock().UnixNano())), "-i"}
+	argv := []string{"podman", "run", "--rm", "--init", "--name", image.ContainerName(orDefault(c.Getenv("BW_WORKTREE"), filepath.Base(c.Root)), fmt.Sprintf("%s-%d", kind, c.Clock().UnixNano())), "-i"}
 	argv = append(argv, podArgs...)
 	argv = append(argv, mounts...)
 	argv = append(argv, "-e", "BW_NATIVE=1", "-w", c.Root, h.Image)

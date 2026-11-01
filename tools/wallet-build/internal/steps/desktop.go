@@ -25,8 +25,11 @@ import (
 // ShardsOf are the files that run as several units, each a slice of the file's tests (flutter test --total-shards).
 var ShardsOf = map[string]int{"layout": 5}
 
-// procDir is /proc (a variable for the tests).
-var procDir = "/proc"
+// procDir is /proc and numCPU the core count (variables for the tests).
+var (
+	procDir = "/proc"
+	numCPU  = runtime.NumCPU
+)
 
 // Headless runs argv on a virtual X display (Mesa software GL) inside a private D-Bus session, with the app's data
 // (XDG_DATA_HOME: wallet, key file, logs), documents and runtime folders inside dir. The display is the first free one, or
@@ -331,7 +334,7 @@ func DesktopJobs(env sys.Env) (int, error) {
 			}
 		}
 	}
-	jobs := (runtime.NumCPU() - load) / 4
+	jobs := (numCPU() - load) / 4
 	if jobs > mem {
 		jobs = mem
 	}

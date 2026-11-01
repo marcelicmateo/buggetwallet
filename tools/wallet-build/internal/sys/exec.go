@@ -122,18 +122,23 @@ func (Real) Run(ctx context.Context, c Cmd) int {
 
 // Fake records commands instead of running them.
 type Fake struct {
-	mu      sync.Mutex
-	Calls   []Cmd
-	Execs   []Cmd
-	Handle  func(c Cmd) int // exit code per command; nil = 0. May write to c.Stdout/c.Stderr.
-	Missing map[string]bool // LookPath fails for these names
+	mu     sync.Mutex
+	Calls  []Cmd
+	Execs  []Cmd
+	Handle func(c Cmd) int // exit code per command; nil = 0. May write to c.Stdout/c.Stderr.
+	// HandleCtx is Handle for commands that wait for their context (a timeout); it wins when set.
+	HandleCtx func(ctx context.Context, c Cmd) int
+	Missing   map[string]bool // LookPath fails for these names
 }
 
 func (f *Fake) Run(ctx context.Context, c Cmd) int {
 	f.mu.Lock()
 	f.Calls = append(f.Calls, c)
-	h := f.Handle
+	h, hc := f.Handle, f.HandleCtx
 	f.mu.Unlock()
+	if hc != nil {
+		return hc(ctx, c)
+	}
 	if h != nil {
 		return h(c)
 	}
