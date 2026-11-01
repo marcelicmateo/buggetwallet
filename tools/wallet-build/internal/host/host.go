@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"wallet-build/internal/image"
+	"wallet-build/internal/native"
 	"wallet-build/internal/run"
 	"wallet-build/internal/steps"
 	"wallet-build/internal/sys"
@@ -187,8 +188,12 @@ func (h *Host) Main(cmd string, rest []string) (code int) {
 		if rc := h.nested("relay-bin", "x64"); rc != 0 {
 			return 1
 		}
-		return h.TimedLog("relay-native-test", filepath.Join(c.Getenv("BW_RUN_DIR"), "relay-native-test.log"), true, "false", true,
-			append([]string{filepath.Join(c.Root, "tools", "relay-native-test.sh")}, rest...))
+		tmp := orDefault(c.Getenv("TMPDIR"), "/tmp")
+		return h.timedLog("relay-native-test", filepath.Join(c.Getenv("BW_RUN_DIR"), "relay-native-test.log"), true, "false", true,
+			func(ctx context.Context, stdout, stderr io.Writer) int {
+				t := &native.Tester{R: c.R, Root: c.Root, Env: c.Env, Out: stdout, Err: stderr, TmpDir: tmp}
+				return t.Test(ctx, rest)
+			})
 	case cmd == "shell":
 		if len(rest) > 0 && rest[0] == "-c" {
 			if err := h.begin(cmd); err != nil {

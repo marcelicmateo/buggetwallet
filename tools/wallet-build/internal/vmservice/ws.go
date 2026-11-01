@@ -108,6 +108,12 @@ func (c *Conn) handshake(u *url.URL, host, port string) error {
 	return nil
 }
 
+// WriteText sends one masked text frame (raw JSON for protocols other than the VM service's JSON-RPC 2.0, e.g. DevTools).
+func (c *Conn) WriteText(data []byte) error { return c.send(opText, data) }
+
+// ReadMessage reads the next data message: the whole text of a JSON reply or event.
+func (c *Conn) ReadMessage() ([]byte, error) { return c.message() }
+
 // Opcodes.
 const (
 	opCont  = 0

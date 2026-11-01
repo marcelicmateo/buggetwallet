@@ -1,0 +1,65 @@
+set -uo pipefail
+f=0
+ok() { echo "ok: $*"; }
+no() { echo "FAIL: $*"; f=1; }
+info() { echo "info: $*"; }
+# The real install script of tools/relay-deploy.sh (native-install) runs here, as root, with Caddy not started (no ACME in a test).
+stage() { # what native_copy puts on the host
+  mkdir -p /root/.relay-native
+  cp /t/relay /root/.relay-native/relay-linux-x64
+  (cd /root/.relay-native && sha256sum relay-linux-x64 > relay-linux-x64.sha256)
+  cp /t/bw-relay.service /t/bw-relay.sysusers /t/bw-relay.env.example /t/Caddyfile /root/.relay-native/
+  cp /t/caddy-dropin.conf /root/.relay-native/bw-relay.conf
+}
+stage
+place() { bash /t/place.sh "$@" 2>/tmp/place.err; } # args: domain datadir startcaddy
+place relay-test.example.invalid /var/lib/bw-relay 0 >/dev/null && ok "install script (default data dir)" || { no "install script"; cat /tmp/place.err; }
+tok=$(grep -A1 'WALLET-CREATION TOKEN' /tmp/place.err | tail -n 1)
+[[ -n $tok ]] && ok "token printed once on stderr" || no "no token printed"
+[[ $(stat -c %a /etc/bw-relay/create-token) == 600 ]] && ok "create-token is 0600" || no "create-token mode"
+grep -q "$tok" /etc/bw-relay/bw-relay.env /etc/systemd/system/bw-relay.service && no "token found in env/unit" || ok "token not in env/unit"
+[[ $(systemctl is-active bw-relay) == active ]] && ok "bw-relay active" || no "bw-relay not active"
+code=$(curl -s -o /dev/null -w '%{http_code}' --retry 10 --retry-delay 1 --retry-connrefused http://127.0.0.1:8787/v2/health || true)
+[[ $code == 200 ]] && ok "GET /v2/health 200" || no "health answered $code"
+if /usr/local/bin/bw-relay --health-check; then ok "bw-relay --health-check exit 0"; else no "--health-check failed"; fi
+ls=$(ss -ltnH | awk '{print $4}')
+grep -qx '127.0.0.1:8787' <<<"$ls" && ok "listens on 127.0.0.1:8787" || no "not listening on 127.0.0.1:8787 ($ls)"
+if grep -E ':8787$' <<<"$ls" | grep -vq '^127\.0\.0\.1:'; then no "8787 also on a non-loopback address"; else ok "8787 not on 0.0.0.0 / [::]"; fi
+[[ $(stat -c %U /var/lib/bw-relay) == bw-relay ]] && ok "state dir owned by bw-relay" || no "state dir owner $(stat -c %U /var/lib/bw-relay)"
+ps -o user= -p "$(systemctl show -p MainPID --value bw-relay)" | grep -qx bw-relay && ok "runs as bw-relay" || no "wrong user"
+# a creating PUT without the token must be refused (token reached the service as a credential and is enforced)
+tc=$(curl -s -o /dev/null -w '%{http_code}' -X PUT http://127.0.0.1:8787/v2/w/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/d/x/1 -d x || true)
+info "unsigned PUT answered $tc (any 4xx = refused before storing)"
+for i in 1 2 3 4 5; do curl -s -o /dev/null http://127.0.0.1:8787/v2/health; done
+[[ $(systemctl is-active bw-relay) == active ]] && ok "still active after requests" || no "relay died after requests"
+j=$(journalctl -u bw-relay --no-pager 2>&1)
+if grep -qiE 'SIGSYS|Bad system call|Operation not permitted|EPERM|status=31|seccomp' <<<"$j"; then
+  no "journal shows syscall-filter trouble"
+  grep -iE 'SIGSYS|Bad system|not permitted|EPERM|seccomp' <<<"$j" | head -5
+else ok "journal: no SIGSYS/EPERM"; fi
+info "security: $(systemd-analyze security bw-relay --no-pager 2>/dev/null | tail -n 1)"
+systemctl stop bw-relay && ok "stop" || no "stop"
+[[ $(systemctl show -p Result --value bw-relay) == success ]] && ok "stopped with Result=success" || no "stop result $(systemctl show -p Result --value bw-relay)"
+# Second pass: another data folder (SSD mount) through the drop-in, then the upgrade script on top of it.
+stage; place relay-test.example.invalid /srv/ssd 0 > /tmp/tok2 && ok "install script again (data dir /srv/ssd)" || { no "reinstall"; cat /tmp/place.err; }
+grep -q 'WALLET-CREATION' /tmp/place.err && no "token printed again on re-install" || ok "token kept on re-install (not printed)"
+curl -s -o /dev/null --retry 10 --retry-delay 1 --retry-connrefused http://127.0.0.1:8787/v2/health && ok "health with data dir /srv/ssd" || no "no health with /srv/ssd"
+tr '\0' ' ' </proc/"$(systemctl show -p MainPID --value bw-relay)"/cmdline | grep -q -- '--data /srv/ssd' && ok "relay runs with --data /srv/ssd" || no "drop-in not applied"
+[[ $(stat -c %U /srv/ssd) == bw-relay ]] && ok "/srv/ssd owned by bw-relay" || no "/srv/ssd owner"
+stage; bash /t/upgrade.sh 2>/tmp/up.err && ok "upgrade script" || { no "upgrade script"; cat /tmp/up.err; }
+curl -s -o /dev/null --retry 10 --retry-delay 1 --retry-connrefused http://127.0.0.1:8787/v2/health && ok "health after upgrade" || no "no health after upgrade"
+tr '\0' ' ' </proc/"$(systemctl show -p MainPID --value bw-relay)"/cmdline | grep -q -- '--data /srv/ssd' && ok "upgrade kept --data /srv/ssd" || no "upgrade lost the data dir"
+# Failed upgrade: a binary that cannot run must be rolled back.
+stage; printf '#!/bin/false\n' > /root/.relay-native/relay-linux-x64; (cd /root/.relay-native && sha256sum relay-linux-x64 > relay-linux-x64.sha256)
+if bash /t/upgrade.sh 2>/tmp/up2.err; then no "broken upgrade reported success"; else ok "broken upgrade fails"; fi
+curl -s -o /dev/null --retry 10 --retry-delay 1 --retry-connrefused http://127.0.0.1:8787/v2/health && ok "previous binary restored, health ok" || no "no health after rollback"
+systemctl stop bw-relay
+# Caddy
+set -a; . /etc/bw-relay/bw-relay.env; set +a
+if caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/tmp/val.txt 2>&1; then ok "caddy validate"; else no "caddy validate"; cat /tmp/val.txt; fi
+ad=$(caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile 2>/dev/null)
+grep -q '127.0.0.1:8787' <<<"$ad" && ok "caddy adapt: upstream 127.0.0.1:8787" || no "adapt: no upstream 127.0.0.1:8787"
+grep -q 'relay-test.example.invalid' <<<"$ad" && ok "caddy adapt: host from BW_RELAY_DOMAIN" || no "adapt: domain missing"
+systemctl cat caddy 2>/dev/null | grep -q 'EnvironmentFile=/etc/bw-relay/bw-relay.env' && ok "caddy.service has the drop-in" || no "drop-in not applied to caddy.service"
+systemctl show -p After caddy | grep -q bw-relay.service && ok "caddy ordered after bw-relay" || no "caddy not after bw-relay"
+exit "$f"
