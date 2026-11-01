@@ -126,14 +126,22 @@ func TestCreateCallsKeytoolAndWritesPrivateFiles(t *testing.T) {
 		t.Fatalf("calls %v", fake.Argvs())
 	}
 	gen := fake.Calls[0].Argv
-	pass := gen[len(gen)-1]
+	pass := fake.Calls[0].Env.Get(PassEnv) // the password reaches keytool through its environment
 	wantGen := []string{"keytool", "-genkeypair", "-keystore", ks, "-storetype", "PKCS12", "-alias", "budget-wallet", "-keyalg", "RSA", "-keysize", "4096",
-		"-validity", "20000", "-dname", "CN=Budget Wallet", "-storepass", pass, "-keypass", pass}
+		"-validity", "20000", "-dname", "CN=Budget Wallet", "-storepass:env", PassEnv, "-keypass:env", PassEnv}
 	if strings.Join(gen, "\x00") != strings.Join(wantGen, "\x00") || pass == "" {
 		t.Errorf("genkeypair argv %q", gen)
 	}
-	if list := strings.Join(fake.Calls[1].Argv, " "); list != "keytool -list -keystore "+ks+" -storepass "+pass+" -v" {
+	if list := strings.Join(fake.Calls[1].Argv, " "); list != "keytool -list -keystore "+ks+" -storepass:env "+PassEnv+" -v" || fake.Calls[1].Env.Get(PassEnv) != pass {
 		t.Errorf("list argv %q", list)
+	}
+	// the password is on no command line (it would show in /proc/<pid>/cmdline)
+	for _, c := range fake.Calls {
+		for _, a := range c.Argv {
+			if strings.Contains(a, pass) {
+				t.Errorf("the password is in argv: %q", c.Argv)
+			}
+		}
 	}
 	env, err := os.ReadFile(filepath.Join(f.dir, "signing.env"))
 	if err != nil || string(env) != EnvFileText("budget-wallet", pass) {
@@ -186,7 +194,7 @@ func TestExistingKeyIsNeverOverwritten(t *testing.T) {
 		if rc != 0 || !strings.HasSuffix(f.out.String(), "Certificate SHA256: 11:22\n") {
 			t.Errorf("%s: rc %d err %q out %q", existing, rc, f.err.String(), f.out.String())
 		}
-		if len(fake.Calls) != 1 || !strings.Contains(strings.Join(fake.Calls[0].Argv, " "), "-storepass old") {
+		if len(fake.Calls) != 1 || fake.Calls[0].Env.Get(PassEnv) != "old" || strings.Contains(strings.Join(fake.Calls[0].Argv, " "), "old") {
 			t.Errorf("calls %v", fake.Argvs())
 		}
 	}
@@ -232,7 +240,7 @@ func TestPasswordsAreRedactedFromKeytoolOutput(t *testing.T) {
 	fake.Handle = func(c sys.Cmd) int {
 		if c.Argv[1] == "-genkeypair" {
 			os.WriteFile(c.Argv[3], []byte("k"), 0o600)
-			io.WriteString(c.Stderr, "keytool says storepass "+c.Argv[len(c.Argv)-1]+"\n")
+			io.WriteString(c.Stderr, "keytool says storepass "+c.Env.Get(PassEnv)+"\n")
 			return 0
 		}
 		io.WriteString(c.Stdout, "\t SHA256: AA\n")
@@ -242,8 +250,7 @@ func TestPasswordsAreRedactedFromKeytoolOutput(t *testing.T) {
 	if rc := f.m.Main(nil); rc != 0 {
 		t.Fatalf("rc %d", rc)
 	}
-	gen := fake.Calls[0].Argv
-	if strings.Contains(f.err.String(), gen[len(gen)-1]) || !strings.Contains(f.err.String(), "keytool says storepass") {
+	if strings.Contains(f.err.String(), fake.Calls[0].Env.Get(PassEnv)) || !strings.Contains(f.err.String(), "keytool says storepass") {
 		t.Errorf("stderr %q", f.err.String())
 	}
 }
