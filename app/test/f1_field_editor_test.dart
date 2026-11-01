@@ -101,6 +101,45 @@ void main() {
     expect(saved, isEmpty);
   });
 
+  testWidgets('an error under a date goes away when the value changes from outside, not when the editor itself reported it', (t) async {
+    final value = ValueNotifier<String?>(null);
+    await pumpApp(
+        t,
+        Scaffold(
+            body: ValueListenableBuilder<String?>(
+                valueListenable: value,
+                builder: (_, v, __) => FieldEditor(_guaranteeUntil, value: v, today: _today, onSave: (x) => 'Guarantee until: no.'))));
+    await t.tap(k('guaranteeUntil:chip:1m'));
+    await t.pump();
+    expect(find.textContaining('Guarantee until: no.', findRichText: true), findsOneWidget);
+    value.value = '2027-01-01';
+    await t.pump();
+    expect(find.textContaining('Guarantee until: no.', findRichText: true), findsNothing,
+        reason: 'a value from outside makes the refusal stale');
+  });
+
+  testWidgets('a dropdown follows outside changes and shows a stored value it does not list as its own option', (t) async {
+    const source = TextCol('gadget', 'source', label: 'Format', nullable: true);
+    final value = ValueNotifier<String?>('csv:gone');
+    const options = [FieldOption(null, 'None'), FieldOption('pbz', 'PBZ')];
+    await pumpApp(
+        t,
+        Scaffold(
+            body: ValueListenableBuilder<String?>(
+                valueListenable: value,
+                builder: (_, v, __) =>
+                    FieldEditor(source, value: v, today: _today, options: options, unknownLabel: 'Unknown format', onSave: (x) => null))));
+    expect(find.text('Unknown format'), findsOneWidget, reason: 'not shown as None');
+    expect(find.text('None'), findsNothing);
+    value.value = 'pbz';
+    await t.pump();
+    expect(find.text('PBZ'), findsOneWidget);
+    expect(find.text('Unknown format'), findsNothing);
+    value.value = null;
+    await t.pump();
+    expect(find.text('None'), findsOneWidget);
+  });
+
   testWidgets('number, amount, choice, text and switch', (t) async {
     final saved = <Col, Object?>{_warnDays: 3, _shape: _Shape.round};
     await pumpApp(t, _Sheet(const [_warnDays, _price, _shape, _label, _boxed], saved));

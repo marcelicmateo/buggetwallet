@@ -61,6 +61,7 @@ class FieldEditor extends StatefulWidget {
     this.large = false,
     this.zeroText,
     this.editPrompt,
+    this.unknownLabel = 'Not in the list',
   });
 
   /// The column to edit.
@@ -117,6 +118,9 @@ class FieldEditor extends StatefulWidget {
   /// IntCol: the line when the number is 0 ("Reminder on the day").
   final String? zeroText;
 
+  /// TextCol with [options]: the words for a stored value that is not among them.
+  final String unknownLabel;
+
   /// IntCol: the words before the number field ("Remind me"); [label] otherwise.
   final String? editPrompt;
 
@@ -129,6 +133,10 @@ class _FieldEditorState extends State<FieldEditor> {
   final _length = TextEditingController();
   String? _problem, _lengthError;
   bool _changing = false, _lengths = false, _dirty = false;
+
+  /// The last value this editor handed to onSave: a change of [FieldEditor.value] to it is the editor's own.
+  Object? _reported;
+  bool _hasReported = false;
 
   Col get _col => widget.col;
   String get _id => widget.id ?? fieldId(_col);
@@ -146,7 +154,13 @@ class _FieldEditorState extends State<FieldEditor> {
     super.didUpdateWidget(old);
     // The sheet changed the value itself (a name that follows the kind, a cleared date): show it, unless it is what was just typed.
     if (widget.value != old.value && !_dirty && !_changing) _text.text = _textOf(widget.value);
-    if (old.value != null && widget.value == null) {
+    final other = old.col != widget.col;
+    // A value that came from outside (not the one this editor just reported) or another column: old refusals and length errors are stale.
+    if (other || (widget.value != old.value && !(_hasReported && widget.value == _reported))) {
+      _problem = _lengthError = null;
+      if (other) _text.text = _textOf(widget.value);
+    }
+    if (other || (old.value != null && widget.value == null)) {
       _changing = false;
       _lengths = false;
       _problem = _lengthError = null;
@@ -167,6 +181,11 @@ class _FieldEditorState extends State<FieldEditor> {
         final Object x => '$x',
       };
 
+  void _report(Object? v) {
+    _reported = v;
+    _hasReported = true;
+  }
+
   /// Checks [v] with the column, then hands it to the sheet. True when it was saved.
   bool _commit(Object? v) {
     final p = _col.problem(v, today: widget.today);
@@ -174,6 +193,7 @@ class _FieldEditorState extends State<FieldEditor> {
       setState(() => _problem = p);
       return false;
     }
+    _report(v);
     final refusal = widget.onSave(v);
     if (mounted) setState(() => _problem = refusal);
     return refusal == null;
@@ -331,6 +351,7 @@ class _FieldEditorState extends State<FieldEditor> {
       if (widget.autoSave) {
         // Draft form: the sheet's own Save says what is wrong with a missing or unreadable amount.
         setState(() => _problem = cents != null ? c.problem(cents, today: widget.today) : null);
+        _report(cents);
         widget.onSave(cents);
       } else {
         setState(() {});
@@ -340,12 +361,14 @@ class _FieldEditorState extends State<FieldEditor> {
     if (c is IntCol) {
       final n = int.tryParse(t.trim());
       setState(() => _problem = n != null && c.problem(n) != null ? c.problem(n) : null);
+      _report(n);
       widget.onSave(n);
       return;
     }
     final v = t.isEmpty && _col.nullable ? null : t;
     if (widget.autoSave) {
       setState(() => _problem = _col.problem(v, today: widget.today));
+      _report(v);
       widget.onSave(v);
     } else {
       setState(() {});
@@ -399,14 +422,19 @@ class _FieldEditorState extends State<FieldEditor> {
 
   Widget _options(List<FieldOption> options) {
     final v = widget.value is String ? widget.value as String : null;
-    return DropdownButtonFormField<String?>(
-      key: ValueKey(_id),
-      isExpanded: true,
-      initialValue: options.any((o) => o.value == v) ? v : null,
-      decoration: InputDecoration(labelText: _label, errorText: _shownError, errorMaxLines: 3),
-      items: [for (final o in options) DropdownMenuItem<String?>(key: o.key, value: o.value, child: Text(o.label))],
-      onChanged: _commit,
-    );
+    // A stored value the list does not know (a deleted CSV layout) shows as its own option, never as "none": Save must not keep what the form hides.
+    final shown = [if (v != null && !options.any((o) => o.value == v)) FieldOption(v, widget.unknownLabel), ...options];
+    // The dropdown reads initialValue once: a new subtree per value shows what changed from outside.
+    return KeyedSubtree(
+        key: ValueKey('$_id:$v'),
+        child: DropdownButtonFormField<String?>(
+          key: ValueKey(_id),
+          isExpanded: true,
+          initialValue: v,
+          decoration: InputDecoration(labelText: _label, errorText: _shownError, errorMaxLines: 3),
+          items: [for (final o in shown) DropdownMenuItem<String?>(key: o.key, value: o.value, child: Text(o.label))],
+          onChanged: _commit,
+        ));
   }
 
   // ---------- choices ----------

@@ -244,6 +244,7 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
     }
     final name = c == AccountCols.name;
     return FieldEditor(c,
+        key: ValueKey(c),
         id: name ? 'accountName' : 'accountInstitution',
         label: name ? null : (_isCrypto ? 'Exchange or wallet (optional)' : 'Bank or provider (optional)'),
         value: _draft[c],
@@ -279,7 +280,6 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
             _pickKind(k as AccountKind);
             return null;
           }),
-      const SizedBox(height: 12),
       for (final c in _fieldsOf(_kind)) ...[const SizedBox(height: 12), _field(c)],
       const SizedBox(height: 12),
       CurrencyField(

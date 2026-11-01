@@ -677,26 +677,6 @@ extension BillsDb on WalletController {
   int billReminderDays(Bill b, {required bool warranty}) =>
       warranty ? effectiveWarrantyReminderDays(b, settings) : effectiveReturnReminderDays(b, settings);
 
-  /// Saves this bill's reminder days (return-by and/or warranty; null leaves that one alone) and schedules the reminders again.
-  /// False (nothing saved) when core refuses (outside 0..30 return, 0..90 warranty).
-  bool setBillReminderDays(String id, {int? returnDays, int? warrantyDays}) {
-    final ok = _writeBillReminderDays(id, returnDays, warrantyDays);
-    if (ok) unawaited(rescheduleHeadsUps());
-    return ok;
-  }
-
-  bool _writeBillReminderDays(String id, int? returnDays, int? warrantyDays) {
-    try {
-      repo.updateBill(id, returnReminderDays: returnDays, warrantyReminderDays: warrantyDays);
-    } on ArgumentError {
-      logEvent(_billLog, Level.INFO, 'bill.reminderDays', {'ok': false});
-      return false;
-    }
-    logEvent(_billLog, Level.INFO, 'bill.reminderDays', {'return': returnDays != null, 'warranty': warrantyDays != null});
-    _changed();
-    return true;
-  }
-
   /// The wallet-wide default for both reminder spans (the value a bill without its own uses). Saves both; false (nothing saved) when one is outside 0..30 (return) or 0..90 (warranty).
   bool saveBillReminderDays({required int returnDays, required int warrantyDays}) {
     if (returnDays < 0 ||

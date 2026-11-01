@@ -115,6 +115,7 @@ class _BillDates extends StatelessWidget {
         SizedBox(
             width: 200,
             child: FieldEditor(c,
+                key: ValueKey(c),
                 value: s.dates[c],
                 today: v.wc.today(),
                 lengths: false,
