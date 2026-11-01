@@ -156,8 +156,9 @@ func TestGoldenArgvLint(t *testing.T) {
 		"$ shellcheck tools/a.sh dev/b.sh dev/install-lint-tools.sh .github/scripts/c.sh",
 		"$ actionlint",
 		"$ tools/no-poll-hook.sh --self-test",
+		"$ dist/bin/wallet-build hook no-poll --self-test", // the Go port of the hook runs next to the bash one (GO4-B)
 		"$ tools/relay-deploy.sh --self-test",
-		"$ tools/relay-native-check.sh",
+		"$ dist/bin/wallet-build relay-native-check",
 	})
 	if r.code != 0 {
 		t.Errorf("code %d\n%s", r.code, r.err)

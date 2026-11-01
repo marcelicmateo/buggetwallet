@@ -60,3 +60,25 @@ ci-status: $(BIN)
 	$(WB) ci status $(ARGS)
 ci-log: $(BIN)
 	$(WB) ci log $(ARGS)
+
+# ---- GO4-B helpers (shell helpers ported to Go: relay.sh, web.sh, web_shot.py, relay-native-check.sh, make-signing-key.sh, no-poll-hook.sh)
+#   make relay-start|relay-stop|relay-status|relay-reset|relay-image    make relay-logs [ARGS=-f]      (BW_RELAY_PORT, BW_RELAY_ORIGINS, BW_YES)
+#   make web-serve [PORT=8080]    make web-stop    make web-status    make web-shot P=/ O=dist/shot.png [S=412x915]
+#   make relay-native-check       make signing-key [ARGS=--upload]    make hook-no-poll [ARGS=--self-test]   (reads the hook JSON on stdin)
+# The container side `wallet-build web-shot <url> <out.png> <W>x<H> [wait]` is called by `web shot`; relay-native-test, times, trend, ci-status and ci-log are above.
+.PHONY: relay-start relay-stop relay-status relay-reset relay-image relay-logs web-serve web-stop web-status web-shot relay-native-check signing-key hook-no-poll
+
+relay-start relay-stop relay-status relay-reset relay-image: $(BIN)
+	$(WB) relay $(patsubst relay-%,%,$@)
+relay-logs: $(BIN)
+	$(WB) relay logs $(ARGS)
+web-serve: $(BIN)
+	$(WB) web serve $(PORT)
+web-stop web-status: $(BIN)
+	$(WB) web $(patsubst web-%,%,$@)
+web-shot: $(BIN)
+	$(WB) web shot $(P) $(O) $(S)
+relay-native-check signing-key: $(BIN)
+	$(WB) $@ $(ARGS)
+hook-no-poll: $(BIN)
+	$(WB) hook no-poll $(ARGS)

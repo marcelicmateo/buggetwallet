@@ -253,10 +253,17 @@ func lintSpecs(c *run.Ctx) []run.Spec {
 			return sc.Cmd("", append([]string{"shellcheck"}, files...)...)
 		}},
 		{Name: "actionlint", Fn: cmd("actionlint")},
-		{Name: "hook-selftest", Fn: cmd("tools/no-poll-hook.sh", "--self-test")},
+		// the bash hook and its Go port (wallet-build hook no-poll) both have to pass until the hook is switched (GO4-B)
+		{Name: "hook-selftest", Fn: func(sc *run.StepCtx) int {
+			rc := sc.Cmd("", "tools/no-poll-hook.sh", "--self-test")
+			if sc.Cmd("", "dist/bin/wallet-build", "hook", "no-poll", "--self-test") != 0 {
+				rc = 1
+			}
+			return rc
+		}},
 		{Name: "env-selftest", Fn: EnvSelftest},
 		{Name: "deploy-selftest", Fn: cmd("tools/relay-deploy.sh", "--self-test")},
-		{Name: "native-units", Fn: cmd("tools/relay-native-check.sh")},
+		{Name: "native-units", Fn: cmd("dist/bin/wallet-build", "relay-native-check")},
 	}
 }
 

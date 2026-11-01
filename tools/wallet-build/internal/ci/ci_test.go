@@ -148,6 +148,26 @@ func TestMainDispatch(t *testing.T) {
 	}
 }
 
+// tools/ci-status.sh --log [name] is `ci status --log [name]` as well as `ci log [name]`
+func TestStatusLogFlag(t *testing.T) {
+	e := newEnv(t, "the latest log\n")
+	if rc := e.x.Status([]string{"--log"}); rc != 0 || e.out.String() != "the latest log\n" {
+		t.Errorf("rc %d out %q", rc, e.out)
+	}
+	var shown []string
+	e.fake.Handle = func(c sys.Cmd) int {
+		if len(c.Argv) > 2 && c.Argv[0] == "git" && c.Argv[1] == "show" {
+			shown = append(shown, c.Argv[2])
+			c.Stdout.Write([]byte("x"))
+		}
+		return 0
+	}
+	e.x.Status([]string{"--log", "20261101-run"})
+	if len(shown) != 1 || shown[0] != "origin/ci-logs:20261101-run.txt" {
+		t.Errorf("shown %v", shown)
+	}
+}
+
 // all jobs completed but "log" (created last) is not there yet: not green
 func TestStatusNeedsTheLogCheckRun(t *testing.T) {
 	e := newEnv(t, "", "lint\tcompleted\tsuccess\napk\tcompleted\tsuccess\n")

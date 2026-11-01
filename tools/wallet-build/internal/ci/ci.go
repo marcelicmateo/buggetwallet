@@ -125,6 +125,9 @@ func line3(log string) string {
 func (x *CI) Status(args []string) int {
 	c := x.C
 	wait := false
+	if len(args) > 0 && args[0] == "--log" { // tools/ci-status.sh --log [name]
+		return x.Log(args[1:])
+	}
 	if len(args) > 0 && args[0] == "--wait" {
 		wait, args = true, args[1:]
 	}

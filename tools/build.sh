@@ -414,15 +414,17 @@ steps() {
   done
 }
 
+# The Go port (wallet-build hook no-poll, relay-native-check; GO4-B) runs when dist/bin/wallet-build exists (the host builds it in
+# go-check before the container); without it (CI before GO3) native-units falls back to the old script.
 # Packages are resolved first (pub_ready, sequentially: they share the pub cache), so the checks skip their own
 # implicit `pub get` (--no-pub) and all run in parallel.
 LINT=(format format_check
       shellcheck 'shellcheck tools/*.sh dev/*.sh .github/scripts/*.sh'
       actionlint actionlint
-      hook-selftest 'tools/no-poll-hook.sh --self-test'
+      hook-selftest 'tools/no-poll-hook.sh --self-test && { [[ ! -x dist/bin/wallet-build ]] || dist/bin/wallet-build hook no-poll --self-test; }'
       env-selftest env_selftest
       deploy-selftest 'tools/relay-deploy.sh --self-test'
-      native-units 'tools/relay-native-check.sh')
+      native-units 'if [[ -x dist/bin/wallet-build ]]; then dist/bin/wallet-build relay-native-check; else tools/relay-native-check.sh; fi')
 declare -A SUITE=(
   [importer]='suite importer packages/wallet_importer "dart analyze --fatal-infos" dart test --timeout 60s'
   [core]='suite core packages/wallet_core "dart analyze --fatal-infos" dart test --timeout 60s'
