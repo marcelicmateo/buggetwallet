@@ -6,6 +6,7 @@ import 'dart:io';
 
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
+import 'package:budget_wallet/src/insights_api.dart';
 import 'package:budget_wallet/src/screens/period_report.dart';
 import 'package:budget_wallet/src/theme.dart';
 import 'package:flutter/material.dart';
@@ -107,6 +108,48 @@ Future<void> _tapIcon(WidgetTester t, String key) async {
 
 void main() {
   setUpAll(_loadFonts);
+
+  group('UX-A: the next payday and "start a new month" (was Settings › Month)', () {
+    testWidgets('the running period shows its expected payday and the button; a finished one shows neither', (tester) async {
+      final wc = _wallet();
+      await _pump(tester, wc);
+      final end = wc.periodReportsFor(count: 12).last.end;
+      expect(find.text('Expected ${shortDate(end)}'), findsOneWidget);
+      expect(_k('startNewMonth'), findsOneWidget);
+      await _tapIcon(tester, 'reportPrev');
+      expect(_k('reportNewMonth'), findsNothing);
+      expect(_k('startNewMonth'), findsNothing);
+    });
+
+    testWidgets('Cancel writes nothing; OK starts the month on the day picked and says so', (tester) async {
+      final wc = _wallet();
+      await _pump(tester, wc);
+      final before = wc.settings.periodStart;
+      await tester.ensureVisible(_k('startNewMonth'));
+      await tester.tap(_k('startNewMonth'));
+      await tester.pumpAndSettle();
+      expect(find.byType(DatePickerDialog), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(wc.settings.periodStart, before);
+
+      await tester.tap(_k('startNewMonth'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      expect(wc.settings.periodStart, '2026-10-20');
+      expect(wc.period().start, '2026-10-20');
+      expect(find.text('New month started ${shortDate('2026-10-20')}'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 3)); // the toast's timer
+    });
+
+    testWidgets('fits 320 dp at text scale 2.0', (tester) async {
+      final wc = _wallet();
+      await _pump(tester, wc, size: const Size(320, 2400), scale: 2);
+      await tester.ensureVisible(_k('startNewMonth'));
+      expect(tester.takeException(), isNull);
+    });
+  });
 
   group('running chip wording', () {
     /// Payday 10, today 20 Oct 2026, the given synthetic salary rows.

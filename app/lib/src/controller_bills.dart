@@ -672,7 +672,18 @@ extension BillsDb on WalletController {
   int get returnReminderDays => settings.returnReminderDays;
   int get warrantyReminderDays => settings.warrantyReminderDays;
 
-  /// Saves both reminder spans; false (nothing saved) when one is outside 0..30 (return) or 0..90 (warranty).
+  /// The reminder days of one bill's date: the bill's own value, else the wallet default. Today the bill has no value of its own
+  /// (core's per-bill field is not merged yet), so this is the default. Wire at merge: `warranty ? b.warrantyReminderDays : b.returnReminderDays`
+  /// first, then the default below.
+  int billReminderDays(Bill b, {required bool warranty}) => warranty ? warrantyReminderDays : returnReminderDays;
+
+  /// Saves this bill's reminder days (return-by and/or warranty; null leaves that one alone). Wire at merge to core's
+  /// `updateBill(id, returnReminderDays:, warrantyReminderDays:)`: false when core refuses (outside 0..30 return, 0..90 warranty), and the
+  /// sheet's reminder line then rebuilds from `billReminderDays`.
+  bool setBillReminderDays(String id, {int? returnDays, int? warrantyDays}) =>
+      throw UnimplementedError('Per-bill reminder days wait for core (schema 20); wire this to updateBill.');
+
+  /// The wallet-wide default for both reminder spans (the value a bill without its own uses). Saves both; false (nothing saved) when one is outside 0..30 (return) or 0..90 (warranty).
   bool saveBillReminderDays({required int returnDays, required int warrantyDays}) {
     if (returnDays < 0 ||
         returnDays > WalletSettings.maxReturnReminderDays ||

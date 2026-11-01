@@ -176,6 +176,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Bill to review'), findsOneWidget);
     await binding.takeScreenshot('3-bill-sheet');
+    // UX-A: a quick length sets the warranty date, and the reminder line then shows under it.
+    final warrantyChip = find.byKey(const ValueKey('warranty:chip:1y'));
+    await tester.ensureVisible(warrantyChip);
+    await tester.tap(warrantyChip);
+    await tester.pumpAndSettle();
+    await Scrollable.ensureVisible(tester.element(find.byKey(const ValueKey('warrantyDate'))), alignment: 0.1);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('warranty:reminder')), findsOneWidget);
+    await binding.takeScreenshot('3-bill-warranty');
     Navigator.of(tester.element(find.byType(BillSheet))).pop();
     await tester.pumpAndSettle();
 

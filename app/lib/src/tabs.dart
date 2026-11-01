@@ -18,7 +18,6 @@ enum SettingsSection {
   sync('Sync', 'Relay, devices and wallet key'),
   backup('Backup and export', 'Files you keep'),
   calendars('Calendars and reminders', 'Calendars, nudges, review day'),
-  month('Month', 'Start a new pay month'),
   look('Look', 'Theme and number style'),
   diagnostics('Diagnostics', 'Logs for support'),
   currencies('Currencies', 'Rates for other currencies');

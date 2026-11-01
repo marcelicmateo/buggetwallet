@@ -1223,30 +1223,71 @@ void main() {
     });
 
     // ---- 7. reminder days and waiting bill files ----
-    tw('Plan › Bills saves the reminder days and refuses numbers out of range', (tester) async {
+    tw('the bill sheet sets a date from a quick length or a typed one, counted from the purchase date', (tester) async {
       final wc = bw();
-      await pumpApp(tester, Scaffold(body: SingleChildScrollView(child: BillsPanel(wc: wc))), size: const Size(400, 1600));
-      expect(tester.widget<TextField>(key('returnReminderDays')).controller!.text, '3');
-      expect(tester.widget<TextField>(key('warrantyReminderDays')).controller!.text, '14');
-      await tester.enterText(key('returnReminderDays'), '31');
-      await tester.ensureVisible(key('remindSave'));
-      await tester.tap(key('remindSave'));
+      final id = addBill(wc, syntheticBill('len', date: '2026-01-31'), confirm: true);
+      await openSheetFor(tester, wc, id, size: const Size(400, 1600));
+      expect(key('warranty:reminder'), findsNothing, reason: 'no date, no reminder line');
+      await tester.ensureVisible(key('warranty:chip:1m'));
+      await tester.tap(key('warranty:chip:1m'));
       await tester.pumpAndSettle();
-      expect(key('remindError'), findsOneWidget);
-      expect(wc.returnReminderDays, 3);
-      await tester.enterText(key('returnReminderDays'), '7');
-      await tester.enterText(key('warrantyReminderDays'), '91');
-      await tester.tap(key('remindSave'));
+      expect(wc.bill(id)!.warrantyUntil, '2026-02-28', reason: '31 Jan + 1m clamps to the month end');
+      await tester.enterText(key('return:length'), '45d');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
-      expect(key('remindError'), findsOneWidget);
-      expect(wc.warrantyReminderDays, 14);
-      await tester.enterText(key('warrantyReminderDays'), '30');
-      await tester.tap(key('remindSave'));
+      expect(wc.bill(id)!.returnBy, '2026-03-17');
+      await tester.enterText(key('return:length'), '5 x');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
-      expect(key('remindError'), findsNothing);
-      expect((wc.returnReminderDays, wc.warrantyReminderDays), (7, 30));
-      expect(wc.settings.returnReminderDays, 7);
+      expect(key('return:lengthError'), findsOneWidget);
+      expect(wc.bill(id)!.returnBy, '2026-03-17');
     });
+
+    tw('the reminder line sits under its date (the bill\'s value, else the default) and refuses numbers out of range', (tester) async {
+      final wc = bw();
+      final id = addBill(wc, syntheticBill('rem'), confirm: true);
+      wc.setBillDates(id, warrantyUntil: '2027-01-10', returnBy: '2026-11-01');
+      await openSheetFor(tester, wc, id, size: const Size(400, 1600));
+      expect(find.text('Reminder 3 days before'), findsOneWidget);
+      expect(find.text('Reminder 14 days before'), findsOneWidget);
+      expect(find.textContaining('all bills'), findsNothing);
+      await tester.ensureVisible(key('return:reminderChange'));
+      await tester.tap(key('return:reminderChange'));
+      await tester.pump();
+      expect(tester.widget<TextField>(key('return:reminderDays')).controller!.text, '3');
+      await tester.enterText(key('return:reminderDays'), '31');
+      await tester.tap(key('return:reminderSave'));
+      await tester.pump();
+      expect(key('return:reminderError'), findsOneWidget);
+      await tester.tap(key('return:reminderCancel'));
+      await tester.pump();
+      expect(key('return:reminderError'), findsNothing);
+      expect(find.text('Reminder 3 days before'), findsOneWidget);
+      await tester.ensureVisible(key('warranty:reminderChange'));
+      await tester.tap(key('warranty:reminderChange'));
+      await tester.pump();
+      await tester.enterText(key('warranty:reminderDays'), '91');
+      await tester.tap(key('warranty:reminderSave'));
+      await tester.pump();
+      expect(key('warranty:reminderError'), findsOneWidget);
+      expect(find.text('Reminder days'), findsNothing, reason: 'the Bills panel has no section of its own any more');
+    });
+
+    testWidgets('Change saves this bill\'s reminder days only', (tester) async {
+      // Wire at merge: WalletController.setBillReminderDays -> core's updateBill(returnReminderDays:, warrantyReminderDays:).
+      final wc = bw();
+      final id = addBill(wc, syntheticBill('rem2'), confirm: true);
+      wc.setBillDates(id, returnBy: '2026-11-01');
+      await openSheetFor(tester, wc, id, size: const Size(400, 1600));
+      await tester.ensureVisible(key('return:reminderChange'));
+      await tester.tap(key('return:reminderChange'));
+      await tester.pump();
+      await tester.enterText(key('return:reminderDays'), '1');
+      await tester.tap(key('return:reminderSave'));
+      await tester.pumpAndSettle();
+      expect(find.text('Reminder 1 day before'), findsOneWidget);
+      expect(wc.returnReminderDays, 3, reason: 'the wallet default is not touched');
+    }, skip: true); // per-bill reminder days wait for core (schema 20): wire WalletController.setBillReminderDays at merge
 
     test('saveBillReminderDays checks both ranges (0 is on the day)', () {
       final wc = bw();

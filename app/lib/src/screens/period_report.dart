@@ -190,8 +190,43 @@ class _Tiles extends StatelessWidget {
         value: moneyExact(saved.cents, cur),
         sub: saved.count == 0 ? 'None skipped' : '${saved.count} skipped',
       ),
+      // The running period only: its next payday and the one place to start a new month by hand.
+      if (r.running) DashItem(span: 2, child: _NewMonthTile(wc: wc, nextPayday: r.end)),
     ]);
   }
+}
+
+/// The running period's expected next payday and "Salary came: start a new month" (a date no later than today).
+class _NewMonthTile extends StatelessWidget {
+  final WalletController wc;
+  final String nextPayday;
+  const _NewMonthTile({required this.wc, required this.nextPayday});
+
+  Future<void> _start(BuildContext context) async {
+    logNav('month.pick');
+    final d = await showDatePicker(context: context, initialDate: wc.now, firstDate: DateTime(2020), lastDate: wc.now);
+    if (d == null) return;
+    wc.startNewMonth(isoDate(d));
+    if (context.mounted) toast(context, 'New month started ${shortDate(isoDate(d))}');
+  }
+
+  @override
+  Widget build(BuildContext context) => Tile(
+        key: const ValueKey('reportNewMonth'),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+          const TileLabel('Next payday'),
+          const SizedBox(height: 6),
+          Text('Expected ${shortDate(nextPayday)}',
+              key: const ValueKey('reportNextPayday'), style: dashNumStyle(size: 20, color: context.c.ink)),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            key: const ValueKey('startNewMonth'),
+            icon: const Icon(Icons.event_repeat),
+            label: const Text('Salary came: start a new month'),
+            onPressed: () => _start(context),
+          ),
+        ]),
+      );
 }
 
 /// One square per day of the period, shaded by the flexible money spent that day (relative to the period's biggest day). A tap on a

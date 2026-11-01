@@ -56,7 +56,7 @@ class _DashParentData extends ContainerBoxParentData<RenderBox> {
 /// Tiles in 1, 2 or 4 columns, in the same reading order at every size. Columns come from the window ([sizeFor]: compact and medium 2,
 /// expanded 4) and drop (4 → 2 → 1) while a column would be under [minColumn] dp scaled by the text scale (130 dp at 1.0, 260 dp at
 /// 2.0), so 320 dp at text scale 2.0 and 360 dp at 2.0 get one column. A tile's row is as tall as its tallest tile; a [DashItem] with
-/// `rowSpan` 2 is as tall as two rows, the next tiles fill the cells beside it. Children are tiles, optionally wrapped in [DashItem].
+/// `rowSpan` 2 is as tall as two rows, the next tiles fill the cells beside it. When the next tile does not fit in the cells a row has left, the tiles of that row take them (each one cell wider, the last first): no empty cell above the last row. Children are tiles, optionally wrapped in [DashItem].
 class DashGrid extends MultiChildRenderObjectWidget {
   final double gap;
   final double minColumn;
@@ -93,8 +93,9 @@ class DashGrid extends MultiChildRenderObjectWidget {
 
 class _Place {
   final RenderBox child;
-  final int row, col, span, rows;
-  final double width;
+  final int row, rows;
+  int col, span;
+  double width;
   double natural = 0;
   _Place(this.child, this.row, this.col, this.span, this.rows, this.width);
   int get end => row + rows - 1;
@@ -157,6 +158,28 @@ class _RenderDash extends RenderBox
       final rows = span < cols ? data.rowSpan.clamp(1, 1 << 10) : 1;
       while (true) {
         if (c + span > cols) {
+          // Cells are left at the end of this row and the next tile does not fit in them: the tiles of the row share them, so no
+          // empty cell stays above the last row (the hero is one row tall since UX-A, which no longer absorbs odd counts).
+          final rowPlaces = [
+            for (final q in places)
+              if (q.row == r && q.rows == 1) q
+          ];
+          if (c > 0 && rowPlaces.isNotEmpty && rowPlaces.fold<int>(0, (n, q) => n + q.span) == c) {
+            for (var i = 0; i < cols - c; i++) {
+              rowPlaces[rowPlaces.length - 1 - i % rowPlaces.length].span++;
+            }
+            var col = 0;
+            for (final q in rowPlaces) {
+              q.col = col;
+              col += q.span;
+              q.width = colW * q.span + _gap * (q.span - 1);
+              q.child.layout(BoxConstraints.tightFor(width: q.width), parentUsesSize: true);
+              q.natural = q.child.size.height;
+            }
+            for (var cc = c; cc < cols; cc++) {
+              taken[r][cc] = true;
+            }
+          }
           r++;
           c = 0;
         } else if (!free(r, c, span, rows)) {

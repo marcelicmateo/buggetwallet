@@ -107,7 +107,8 @@ class TodayScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(pagePad, 12, pagePad, pageBottomPad),
         children: [
           DashGrid(children: [
-            DashItem(span: 2, rowSpan: 2, child: _Hero(f)),
+            // Two cells wide, one row tall: its height follows its content (a 2x2 hero left a block of empty paper under the figure, UX-A).
+            DashItem(span: 2, child: _Hero(f)),
             // What needs the owner first.
             if (f.ended && f.newPayday == null) DashItem(span: 2, child: _PeriodEndedTile(f)),
             if (f.setupSteps.isNotEmpty)

@@ -5,6 +5,7 @@ import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart' show validIban;
 
 import '../controller.dart';
+import '../date_length.dart';
 import '../file_chooser.dart';
 import '../format.dart';
 import '../layout.dart';
@@ -16,6 +17,7 @@ import '../widgets/common.dart';
 import '../widgets/sheets.dart';
 import 'pay_sheet.dart';
 
+part 'bill_sheet_dates.dart';
 part 'bill_sheet_sections.dart';
 
 /// Opens one bill (the sheet with its fields) and shows the toast for its result. [chooser] saves the original file where it cannot

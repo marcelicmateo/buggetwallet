@@ -321,18 +321,27 @@ class _BillWarranty extends StatelessWidget {
       const SizedBox(height: 14),
       const SectionHead('Warranty and returns'),
       const SizedBox(height: 6),
-      Wrap(spacing: 12, runSpacing: 8, children: [
-        SizedBox(
-            width: 200,
-            child: v.dateButton('Warranty until', b.warrantyUntil, (x) {
-              s._saveDates(b, warrantyUntil: x, clearWarranty: x == null);
-            }, clearable: true)),
-        SizedBox(
-            width: 200,
-            child: v.dateButton('Return by', b.returnBy, (x) {
-              s._saveDates(b, returnBy: x, clearReturnBy: x == null);
-            }, clearable: true)),
-      ]),
+      _LengthDate(
+          key: const ValueKey('warrantyDate'),
+          v: v,
+          id: 'warranty',
+          label: 'Warranty until',
+          value: b.warrantyUntil,
+          maxReminder: WalletSettings.maxWarrantyReminderDays,
+          reminderDays: v.wc.billReminderDays(b, warranty: true),
+          saveReminder: (n) => v.wc.setBillReminderDays(b.id, warrantyDays: n),
+          onDate: (x) => s._saveDates(b, warrantyUntil: x, clearWarranty: x == null)),
+      const SizedBox(height: 14),
+      _LengthDate(
+          key: const ValueKey('returnDate'),
+          v: v,
+          id: 'return',
+          label: 'Return by',
+          value: b.returnBy,
+          maxReminder: WalletSettings.maxReturnReminderDays,
+          reminderDays: v.wc.billReminderDays(b, warranty: false),
+          saveReminder: (n) => v.wc.setBillReminderDays(b.id, returnDays: n),
+          onDate: (x) => s._saveDates(b, returnBy: x, clearReturnBy: x == null)),
       if (v.review)
         const Padding(
             padding: EdgeInsets.only(top: 4), child: Muted('Shown in Upcoming once the bill is confirmed.', size: BwType.metaSize)),

@@ -440,7 +440,9 @@ void main() {
       }
 
       final wide = await boxes(const Size(1280, 800), 1.0);
-      expect(wide.first.width, greaterThan(wide.map((b) => b.width).reduce((a, b) => a < b ? a : b)), reason: 'the hero spans two columns');
+      final column = (tester.getSize(find.byType(DashGrid)).width - 3 * 10) / 4;
+      expect(wide.first.width, closeTo(2 * column + 10, 1), reason: 'the hero spans two columns');
+      expect(wide.first.height, lessThan(wide.first.width), reason: 'one row tall: no block of empty paper under the figure');
       expect(wide[1].left, greaterThanOrEqualTo(wide.first.right), reason: 'the next tile sits right of the hero');
       expect(wide[1].top, closeTo(wide.first.top, 1));
       final phone = await boxes(const Size(360, 800), 1.0);

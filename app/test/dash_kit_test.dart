@@ -422,6 +422,35 @@ void main() {
       expect(_rect(tester, 't1').top, greaterThan(_rect(tester, 'hero').bottom));
     });
 
+    testWidgets('cells a row has left are shared by its tiles when the next tile does not fit: no hole above the last row', (tester) async {
+      Widget grid(List<Widget> children) =>
+          Padding(padding: const EdgeInsets.all(16), child: SingleChildScrollView(child: DashGrid(children: children)));
+      Widget tile(String k) => StatTile(key: ValueKey(k), label: k, value: '1 €');
+      // Hero (2) + one tile leaves one cell; the next tile is two wide: the tile beside the hero takes the cell.
+      await _pump(
+          tester,
+          grid([
+            DashItem(span: 2, child: tile('hero')),
+            tile('a'),
+            DashItem(span: 2, child: tile('wide')),
+            tile('last'),
+          ]),
+          size: const Size(1280, 800));
+      final hero = _rect(tester, 'hero'), a = _rect(tester, 'a'), wide = _rect(tester, 'wide');
+      expect(a.left, greaterThan(hero.right - 1));
+      expect(a.width, closeTo(hero.width, 1), reason: 'two cells wide now');
+      expect(a.right, closeTo(hero.right + 10 + a.width, 1));
+      expect(wide.top, greaterThan(a.bottom));
+      expect(wide.left, hero.left);
+      // Two cells left before a full-width tile: the two tiles of the row grow by one cell each.
+      await _pump(tester, grid([tile('p'), tile('q'), DashItem(span: 4, child: tile('full')), tile('z')]), size: const Size(1280, 800));
+      expect(_rect(tester, 'p').width, closeTo(_rect(tester, 'full').width / 2 - 5, 1));
+      expect(_rect(tester, 'q').width, closeTo(_rect(tester, 'p').width, 1));
+      expect(_rect(tester, 'q').right, closeTo(_rect(tester, 'full').right, 1));
+      // The last row stays short.
+      expect(_rect(tester, 'z').width, lessThan(_rect(tester, 'full').width / 3));
+    });
+
     testWidgets('HeroTile: exact figure in a FittedBox, chip, dots slot and a pace meter, one spoken sentence', (tester) async {
       final handle = tester.ensureSemantics();
       await _pump(

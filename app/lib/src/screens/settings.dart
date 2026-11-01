@@ -56,7 +56,6 @@ List<Widget> settingsPanels(BuildContext context, WalletController wc, SettingsS
         if (!isWeb) NudgesPanel(wc: wc),
         ReviewDayPanel(wc: wc),
       ],
-    SettingsSection.month => [keyed(MonthPanel(wc: wc))],
     SettingsSection.look => [keyed(LookPanel(wc: wc))],
     SettingsSection.diagnostics => [keyed(DiagnosticsPanel(wc: wc, chooser: chooser))],
     SettingsSection.currencies => const [],

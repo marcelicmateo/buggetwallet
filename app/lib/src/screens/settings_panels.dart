@@ -1,12 +1,9 @@
-// Small Settings panels that used to be inline in the Plan tab (P5): Import, Month, Weekly review day, Another wallet, This browser.
+// Small Settings panels that used to be inline in the Plan tab (P5): Import, Weekly review day, Another wallet, This browser.
 // Behaviour and keys are unchanged.
 import 'package:flutter/material.dart';
-import 'package:wallet_core/wallet_core.dart';
 
 import '../controller.dart';
 import '../file_chooser.dart';
-import '../format.dart';
-import '../logging.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'forget_browser.dart';
@@ -61,31 +58,6 @@ class _ImportPanelState extends State<ImportPanel> {
         ),
         for (final l in widget.wc.lastImport) StatusLabel(good: l.ok, text: '${l.file}: ${l.message}'),
       ]);
-}
-
-/// Settings › Month: start a new pay month by hand.
-class MonthPanel extends StatelessWidget {
-  final WalletController wc;
-  const MonthPanel({super.key, required this.wc});
-  @override
-  Widget build(BuildContext context) {
-    final p = wc.period();
-    return Panel(children: [
-      const SectionHead('Month'),
-      Muted('Your month runs from the day your salary lands. Started ${shortDate(p.start)}; next payday expected by ${shortDate(p.end)}.'),
-      OutlinedButton.icon(
-        icon: const Icon(Icons.event_repeat),
-        label: const Text('Salary landed: start new month'),
-        onPressed: () async {
-          logNav('month.pick');
-          final d = await showDatePicker(context: context, initialDate: wc.now, firstDate: DateTime(2020), lastDate: wc.now);
-          if (d == null) return;
-          wc.startNewMonth(isoDate(d));
-          if (context.mounted) toast(context, 'New month started ${shortDate(isoDate(d))}');
-        },
-      ),
-    ]);
-  }
 }
 
 /// Settings › Weekly review day.
