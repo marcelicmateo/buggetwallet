@@ -1,6 +1,8 @@
 package webdev
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -90,12 +92,24 @@ func ListenLoopback(port string) (net.Listener, error) {
 }
 
 // ServeDir is `web _serve <dir> <port>`: the detached static file server of `web serve`, in the foreground of its own process.
-// It runs until it is killed.
-func ServeDir(dir, port string, logw io.Writer) error {
+// It runs until ctx ends (SIGTERM and SIGINT reach it through the tool's signal handling; `web stop` sends SIGTERM) or the
+// listener fails; a clean stop returns nil.
+func ServeDir(ctx context.Context, dir, port string, logw io.Writer) error {
 	ln, err := ListenLoopback(port)
 	if err != nil {
 		return err
 	}
 	srv := &http.Server{Handler: Handler(dir, logw), ReadHeaderTimeout: 30 * time.Second}
-	return srv.Serve(ln)
+	go func() {
+		<-ctx.Done()
+		shut, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if srv.Shutdown(shut) != nil {
+			_ = srv.Close()
+		}
+	}()
+	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return nil
 }

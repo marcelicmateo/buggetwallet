@@ -58,7 +58,7 @@ func Dispatch(c *run.Ctx, cmd string, rest []string, self string, usage func() i
 			if len(rest) != 3 {
 				return usage(), true
 			}
-			if err := webdev.ServeDir(rest[1], rest[2], os.Stderr); err != nil {
+			if err := webdev.ServeDir(c.Ctx, rest[1], rest[2], os.Stderr); err != nil {
 				fmt.Fprintf(os.Stderr, "web server: %v\n", err)
 				return 1, true
 			}

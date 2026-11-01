@@ -2,6 +2,7 @@ package webdev
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func site(t *testing.T) string {
@@ -150,7 +152,46 @@ func TestListenLoopbackOnly(t *testing.T) {
 	}
 	// a second server on the same port fails
 	_, port, _ := net.SplitHostPort(ln.Addr().String())
-	if err := ServeDir(t.TempDir(), port, io.Discard); err == nil {
+	if err := ServeDir(context.Background(), t.TempDir(), port, io.Discard); err == nil {
 		t.Error("a busy port was accepted")
+	}
+}
+
+// SIGTERM reaches the detached server as a cancelled context: it must stop and free the port (`web stop` relies on it).
+func TestServeDirStopsWhenTheContextEnds(t *testing.T) {
+	ln, err := ListenLoopback("0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, port, _ := net.SplitHostPort(ln.Addr().String())
+	ln.Close()
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "index.html"), []byte("hi"), 0o644)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- ServeDir(ctx, dir, port, io.Discard) }()
+	var resp *http.Response
+	for i := 0; i < 100; i++ {
+		if resp, err = http.Get("http://127.0.0.1:" + port + "/"); err == nil {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if err != nil {
+		t.Fatalf("server did not come up: %v", err)
+	}
+	resp.Body.Close()
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("ServeDir returned %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("ServeDir did not stop")
+	}
+	if c, err := net.Dial("tcp", "127.0.0.1:"+port); err == nil {
+		c.Close()
+		t.Error("port still open")
 	}
 }
