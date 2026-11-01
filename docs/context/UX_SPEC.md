@@ -53,6 +53,9 @@ switched on a guess; suggestions ask), synthetic data only, logs carry no amount
    its value in the wallet currency uses the hand-set rate (§1). `addAccount(...)` and a new
    `updateAccount(id, {name, kind, institution, source, clearSource})` go through `_write`; refusals throw
    `ArgumentError` with a short message the UI can show.
+5. **Per-bill reminder days** (schema 20): Bill gains `returnReminderDays`, `warrantyReminderDays` (int?, null = the
+   wallet setting as default; ranges 0..30 / 0..90); `updateBill(..., returnReminderDays, warrantyReminderDays,
+   clearReturnReminderDays, clearWarrantyReminderDays)`; reminder scheduling uses each bill's own value.
 4. **Built-in rules editable**: built-in merchant rules get **stable ids** (`builtIn:<slug>`, e.g. `builtIn:lidl`), and every
    stored ref to `builtIn:<index>` is migrated or still resolves. A synced setting `builtInRuleOverrides`
    (id → `{pattern?, category?, off}`) changes a built-in: `editBuiltInRule(id, {pattern, category})`,
@@ -70,9 +73,9 @@ longer matches). One targeted check at the end (`tools/build.sh core` + `sync` +
    "Length" text field that takes `<n>d|w|m|y` (e.g. `45d`, `5y`); lengths count from the bill's purchase date (today if
    it has none). A pure helper `String addLength(String fromIso, String text)` (throws `FormatException` on bad input,
    month-end clamps: 31 Jan + 1m = 28/29 Feb) with unit tests. Clearable as now. Dates are whole days: no hours.
-2. **Reminder, tied to the date it serves**: directly under each date, one line "Reminder N days before · Change" (N =
-   `returnReminderDays` / `warrantyReminderDays`), editing the same global setting inline; the line says it applies to every
-   bill ("for all bills"). Remove the separate "Reminder days" section from the Bills panel.
+2. **Reminder, a property of the bill** (owner correction 2026-11-01: never one shared setting): directly under each date,
+   "Reminder N days before · Change" edits **this bill's** `returnReminderDays` / `warrantyReminderDays` (N = the bill's
+   value, or the wallet default when it has none). Remove the separate "Reminder days" section from the Bills panel.
 3. **Today hero on wide screens** (`today.dart` ~110, `widgets/dash.dart` `HeroTile`): no empty block — on the expanded
    layout the hero is one row tall (or its height follows its content) with the day dots beside the figure; phones unchanged.
    Check with `tools/live.sh` at 1280 and a phone width.
