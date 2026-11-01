@@ -1,0 +1,12 @@
+{"protocolVersion":"0.1.1","runnerVersion":"1.33.0","pid":1,"type":"start","time":0}
+{"suite":{"id":0,"platform":"vm","path":"test/x_test.dart"},"type":"suite","time":0}
+{"test":{"id":1,"name":"loading test/x_test.dart","suiteID":0},"type":"testStart","time":3}
+{"testID":1,"result":"success","skipped":false,"hidden":true,"type":"testDone","time":90}
+{"test":{"id":2,"name":"shard two first","suiteID":0},"type":"testStart","time":50}
+{"testID":2,"result":"success","skipped":false,"hidden":false,"type":"testDone","time":60}
+{"test":{"id":3,"name":"shard two slower","suiteID":0},"type":"testStart","time":60}
+{"testID":3,"result":"success","skipped":false,"hidden":false,"type":"testDone","time":1260}
+{"test":{"id":4,"name":"BUG: named skip","suiteID":0},"type":"testStart","time":1260}
+{"testID":4,"result":"success","skipped":true,"hidden":false,"type":"testDone","time":1261}
+not json at all
+{"success":true,"type":"done","time":1500}

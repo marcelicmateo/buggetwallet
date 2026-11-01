@@ -1,0 +1,19 @@
+--- core: 15 tests, 2 failed, total 10.5 s; per test p50 15 ms, p90 1200 ms, p99 5370 ms, max 5370 ms
+      <10 ms     6  ########################################
+    10-50 ms     3  ####################
+   50-100 ms     1  #######
+  100-500 ms     2  #############
+     0.5-1 s     1  #######
+       1-5 s     1  #######
+        >5 s     1  #######
+  slowest:
+      5370 ms  slow database "open"
+      1200 ms  shard two slower
+       800 ms  half a second
+       170 ms  throws an error  [error]
+       100 ms  medium test
+        50 ms  fifty
+        30 ms  fails on purpose  [failure]
+        15 ms  parses the Kontoauszug äöü line
+        10 ms  shard two first
+         4 ms  adds up

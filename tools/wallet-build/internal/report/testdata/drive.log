@@ -1,0 +1,8 @@
+I/flutter ( 4242): 00:01 +0: loading integration_test/a_test.dart
+I/flutter ( 4242): 00:03 +0: first screen shows
+I/flutter ( 4242): 00:07 +1: second screen opens
+I/flutter ( 4242): 00:08 +2 ~1: skipped one
+I/flutter ( 4242): 00:20 +2 ~1 -1: broken screen
+I/flutter ( 4242): 01:02 +2 ~1 -1: (tearDownAll)
+some other line
+I/flutter ( 4242): 01:03 +2 ~1 -1: Some tests failed.

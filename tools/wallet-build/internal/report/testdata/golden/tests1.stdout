@@ -1,0 +1,19 @@
+--- core: 12 tests, 2 failed, total 9.0 s; per test p50 15 ms, p90 800 ms, p99 5370 ms, max 5370 ms
+      <10 ms     5  ########################################
+    10-50 ms     2  ################
+   50-100 ms     1  ########
+  100-500 ms     2  ################
+     0.5-1 s     1  ########
+       1-5 s     0  
+        >5 s     1  ########
+  slowest:
+      5370 ms  slow database "open"
+       800 ms  half a second
+       170 ms  throws an error  [error]
+       100 ms  medium test
+        50 ms  fifty
+        30 ms  fails on purpose  [failure]
+        15 ms  parses the Kontoauszug äöü line
+         4 ms  adds up
+         2 ms  tiny b
+         1 ms  skipped for now  [skipped]

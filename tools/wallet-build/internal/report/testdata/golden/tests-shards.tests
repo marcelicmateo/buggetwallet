@@ -1,0 +1,15 @@
+{"ts": "2026-11-01T13:35:56+00:00", "run": "20261101-100000-app-abc1234", "source": "local", "commit": "abc1234", "suite": "core", "test": "adds up", "ms": 4, "result": "success"}
+{"ts": "2026-11-01T13:35:56+00:00", "run": "20261101-100000-app-abc1234", "source": "local", "commit": "abc1234", "suite": "core", "test": "parses the Kontoauszug äöü line", "ms": 15, "result": "success"}
+{"ts": "2026-11-01T13:35:56+00:00", "run": "20261101-100000-app-abc1234", "source": "local", "commit": "abc1234", "suite": "core", "test": "slow database \"open\"", "ms": 5370, "result": "success"}
+{"ts": "2026-11-01T13:35:56+00:00", "run": "20261101-100000-app-abc1234", "source": "local", "commit": "abc1234", "suite": "core", "test": "fails on purpose", "ms": 30, "result": "failure"}
+{"ts": "2026-11-01T13:35:56+00:00", "run": "20261101-100000-app-abc1234", "source": "local", "commit": "abc1234", "suite": "core", "test": "throws an error", "ms": 170, "result": "error"}
+{"ts": "2026-11-01T13:35:56+00:00", "run": "20261101-100000-app-abc1234", "source": "local", "commit": "abc1234", "suite": "core", "test": "skipped for now", "ms": 1, "result": "skipped"}
+{"ts": "2026-11-01T13:35:56+00:00", "run": "20261101-100000-app-abc1234", "source": "local", "commit": "abc1234", "suite": "core", "test": "plain skip", "ms": 1, "result": "skipped"}
+{"ts": "2026-11-01T13:35:56+00:00", "run": "20261101-100000-app-abc1234", "source": "local", "commit": "abc1234", "suite": "core", "test": "medium test", "ms": 100, "result": "success"}
+{"ts": "2026-11-01T13:35:56+00:00", "run": "20261101-100000-app-abc1234", "source": "local", "commit": "abc1234", "suite": "core", "test": "half a second", "ms": 800, "result": "success"}
+{"ts": "2026-11-01T13:35:56+00:00", "run": "20261101-100000-app-abc1234", "source": "local", "commit": "abc1234", "suite": "core", "test": "tiny a", "ms": 1, "result": "success"}
+{"ts": "2026-11-01T13:35:56+00:00", "run": "20261101-100000-app-abc1234", "source": "local", "commit": "abc1234", "suite": "core", "test": "tiny b", "ms": 2, "result": "success"}
+{"ts": "2026-11-01T13:35:56+00:00", "run": "20261101-100000-app-abc1234", "source": "local", "commit": "abc1234", "suite": "core", "test": "fifty", "ms": 50, "result": "success"}
+{"ts": "2026-11-01T13:35:56+00:00", "run": "20261101-100000-app-abc1234", "source": "local", "commit": "abc1234", "suite": "core", "test": "shard two first", "ms": 10, "result": "success"}
+{"ts": "2026-11-01T13:35:56+00:00", "run": "20261101-100000-app-abc1234", "source": "local", "commit": "abc1234", "suite": "core", "test": "shard two slower", "ms": 1200, "result": "success"}
+{"ts": "2026-11-01T13:35:56+00:00", "run": "20261101-100000-app-abc1234", "source": "local", "commit": "abc1234", "suite": "core", "test": "BUG: named skip", "ms": 1, "result": "skipped"}

@@ -1,0 +1,1 @@
+{"ts": "2026-11-01T13:35:56+00:00", "run": "20261101-100000-app-abc1234", "source": "local", "worktree": "wt", "commit": "abc1234", "cmd": "app", "image": "img:1", "cold": false, "step": "core", "kind": "tests", "count": 15, "failed": 2, "total_ms": 10500, "p50": 15, "p90": 1200, "p99": 5370, "max": 5370, "slowest": "slow database \"open\"", "slowest_ms": 5370}

@@ -1,0 +1,5 @@
+slowest 3 tests over the last 4 runs (ms, oldest -> newest):
+test                     11-01 10:00  11-02 10:00  11-03 10:00  11-04 10:00
+core: gamma: odd é name            5            5         7000            5
+app: beta                        900          800          700          600
+core: alpha                       10           20           30           40
