@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -288,8 +289,20 @@ func TestDesktopTestParallelShards(t *testing.T) {
 	if shards != 5 {
 		t.Errorf("layout shards: %d", shards)
 	}
-	if !displays["101"] || !displays["102"] || len(displays) > 2 {
-		t.Errorf("each worker needs its own display (101, 102): %v", displays)
+	// Which workers get units depends on scheduling (one fast worker may claim every unit), so check per call:
+	// worker N (app copy dist/desktop-test/wN) must use display 100+N, never another worker's.
+	for _, c := range r.fake.Calls {
+		argv := strings.Join(c.Argv, " ")
+		if !strings.Contains(argv, "flutter test integration_test/") {
+			continue
+		}
+		m := regexp.MustCompile(`dist/desktop-test/w(\d+)(/|$)`).FindStringSubmatch(c.Dir)
+		if m == nil || !strings.Contains(argv, "xvfb-run -n 10"+m[1]+" ") {
+			t.Errorf("worker needs its own display 10N: dir %s argv %s", c.Dir, argv)
+		}
+	}
+	if len(displays) == 0 || len(displays) > 2 {
+		t.Errorf("displays: %v", displays)
 	}
 	// each worker works in its own copy of app/
 	for _, c := range r.fake.Calls {
