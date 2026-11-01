@@ -1,0 +1,2 @@
+{"type": "assistant", "timestamp": "2026-10-21T15:00:00.000Z", "requestId": "q1", "message": {"id": "msg_q1", "model": "claude-opus-x", "usage": {"input_tokens": 5, "cache_creation_input_tokens": 10, "cache_read_input_tokens": 20, "output_tokens": 250}}}
+{"type": "assistant", "timestamp": "2026-10-22T15:00:00.000Z", "requestId": "q2", "message": {"id": "msg_q2", "model": "claude-haiku-x", "usage": {"input_tokens": 6, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 1, "output_tokens": 60}}}
