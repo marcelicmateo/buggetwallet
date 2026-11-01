@@ -366,6 +366,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('accountAdd')));
     await tester.pumpAndSettle();
+    await tapKey('accountKind:bank');
+    await binding.takeScreenshot('10-account-form-bank');
     await tapKey('accountKind:crypto');
     await binding.takeScreenshot('10-account-form-crypto');
     await tapKey('accountCurrency');

@@ -25,19 +25,6 @@ class _BillView {
       helperText: guessed && filled ? 'Unsure: read from text. Check it.' : null,
       helperMaxLines: 2,
       suffixIcon: guessed && filled ? Icon(Icons.help_outline, size: 18, color: context.c.warnInk) : null);
-
-  Widget dateButton(String label, String? value, ValueChanged<String?> onPick, {bool clearable = false, bool guess = false}) {
-    return DateField(
-      label: label,
-      value: value,
-      helper: guess && value != null ? 'Unsure: check it.' : null,
-      onPick: () async {
-        final d = await s._pick(value);
-        if (d != null) s.edit(() => onPick(d));
-      },
-      onClear: clearable ? () => s.edit(() => onPick(null)) : null,
-    );
-  }
 }
 
 /// A column that takes the sheet's width and only as much height as its children need (one section of the form).
@@ -115,7 +102,8 @@ class _BillTotal extends StatelessWidget {
   }
 }
 
-/// Date and due date.
+/// Date and due date: draft fields of the sheet (kept in `dates`, written by Save), listed by column. The Date stays when empty (Confirm
+/// needs it), so only the due date can be cleared.
 class _BillDates extends StatelessWidget {
   const _BillDates(this.v);
   final _BillView v;
@@ -123,8 +111,18 @@ class _BillDates extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = v.s;
     return Wrap(spacing: 12, runSpacing: 8, children: [
-      SizedBox(width: 200, child: v.dateButton('Date', s.date, (x) => s.date = x, guess: v.guessed)),
-      SizedBox(width: 200, child: v.dateButton('Due date', s.due, (x) => s.due = x, clearable: true, guess: v.guessed)),
+      for (final (c, clearable) in const [(BillCols.date, false), (BillCols.dueDate, true)])
+        SizedBox(
+            width: 200,
+            child: FieldEditor(c,
+                value: s.dates[c],
+                today: v.wc.today(),
+                lengths: false,
+                clearable: clearable,
+                helper: v.guessed && s.dates[c] != null ? 'Unsure: check it.' : null, onSave: (x) {
+              s.edit(() => s.dates[c] = x as String?);
+              return null;
+            })),
     ]);
   }
 }
@@ -315,38 +313,53 @@ class _BillPaid extends StatelessWidget {
   }
 }
 
-/// Warranty-until and return-by dates (saved as soon as they are picked).
+/// What the editor cannot know about a date column: the words its keys and tests use, and the reminder column under it.
+const _dateExtras = {
+  BillCols.warrantyUntil: (id: 'warranty', key: 'warrantyDate', reminder: BillCols.warrantyReminderDays),
+  BillCols.returnBy: (id: 'return', key: 'returnDate', reminder: BillCols.returnReminderDays),
+};
+
+/// Warranty-until and return-by dates (saved as soon as they are picked), each with its reminder line once it has a date. A new date
+/// column of the bill is one more entry in the list below.
 class _BillWarranty extends StatelessWidget {
   const _BillWarranty(this.v);
   final _BillView v;
+
+  Widget _date(DateCol c) {
+    final b = v.b, wc = v.wc, x = _dateExtras[c], value = b[c] as String?, reminder = x?.reminder;
+    String? save(Col col, Object? val) => wc.patchField(BillCols.entity, b.id, col, val);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      FieldEditor(c,
+          key: x == null ? null : ValueKey(x.key),
+          id: x?.id,
+          value: value,
+          today: wc.today(),
+          lengthFrom: b.date,
+          onSave: (val) => save(c, val)),
+      if (value != null && reminder != null)
+        Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: FieldEditor(reminder,
+                id: '${x!.id}:reminder',
+                label: 'Reminder',
+                editPrompt: 'Remind me',
+                zeroText: 'Reminder on the day',
+                value: wc.billReminderDays(b, warranty: reminder == BillCols.warrantyReminderDays),
+                today: wc.today(),
+                onSave: (val) => save(reminder, val))),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final b = v.b, s = v.s;
     return _sectionColumn([
       const SizedBox(height: 14),
       const SectionHead('Warranty and returns'),
       const SizedBox(height: 6),
-      _LengthDate(
-          key: const ValueKey('warrantyDate'),
-          v: v,
-          id: 'warranty',
-          label: 'Warranty until',
-          value: b.warrantyUntil,
-          maxReminder: WalletSettings.maxWarrantyReminderDays,
-          reminderDays: v.wc.billReminderDays(b, warranty: true),
-          saveReminder: (n) => v.wc.setBillReminderDays(b.id, warrantyDays: n),
-          onDate: (x) => s._saveDates(b, warrantyUntil: x, clearWarranty: x == null)),
-      const SizedBox(height: 14),
-      _LengthDate(
-          key: const ValueKey('returnDate'),
-          v: v,
-          id: 'return',
-          label: 'Return by',
-          value: b.returnBy,
-          maxReminder: WalletSettings.maxReturnReminderDays,
-          reminderDays: v.wc.billReminderDays(b, warranty: false),
-          saveReminder: (n) => v.wc.setBillReminderDays(b.id, returnDays: n),
-          onDate: (x) => s._saveDates(b, returnBy: x, clearReturnBy: x == null)),
+      for (final (i, c) in const [BillCols.warrantyUntil, BillCols.returnBy].indexed) ...[
+        if (i > 0) const SizedBox(height: 14),
+        _date(c),
+      ],
       if (v.review)
         const Padding(
             padding: EdgeInsets.only(top: 4), child: Muted('Shown in Upcoming once the bill is confirmed.', size: BwType.metaSize)),
