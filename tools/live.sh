@@ -35,6 +35,22 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
+# The Go port (tools/wallet-build, `wallet-build live`) takes over when BW_IMPL=go (to try it) or when this script is in the auto
+# list of the case below (empty: still bash). BW_IMPL=bash keeps this script; natively (BW_NATIVE=1) auto means bash.
+# Exit 3 = the tool did not build. A command joins the auto list only after its parity case passes. Like this script, the port has
+# no quiet mode (-q is a usage error, BW_QUIET is ignored).
+impl=${BW_IMPL:-auto}
+[[ $impl == auto && ${BW_NATIVE:-} == 1 ]] && impl=bash
+case "$impl" in
+  go)
+    mkdir -p "$ROOT/dist/bin"
+    if ! (cd "$ROOT/tools/wallet-build" && GOTOOLCHAIN=local CGO_ENABLED=0 go build -trimpath -o "$ROOT/dist/bin/wallet-build" .) \
+      > "$ROOT/dist/wallet-build-build.log" 2>&1; then
+      cat "$ROOT/dist/wallet-build-build.log" >&2
+      exit 3
+    fi
+    exec "$ROOT/dist/bin/wallet-build" live "$@" ;;
+esac
 CMD=${1:-status}
 NAME=bw-live-$(basename "$ROOT" | tr -c 'a-zA-Z0-9_.\n-' '-')
 POD=bw-$(basename "$ROOT" | tr -c 'a-zA-Z0-9_.\n-' '-')

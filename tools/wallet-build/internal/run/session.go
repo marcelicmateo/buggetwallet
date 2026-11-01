@@ -148,7 +148,7 @@ func DefaultTimeout(env sys.Env, name string) time.Duration {
 		return sec(1200)
 	case "apk":
 		return sec(2400)
-	case "image":
+	case "image", "emulator-image":
 		return sec(3600)
 	}
 	return 0

@@ -260,7 +260,9 @@ func heavyCases(t *testing.T, repo string) []Case {
 func TestParity(t *testing.T) {
 	repo := repoRoot(t)
 	t.Logf("repo %s; comparing bash with %q (BW_PARITY_IMPL), heavy=%v", repo, implName(), os.Getenv(heavyEnv) == "1")
-	for _, c := range append(cheapCases(t, repo), heavyCases(t, repo)...) {
+	all := append(cheapCases(t, repo), go2Cheap(t, repo)...)
+	all = append(append(all, heavyCases(t, repo)...), go2Heavy(t, repo)...)
+	for _, c := range all {
 		t.Run(c.Name, func(t *testing.T) { runCase(t, c) })
 	}
 }

@@ -1,0 +1,9 @@
+Launching tool/live_demo.dart on Linux in debug mode...
+[{"event":"daemon.connected","params":{"version":"0.6.1","pid":42,"dtdUri":"ws://127.0.0.1:41000/dtdtoken="}}]
+[{"event":"app.start","params":{"appId":"app-id-1","deviceId":"linux","directory":"/x","supportsRestart":true,"launchMode":"run","mode":"debug"}}]
+not json at all [{
+[{"event":"app.debugPort","params":{"appId":"app-id-1","port":38000,"wsUri":"ws://127.0.0.1:38000/AbC=/ws"}}]
+[{"event":"app.devTools","params":{"appId":"app-id-1","uri":"http://127.0.0.1:9100/"}}]
+[{"event":"app.dtd","params":{"appId":"app-id-1","uri":"ws://127.0.0.1:41001/own="}}]
+[{"event":"app.started","params":{"appId":"app-id-1"}}]
+[{"id":5,"result":{"code":0,"message":"Reloaded 3 libraries"}}]

@@ -1,0 +1,32 @@
+Live mode: the Linux desktop app in debug mode (`flutter run -d linux`) in the build container, kept running in the
+background so you can click in it while Claude hot-reloads, reads the widget tree and takes screenshots.
+
+  tools/live.sh start [--headless] [--demo] [--profile] [--fresh]
+                         build and start the app; returns once the first frame is up and prints the VM service,
+                         DTD and DevTools addresses. The window opens on your desktop (Wayland only).
+                         --headless  virtual display (Xvfb), like tools/build.sh desktop-test; also used when
+                                     there is no Wayland session
+                         --demo      the synthetic demo wallet of the screenshot tests (app/tool/live_demo.dart)
+                         --profile   profile build: real performance, no hot reload (use `trace`)
+                         --fresh     start with an empty wallet folder
+  tools/live.sh reload   hot reload (keeps state)          tools/live.sh restart   hot restart (state reset)
+  tools/live.sh shot [file]   screenshot of the app -> file (default dist/screens/live.png); --profile: --headless only
+  tools/live.sh trace start   record the performance timeline from now on
+  tools/live.sh trace stop [name]   save it -> <run dir>/trace-<name>.json (Perfetto / DevTools) + -summary.txt
+                         (frames, build/raster p50/p90/max, frames over 16 ms)
+  tools/live.sh status   addresses, mode, wallet folder, logs        tools/live.sh stop   stop it, keep the logs
+  tools/live.sh mcp      Dart MCP server for Claude Code (same as tools/build.sh mcp, see .mcp.json). In Claude Code:
+                         its `dtd` tool, command connect, uri = the dtd line of `status`; then hot_reload,
+                         get_runtime_errors, widget_inspector work on this app.
+
+Privacy: the app's data (wallet, key file, logs, Documents) is a throwaway folder in dist/live/demo/ (--demo) or
+dist/live/wallet/; the container sees only the repo, never your home folder or the real wallet, and gets its own
+D-Bus session (no keyring, no host portal). File pickers (import, Syncthing folder, save logs) open a GTK dialog from
+a portal running on that private bus, drawn in the app's Wayland window; it sees only the container's folders (the
+repo, this run's log folder and history/ — not device-logs/) and /files = ~/.local/share/budget-wallet/live-files on
+the host (copy test bank files there; saved logs land there). The window uses only the Wayland socket: no X11 (an X11 client can read other windows
+and keystrokes). Claude drives the app only from inside (VM service, the dart MCP server), never with host input
+tools (xdotool, ydotool, uinput), and screenshots come from the app or the container's Xvfb, never your screen.
+Network: the app and the MCP server (tools/build.sh mcp) share a pod (bw-<checkout folder>), so the MCP server
+reaches the app's VM service and DTD; only the VM service/DevTools port is published, on the host's 127.0.0.1.
+Logs: the run's folder (dist/logs -> ~/.local/share/budget-wallet/runs/…-live-…): flutter-run.jsonl, app-live.log,

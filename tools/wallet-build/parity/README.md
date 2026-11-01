@@ -1,7 +1,7 @@
 # wallet-build parity tests
 
 Own Go module (`wallet-build/parity`, standard library only), build tag `parity`. Each case runs the same
-`tools/build.sh <args>` twice, never at the same time: once with `BW_IMPL=bash`, once with `BW_IMPL=$BW_PARITY_IMPL`
+`tools/build.sh <args>` (GO2 cases: `tools/emulator.sh` or `tools/live.sh`, the `Script` field of a case) twice, never at the same time: once with `BW_IMPL=bash`, once with `BW_IMPL=$BW_PARITY_IMPL`
 (default `go`), each with its own temp `BW_DATA_DIR`. Run from the host:
 
     cd tools/wallet-build/parity
@@ -33,6 +33,40 @@ New behaviour, Go side only (`TestNewBehaviour/<name>`, skipped for `BW_PARITY_I
 `exit3_tool_does_not_build` (copy of `tools/` and `dev/` in a temp dir with a syntax error added; exit 3, a non-empty
 `dist/*build*.log`, no run dir), `interrupted_desktop_test_leaves_no_container` (heavy: SIGINT mid-run, exit 130 or 143,
 no container left, no `.running`).
+
+## GO2: emulator and live (`emu_live_test.go`)
+
+Entry script per case (`Case.Script`); a sequence case (`Case.Steps`) runs several invocations on one data dir, one side
+after the other (never two containers at once), stops at the first non-zero exit, and runs `Cleanup` (a `stop`, with
+`BW_IMPL=bash`) after each side. Per step the command, exit code, masked stdout and masked stderr are compared.
+
+Cheap (skipped with the reason when podman is missing or a `bw-emulator` / `bw-live-<checkout>` container already runs, so
+nothing of the owner's is observed or touched):
+- usage: `emulator_usage_unknown_command`, `live_usage_unknown_command`, `live_usage_start_bad_flag`,
+  `live_usage_start_headless_bad_flag` (exit 2, stdout and stderr compared, no run dir);
+- quiet (emulator: zero bytes): `emulator_quiet_flag_unknown_command`, `..._long_flag_...`, `..._env_unknown_command`,
+  `emulator_quiet_flag_stop`, `emulator_quiet_env_stop`, `emulator_quiet_flag_adb_not_running`. `live.sh` has no `-q` in bash:
+  `live_quiet_flag_status_parity` (`-q status` is a usage error there) and `live_quiet_env_status_parity` only compare the
+  two implementations, no zero-byte assertion;
+- nothing running: `emulator_stop|adb|shot|install_not_running` (+ `shot` without a name), `live_status|stop|reload|restart|
+  shot|trace_start|trace_stop_not_running`, `live_no_args_is_status` (exit codes, "not running", "Start one with" lines, no run dir);
+- `live_pod`: prints the checkout's pod name; the pod it created is removed after each side (skipped when the pod already
+  exists, the MCP server may use it).
+- Not covered on purpose: `emulator.sh reset` (with nothing running it deletes the real `bw-emulator*` volumes; "refused while
+  running" would need a running emulator).
+
+Heavy (`BW_PARITY_HEAVY=1`; emulator cases also skip when the volumes `bw-emulator` / `bw-emulator-image` are missing):
+`emulator_screens`, `emulator_test_one_small_file` (history steps prepare, boot, build, install, test, total; run dir logs,
+summary structure, screenshot names), `emulator_start_install_shot_stop` (needs `dist/BudgetWallet-android.apk`; also
+`adb shell echo`), `live_headless_demo_session` (`start --headless --demo --fresh`, `reload`, `restart`, `shot`,
+`trace start`, `trace stop t`, `status`, `stop`; run dir `flutter-run.jsonl`, `app-live.log`, `shot-*.png`, `trace-t.json`
+(`traceEvents`, `displayTimeUnit`), `trace-t-summary.txt` structure; history `live-start`, `live-reload`, `live-restart`).
+Heavy live cases are headless only (privacy: no window, no host X11 or Wayland). `dist/screens` (emulator screens) and
+`dist/screens/live.png` are deleted before each side.
+
+Extra masking for the sequences: `http(s)://` and `ws://` URIs, `127.0.0.1:PORT`, `NN KB`, `shot-HHMMSS.png`, the optional
+`(main() to first frame: N ms)`, and every number in `timeline:` / `build` / `raster` trace lines and in
+`trace-*-summary.txt`.
 
 ## What is compared (after masking)
 
