@@ -71,11 +71,12 @@ func seqLines(s *side) []string {
 	return out
 }
 
-// traceStructure: the trace summary with every number replaced (the figures follow the machine's load).
+// traceStructure: the trace summary with every number replaced (the figures follow the machine's load) and whitespace
+// runs collapsed: the columns are padded to the number's width, so "p90=  12.3" and "p90=   3.2" are the same shape.
 func traceStructure(txt string) []string {
 	var out []string
 	for _, ln := range lines(txt) {
-		out = append(out, reDigits.ReplaceAllString(ln, "#"))
+		out = append(out, strings.Join(strings.Fields(reDigits.ReplaceAllString(ln, "#")), " "))
 	}
 	return out
 }
@@ -338,7 +339,9 @@ func go2Heavy(t *testing.T, repo string) []Case {
 		checkStepsInHistory(emuSteps...))
 	out = append(out, h(screens))
 
-	if small := smallDesktopTests(t, repo, 1); len(small) == 1 {
+	// A file that runs on Android: the smallest one by size can be desktop-only (chart_dpr skips every test there, and
+	// flutter drive then waits for the driver extension without end). onboarding runs on both, ~60 s on the emulator.
+	if small := []string{"onboarding"}; fileExists(filepath.Join(repo, "app/integration_test/onboarding_test.dart")) {
 		et := mkS(E, "emulator_test_one_small_file", 0, "test", small[0])
 		et.Artifacts = []string{"dist/screens/" + small[0]}
 		et.SkipIf = emulatorVolumes
@@ -409,4 +412,9 @@ func checkLiveFiles(t *testing.T, s *side) {
 			t.Errorf("%s: flutter-run.jsonl is empty", s.impl)
 		}
 	}
+}
+
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
 }
