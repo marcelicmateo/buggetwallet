@@ -71,11 +71,12 @@ func seqLines(s *side) []string {
 	return out
 }
 
-// traceStructure: the trace summary with every number replaced (the figures follow the machine's load).
+// traceStructure: the trace summary with every number replaced (the figures follow the machine's load) and whitespace
+// runs collapsed: the columns are padded to the number's width, so "p90=  12.3" and "p90=   3.2" are the same shape.
 func traceStructure(txt string) []string {
 	var out []string
 	for _, ln := range lines(txt) {
-		out = append(out, reDigits.ReplaceAllString(ln, "#"))
+		out = append(out, strings.Join(strings.Fields(reDigits.ReplaceAllString(ln, "#")), " "))
 	}
 	return out
 }
