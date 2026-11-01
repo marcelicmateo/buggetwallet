@@ -142,7 +142,7 @@ func Container(c *run.Ctx, args []string, self string, usage func() int) int {
 			s.Step(run.Spec{Name: "go-check", Fn: GoCheck})
 		}
 	}
-	lint := func() []run.Spec { return lintSpecs(c) }
+	lint := func() []run.Spec { return lintSpecs(c, self) }
 	switch cmd {
 	case "format":
 		if pub() {

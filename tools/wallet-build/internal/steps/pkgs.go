@@ -238,7 +238,12 @@ func EnvSelftest(sc *run.StepCtx) int {
 	return rc
 }
 
-func lintSpecs(c *run.Ctx) []run.Spec {
+// lintSpecs are the steps of lint. self is the running binary (os.Executable): hook-selftest and native-units test this very
+// binary, so a temp or parity build checks itself, not whatever sits in dist/bin; "" = dist/bin/wallet-build.
+func lintSpecs(c *run.Ctx, self string) []run.Spec {
+	if self == "" {
+		self = "dist/bin/wallet-build"
+	}
 	root := c.Root
 	cmd := func(argv ...string) func(*run.StepCtx) int {
 		return func(sc *run.StepCtx) int { return sc.Cmd("", argv...) }
@@ -256,21 +261,21 @@ func lintSpecs(c *run.Ctx) []run.Spec {
 		// the bash hook and its Go port (wallet-build hook no-poll) both have to pass until the hook is switched (GO4-B)
 		{Name: "hook-selftest", Fn: func(sc *run.StepCtx) int {
 			rc := sc.Cmd("", "tools/no-poll-hook.sh", "--self-test")
-			if sc.Cmd("", "dist/bin/wallet-build", "hook", "no-poll", "--self-test") != 0 {
+			if sc.Cmd("", self, "hook", "no-poll", "--self-test") != 0 {
 				rc = 1
 			}
 			return rc
 		}},
 		{Name: "env-selftest", Fn: EnvSelftest},
 		{Name: "deploy-selftest", Fn: cmd("tools/relay-deploy.sh", "--self-test")},
-		{Name: "native-units", Fn: cmd("dist/bin/wallet-build", "relay-native-check")},
+		{Name: "native-units", Fn: cmd(self, "relay-native-check")},
 	}
 }
 
 // LintNames are the steps of lint, in order.
 func LintNames(c *run.Ctx) []string {
 	var n []string
-	for _, s := range lintSpecs(c) {
+	for _, s := range lintSpecs(c, "") {
 		n = append(n, s.Name)
 	}
 	return n

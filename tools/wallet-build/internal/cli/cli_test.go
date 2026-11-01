@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -89,6 +90,7 @@ type opts struct {
 	env    []string
 	handle func(c sys.Cmd) int
 	setup  func(h *host.Host)
+	stdin  io.Reader
 	root   string
 }
 
@@ -102,7 +104,7 @@ func runCLI(t *testing.T, o opts, args ...string) result {
 	fake := &sys.Fake{Handle: o.handle}
 	var out, errb bytes.Buffer
 	env := append([]string{"PATH=/usr/bin", "HOME=" + t.TempDir(), "BW_DATA_DIR=" + data, "BW_COMMIT=abc1234", "BW_SOURCE=local", "BW_WORKTREE=wt", "BW_JOBS=1"}, o.env...)
-	code := Run(args, env, &out, &errb, Deps{R: fake, Root: root, Self: "/x/wallet-build", HostSetup: o.setup})
+	code := Run(args, env, &out, &errb, Deps{R: fake, Root: root, Self: "/x/wallet-build", HostSetup: o.setup, Stdin: o.stdin})
 	r := result{code: code, out: out.String(), err: errb.String(), root: root, data: data, fake: fake}
 	r.calls = calls(fake, root)
 	for _, e := range fake.Execs {
@@ -110,6 +112,21 @@ func runCLI(t *testing.T, o opts, args ...string) result {
 	}
 	r.logs = filepath.Join(root, "dist", "logs")
 	return r
+}
+
+// BW_QUIET=1 in the session env must not swallow the hook's verdict: a block still says why, on stderr.
+func TestHookIsExemptFromQuiet(t *testing.T) {
+	block := `{"tool_input":{"command":"until x; do sleep 1; done"}}`
+	for _, args := range [][]string{{"hook", "no-poll"}, {"-q", "hook", "no-poll"}} {
+		r := runCLI(t, opts{env: []string{"BW_QUIET=1"}, stdin: strings.NewReader(block)}, args...)
+		if r.code != 2 || !strings.HasPrefix(r.err, "Blocked: no sleep/until/while poll loops") {
+			t.Errorf("%v: code %d, stderr %q", args, r.code, r.err)
+		}
+	}
+	r := runCLI(t, opts{env: []string{"BW_QUIET=1"}, stdin: strings.NewReader(`{"tool_input":{"command":"make test"}}`)}, "hook", "no-poll")
+	if r.code != 0 || r.err != "" || r.out != "" {
+		t.Errorf("pass: code %d out %q err %q", r.code, r.out, r.err)
+	}
 }
 
 // native runs a command the way the container (or CI) does: BW_NATIVE=1 with a run directory.
@@ -156,9 +173,9 @@ func TestGoldenArgvLint(t *testing.T) {
 		"$ shellcheck tools/a.sh dev/b.sh dev/install-lint-tools.sh .github/scripts/c.sh",
 		"$ actionlint",
 		"$ tools/no-poll-hook.sh --self-test",
-		"$ dist/bin/wallet-build hook no-poll --self-test", // the Go port of the hook runs next to the bash one (GO4-B)
+		"$ /x/wallet-build hook no-poll --self-test", // the Go port of the hook runs next to the bash one (GO4-B)
 		"$ tools/relay-deploy.sh --self-test",
-		"$ dist/bin/wallet-build relay-native-check",
+		"$ /x/wallet-build relay-native-check",
 	})
 	if r.code != 0 {
 		t.Errorf("code %d\n%s", r.code, r.err)

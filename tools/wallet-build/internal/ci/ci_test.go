@@ -125,6 +125,39 @@ func TestStatusWaitPollsUntilDone(t *testing.T) {
 	}
 }
 
+// BUG (found by the GO4 parity run): --wait never returned when a check had failed and the "log" run did not exist (it is skipped
+// or never created after a failure). A failed check ends the wait at once: exit 1 and the failing lines, like ci-status.sh.
+func TestStatusWaitEndsAtOnceOnAFailedCheck(t *testing.T) {
+	latest := "commit: " + sha + "  ref: v2  run: 1\n\nlint=ok core=failure\njobs\nTest failed: x\n"
+	for _, table := range []string{
+		"core\tcompleted\tfailure\n",                             // no log run at all
+		"core\tcompleted\tfailure\nlint\tin_progress\t-\n",       // another check still running
+		"lint\tcompleted\tsuccess\ncore\tcompleted\tcancelled\n", // cancelled counts as failed
+		"core\tcompleted\tfailure\nlog\tcompleted\tsuccess\n",    // with the log run, as before
+		"core\tcompleted\ttimed_out\nlint\tcompleted\tskipped\n", // timed out
+	} {
+		e := newEnv(t, latest, table)
+		slept := 0
+		e.x.Sleep = func(d time.Duration) { slept++; e.now = e.now.Add(d) }
+		if rc := e.x.Status([]string{"--wait", sha}); rc != 1 {
+			t.Errorf("%q: rc %d\n%s", table, rc, e.out)
+		}
+		if slept != 0 || e.now != time.Date(2026, 11, 1, 10, 0, 0, 0, time.UTC) {
+			t.Errorf("%q: waited (%d sleeps)", table, slept)
+		}
+		if !strings.Contains(e.out.String(), "--- failing lines") || !strings.Contains(e.out.String(), "Test failed: x") {
+			t.Errorf("%q: no failing lines\n%s", table, e.out)
+		}
+	}
+	// no check runs yet still gets the grace period, and green still needs the log run
+	e := newEnv(t, "", "", "lint\tcompleted\tsuccess\n")
+	slept := 0
+	e.x.Sleep = func(d time.Duration) { slept++; e.now = e.now.Add(d) }
+	if rc := e.x.Status([]string{"--wait", sha}); rc != 2 || slept == 0 {
+		t.Errorf("green without log: rc %d slept %d", rc, slept)
+	}
+}
+
 func TestStatusWaitGivesUpAfter30Minutes(t *testing.T) {
 	e := newEnv(t, "", "lint\tin_progress\t-\n")
 	if rc := e.x.Status([]string{"--wait"}); rc != 2 {

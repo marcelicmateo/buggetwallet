@@ -31,6 +31,10 @@ The key never goes into git. Back up the whole ~/.config/budget-wallet/ folder (
 manager): if the key is lost, the next APK can't update the installed app.
 `
 
+// PassEnv is the environment variable that hands the password to keytool (-storepass:env, -keypass:env): never argv, which
+// any process of the machine can read in /proc/<pid>/cmdline while keytool runs.
+const PassEnv = "BW_KEYSTORE_PASSWORD"
+
 // Alias is the key alias in the keystore and in signing.env.
 const Alias = "budget-wallet"
 
@@ -107,7 +111,7 @@ func (m *Maker) Main(args []string) int {
 	c.Red = sys.NewRedactor(c.Env, sys.ReadSecretsFile(envFile)...)
 	var list strings.Builder
 	ew := c.Red.Writer(c.Err)
-	rc := c.R.Run(c.Ctx, sys.Cmd{Argv: []string{"keytool", "-list", "-keystore", keystore, "-storepass", pass, "-v"}, Env: c.Env, Stdout: &list, Stderr: ew})
+	rc := c.R.Run(c.Ctx, sys.Cmd{Argv: []string{"keytool", "-list", "-keystore", keystore, "-storepass:env", PassEnv, "-v"}, Env: c.Env.With(PassEnv, pass), Stdout: &list, Stderr: ew})
 	_ = ew.Close()
 	if rc != 0 {
 		return rc
@@ -150,8 +154,8 @@ func (m *Maker) create(dir, keystore, envFile string) int {
 	ew := c.Red.Writer(c.Err)
 	defer ew.Close()
 	if rc := c.R.Run(c.Ctx, sys.Cmd{Argv: []string{"keytool", "-genkeypair", "-keystore", keystore, "-storetype", "PKCS12", "-alias", Alias,
-		"-keyalg", "RSA", "-keysize", "4096", "-validity", "20000", "-dname", "CN=Budget Wallet", "-storepass", pass, "-keypass", pass},
-		Env: c.Env, Stderr: ew}); rc != 0 {
+		"-keyalg", "RSA", "-keysize", "4096", "-validity", "20000", "-dname", "CN=Budget Wallet", "-storepass:env", PassEnv, "-keypass:env", PassEnv},
+		Env: c.Env.With(PassEnv, pass), Stderr: ew}); rc != 0 {
 		return rc
 	}
 	if err := os.WriteFile(envFile, []byte(EnvFileText(Alias, pass)), 0o600); err != nil {

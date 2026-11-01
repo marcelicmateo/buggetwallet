@@ -39,6 +39,8 @@ type Deps struct {
 	Self string // path of this binary; "" = os.Executable
 	// Host overrides the host side's terminal/signal/download hooks (tests).
 	HostSetup func(h *host.Host)
+	// Stdin is what the hook and relay reset read; os.Stdin when nil (tests).
+	Stdin io.Reader
 }
 
 // BuildCommands are the commands tools/build.sh has (the host or container side runs them).
@@ -92,7 +94,7 @@ func Run(args []string, environ []string, out, errw io.Writer, d Deps) int {
 	// Quiet: nothing on stdout or stderr, ours or any child's (the logs are written by the steps). lsp, mcp and
 	// image-name use stdout as their result.
 	// `live` has no quiet mode (tools/live.sh has none: -q is a usage error there and BW_QUIET is ignored).
-	if quiet && cmd != "lsp" && cmd != "mcp" && cmd != "image-name" && cmd != "live" {
+	if quiet && cmd != "lsp" && cmd != "mcp" && cmd != "image-name" && cmd != "live" && cmd != "hook" { // hook: its exit code and stderr line are the result
 		c.SetQuiet()
 	}
 	usage := func() int {
@@ -156,7 +158,7 @@ func dispatch(c *run.Ctx, cmd string, rest []string, self string, usage func() i
 		return helpersA(c, cmd, rest, self)
 	}
 	// GO4-B helpers (relay, web serve/shot, web-shot, relay-native-check, signing-key, hook): host or container, no run directory
-	if rc, ok := shellhelpers.Dispatch(c, cmd, rest, self, usage, shellhelpers.Deps{HostSetup: d.HostSetup}); ok {
+	if rc, ok := shellhelpers.Dispatch(c, cmd, rest, self, usage, shellhelpers.Deps{HostSetup: d.HostSetup, Stdin: d.Stdin}); ok {
 		return rc
 	}
 	native := c.Getenv("BW_NATIVE") == "1"

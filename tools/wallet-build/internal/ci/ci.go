@@ -93,6 +93,17 @@ var (
 	reSkip = regexp.MustCompile(`(?i)continue-on-error|0 errors`)
 )
 
+// anyFailed: a completed check run whose conclusion is not success, skipped or neutral.
+func anyFailed(table string) bool {
+	for _, l := range strings.Split(table, "\n") {
+		f := strings.Split(l, "\t")
+		if len(f) == 3 && f[1] == "completed" && f[2] != "success" && f[2] != "skipped" && f[2] != "neutral" {
+			return true
+		}
+	}
+	return false
+}
+
 func hasCheck(table, name string) bool {
 	for _, l := range strings.Split(table, "\n") {
 		if strings.HasPrefix(l, name+"\t") {
@@ -165,7 +176,8 @@ func (x *CI) Status(args []string) int {
 		if !hasCheck(table, "log") {
 			pending++
 		}
-		if !wait || (table != "" && pending == 0) || elapsed >= waitLimit {
+		// a failed check ends the wait at once (the verdict is already 1), whether or not the "log" run exists yet
+		if !wait || (table != "" && pending == 0) || anyFailed(table) || elapsed >= waitLimit {
 			break
 		}
 		x.Sleep(pollEvery)
