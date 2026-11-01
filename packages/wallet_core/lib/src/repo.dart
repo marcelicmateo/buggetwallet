@@ -654,9 +654,14 @@ class WalletRepo {
     return (fates: fates, count: (f) => fates.where((x) => x == f).length);
   }
 
+  /// A new row id: [prefix] + the wall clock in base 36 + 64 random bits (two 32-bit halves, base 36, zero-padded to a
+  /// fixed width). Was 20 random bits: two rows made in the same millisecond (two devices offline, or one device seeding
+  /// several rows) collided about once in a million and merged into one row after sync. Ids are opaque (nothing parses
+  /// them), so older ids stay valid.
   String _newId(String prefix) {
     final r = Random.secure();
-    return '$prefix${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}${r.nextInt(1 << 20).toRadixString(36)}';
+    String part() => r.nextInt(1 << 32).toRadixString(36).padLeft(7, '0');
+    return '$prefix${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}${part()}${part()}';
   }
 
   /// A hand-entered expense (positive [amount] = money spent). Records which bank rows this device holds now

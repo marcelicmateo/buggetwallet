@@ -14,9 +14,10 @@ suites stay serialized (one Haiku run per stage); builders run only targeted che
   context pack (files, line ranges, APIs, tests, helpers); the lead pastes it into the brief. Builders read code by
   `grep -n` + line ranges, never whole files, build output by result line + failures, screenshots downscaled to 540 px.
   **Build output: no pipes** (owner 2026-11-01). A pipe reports the last command's status (`build | tail` says 0
-  when tests fail). Redirect to a file and branch on the build's own exit code:
-  `tools/build.sh app > "$LOG" 2>&1 && echo ok || { echo FAILED; tail -n 30 "$LOG"; }` (or read
-  `dist/logs/<step>.status`). Never judge a run by a piped command's exit code.
+  when tests fail). Use quiet mode and branch on the build's own exit code:
+  `tools/build.sh -q <cmd> || cat dist/logs/last-failed.txt` (also `tools/emulator.sh -q`): nothing is printed when it is green,
+  the failed steps with their log paths when not; read the named log's tail only if needed. Never judge a run by a piped
+  command's exit code.
   Measure with `python3 -I tools/token-usage.py` (baseline in memory: ~2.9M tokens/commit before 2026-10-21).
 - One targeted check per agent at the end, one Haiku full run per stage, one reviewer pass per stage on the whole diff.
   Live-mode screenshots only for visual changes.
@@ -43,15 +44,15 @@ Theme waits for the owner's mockup pick; crypto rate by hand. Merge order A-core
 | UX-C-mock | 3 theme mockups (Today + Plan, light/dark) published for the owner | general-purpose (sonnet) | – | done: owner picked 1 Clean neutral |
 | UX-A-tests | (above) | | | done 7c0d879 (core-builder cherry-picks it) |
 | UX-C1 | Clean neutral tokens, Inter, card/rail surfaces, light + dark | ui-builder (worktree) | – | done 97dccd7 + review fixes 80934aa, merged b60355e |
-| UX-A-ui2 | currency picker + offer, account form by kind, editable built-ins | ui-builder | A-core merged | queued |
-| UX-ACC | payments know their account (`SCHEMA21_SPEC.md`, folded into schema 20, ask once) | core (Cols), then ui | F1-core merged | queued (owner yes 2026-11-01); same core builder as UX-FX, ACC first |
+| UX-A-ui2 | currency picker + offer, account form by kind, editable built-ins | ui-builder | A-core merged | done 628323d + review fixes f58e959, merged 14dd257 |
+| UX-ACC | payments know their account (`SCHEMA21_SPEC.md`, folded into schema 20, ask once) | core (Cols), then ui | F1-core merged | core running (with UX-FX); **v2 not pushed until schema 20 is final** |
 | UX-FX | ECB daily rates per payment date (`UX_SPEC.md` UX-FX), in schema 20 | scout → core (Cols) + ui | F1-core merged, UX-A-ui2 merged | queued (owner yes 2026-11-01) |
 | UX-B | Plan window, Tags window, Settings = setup, Today tiles | ui-builder (+ core if needed) | UX-A | queued |
 | UX-C2 | tightening pass over every screen | ui-builder | UX-B | queued |
-| F1 | field refactor pilot (Bill + Account), plan `FIELDS_PLAN.md` | scout → core + test-writer + ui | owner OK | F0 done; F1-core + F1-tests running (core-only, no overlap with UX-A-ui2); F1-ui after UX-A-ui2 |
+| F1 | field refactor pilot (Bill + Account), plan `FIELDS_PLAN.md` | scout → core + test-writer + ui | owner OK | F1-core 0416494 + review 56b7909 merged 06f728d; F1-ui running |
 | F2 | field refactor roll-out to the other entities | core + ui | F1, UX-B | planned |
 
-## Stage GO: build tools in Go (owner 2026-11-01, queued after Stage UX)
+## Stage GO: build tools in Go (owner 2026-11-01, queued after Stage UX; design + owner answers `STAGE_GO_DESIGN.md`)
 Replace the bash/Python build tooling (~4,400 lines: `build.sh` 751, `emulator.sh`, `live.sh`, `relay-deploy.sh`,
 `build_log.py`, `timing.sh`, `live_vm.py`, …) with one Go program (Go is on the owner's host; static binary, no container
 needed to build the tool). Built in from the start: quiet mode (exit code only), logging per step by default, timeouts
@@ -63,6 +64,8 @@ entry points). Agents: scout → devops (sonnet/high for the rewrite) + test-wri
 |---|---|---|---|---|
 | GO1 | Go build tool: build.sh commands, quiet, logs, status files, parity tests | devops + test-writer | Stage UX done | queued |
 | GO2 | emulator.sh, live.sh (+ live_vm.py) into the same tool | devops | GO1 | queued |
+| GO4 | all remaining tools/ helpers into wallet-build (owner: everything except relay-deploy.sh), golden/parity per helper; then the Makefile replaces the scripts | devops + test-writer | GO1, GO2 | queued |
+| GO3 | CI slimmed (owner 2026-11-01): one composite action `.github/actions/` for checkout + cache + container + log upload (each job ~8 lines, ci.yml ~356 → ~150), release.yml reuses ci.yml's apk/linux jobs via `workflow_call` instead of copies, the `log` job's merge script becomes one Go tool command; same jobs, same parallelism, same artifacts and `ci-logs` output | devops | GO1 | queued |
 
 ## Stages BP, WS, DK (owner picked 2026-10-28; plan `STAGE_Y_PLAN.md`; one at a time after Stage M)
 | # | Item | Agent | Depends on | Status |
