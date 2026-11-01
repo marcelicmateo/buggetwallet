@@ -37,6 +37,9 @@ func (x *CI) gitQuiet(args ...string) (string, int) {
 // Capture runs the version control tool with args in the repository (for `times --ci`).
 func (x *CI) Capture(args ...string) (string, int) { return x.git(args...) }
 
+// CaptureQuiet is Capture with the command's stderr thrown away (2>/dev/null).
+func (x *CI) CaptureQuiet(args ...string) (string, int) { return x.gitQuiet(args...) }
+
 // ShowLog is the text of <name>.txt on the ci-logs branch.
 func (x *CI) ShowLog(name string) (string, int) { return x.showLog(name, x.git) }
 
@@ -185,7 +188,7 @@ func (x *CI) Status(args []string) int {
 	if failed > 0 {
 		c.Printf("\n")
 		if match {
-			c.Printf("%s\n--- failing lines (full log: wallet-build ci log) ---\n", line3(latest))
+			c.Printf("%s\n--- failing lines (full log: tools/ci-status.sh --log) ---\n", line3(latest)) // M6: rename with the scripts
 			n := 0
 			for i, l := range strings.Split(latest, "\n") {
 				if reFail.MatchString(l) && !reSkip.MatchString(l) && n < 40 {
@@ -194,7 +197,7 @@ func (x *CI) Status(args []string) int {
 				}
 			}
 		} else {
-			c.Printf("ci-logs/latest.txt is for another commit; see wallet-build ci log\n")
+			c.Printf("ci-logs/latest.txt is for another commit; see tools/ci-status.sh --log\n") // M6: rename with the scripts
 		}
 		return 1
 	}

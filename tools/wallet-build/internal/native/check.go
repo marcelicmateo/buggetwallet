@@ -43,7 +43,7 @@ func Check(ctx context.Context, r sys.Runner, root string, env sys.Env, out, err
 		fmt.Fprintf(errw, "relay-native-check: %v\n", err)
 		return 2
 	}
-	tmp, err := os.MkdirTemp("", "relay-native-check")
+	tmp, err := os.MkdirTemp("", "tmp.") // named like mktemp -d
 	if err != nil {
 		fmt.Fprintf(errw, "relay-native-check: %v\n", err)
 		return 2
