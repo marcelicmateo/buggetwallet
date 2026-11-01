@@ -96,8 +96,13 @@ extension RulesDb on WalletController {
       }
       patterns.sort((a, b) => a.order != b.order ? a.order.compareTo(b.order) : a.id.compareTo(b.id));
     }
-    final after =
-        Categorizer(merchantRules: rules, patternRules: patterns, rentCashThreshold: categorizer.rentCashThreshold, table: categoryTable);
+    // The owner's built-in edits too (UX-A): else a built-in turned off would match in `after` and count as a change.
+    final after = Categorizer(
+        merchantRules: rules,
+        patternRules: patterns,
+        rentCashThreshold: categorizer.rentCashThreshold,
+        table: categoryTable,
+        builtInOverrides: settings.builtInRuleOverrides);
     return timed('rules.preview', () {
       var n = 0;
       for (final c in wholeTxs) {

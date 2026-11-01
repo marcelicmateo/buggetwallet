@@ -3,7 +3,7 @@ library;
 
 import 'package:wallet_importer/wallet_importer.dart' show pow10;
 
-import 'currencies.dart' show minorDigitsOf;
+import 'currencies.dart' show storageDigitsOf;
 import 'models.dart';
 
 /// 2^53 − 1: the largest whole number a web number holds exactly.
@@ -11,8 +11,8 @@ const _maxExact = 9007199254740991;
 
 /// [amount] minor units of another currency in wallet-currency minor units at [rate] ([FxRate.rate]: home units per
 /// [FxRate.scale] foreign units): `amount × rate / 1,000,000 × 10^(toDigits − fromDigits)`, rounded half away from zero,
-/// exactly. [fromDigits] / [toDigits]: the minor digits of the foreign and the wallet currency (`minorDigitsOf`; 1,000
-/// yen at 6500 is 650 cents). With equal digits and a rate up to [FxRate.maxRate] the product is split
+/// exactly. [fromDigits] / [toDigits]: the storage digits of the foreign and the wallet currency (`storageDigitsOf`: 2
+/// for fiat, so 1,000 yen (100000) at 6500 is 650 cents; BTC 8: 0.01 BTC (1000000) at 50,000 EUR is 50000 cents). With equal digits and a rate up to [FxRate.maxRate] the product is split
 /// (`amount = q × scale + r`), so no step goes past 2^53 for any amount up to `WalletSettings.maxAmount`: the same
 /// result on the VM and on the web; anything else (other digits, a crypto rate) is computed with BigInt.
 int convertMinor(int amount, int rate, {int fromDigits = 2, int toDigits = 2}) {
@@ -76,9 +76,10 @@ List<CategorizedTx> inHomeCurrency(List<CategorizedTx> txs, WalletSettings st) {
 int _partHome(CategorizedTx t, WalletSettings st, int home) =>
     t.tx.homeAmount == null ? _rowHome(t.amount, st.fxRates[t.tx.currency]!.rate, t.tx.currency, st) : _share(t.amount, home, t.tx.amount);
 
-/// [amount] minor units of [currency] at [rate] in the wallet currency's minor units, each with its own digits.
+/// [amount] stored units of [currency] at [rate] in the wallet currency's stored units (`storageDigitsOf`: fiat ↔ fiat
+/// is the same scale, so exactly the math before schema 20; BTC ↔ fiat scales by 10^6).
 int _rowHome(int amount, int rate, String currency, WalletSettings st) =>
-    convertMinor(amount, rate, fromDigits: minorDigitsOf(currency), toDigits: minorDigitsOf(st.currency));
+    convertMinor(amount, rate, fromDigits: storageDigitsOf(currency), toDigits: storageDigitsOf(st.currency));
 
 /// [t] (not in the wallet currency, worth [home]) converted. [wholes]: the converted whole of each split payment met so far.
 CategorizedTx _convert(

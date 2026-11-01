@@ -91,10 +91,11 @@ final _plainNumber = RegExp(r'^[+-]?(\d+\.?\d*|\.\d+)$');
 /// a number, negative, in exponent form, or beyond [maxAmountCents]. The value is `abs() * 100` rounded to the cent
 /// (the rule the app's input fields had).
 ///
-/// [digits] (UX-A): the minor digits of the amount's currency (`minorDigitsOf`): the result is in its minor units
-/// (`"1000"` yen with 0 digits is 1000, `"0.01"` BTC with 8 is 1000000). For a currency with 3 or more digits a comma
-/// followed by up to that many digits is the decimal separator (`"1,234"` dinar is 1.234). For any count but 2 a finer
-/// fraction than the currency has is refused (null), never rounded.
+/// [digits] (UX-A): the decimals the amount's currency is typed with (`displayDigitsOf`: JPY 0, EUR and KWD 2, BTC 8).
+/// The result is in its STORED units (`storageDigitsOf`): hundredths up to 2 digits (`"1000"` yen is 100000, as every
+/// fiat amount is stored), else [digits] (`"0.01"` BTC is 1000000). With 3 or more digits a comma followed by up to
+/// that many digits is the decimal separator (`"0,5"` BTC). For any count but 2 a finer fraction than [digits] is
+/// refused (null: `"10.5"` yen), never rounded.
 int? parseMoneyCents(String input, {int digits = 2}) {
   var s = input.trim().replaceAll(RegExp(r'[\s€\$£]'), '');
   if (s.isEmpty) return null;
@@ -114,7 +115,7 @@ int? parseMoneyCents(String input, {int digits = 2}) {
     final frac = dot < 0 ? '' : s.substring(dot + 1).replaceFirst(RegExp(r'0+$'), '');
     if (frac.length > digits) return null;
   }
-  final cents = v.abs() * pow10(digits);
+  final cents = v.abs() * pow10(digits > 2 ? digits : 2);
   if (cents > maxAmountCents) return null;
   return cents.round();
 }

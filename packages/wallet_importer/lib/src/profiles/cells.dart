@@ -76,12 +76,13 @@ int? cellCents(double x) {
   return jsRound(c);
 }
 
-/// Amount in minor units of a currency with [digits] minor digits (`minorDigitsOf`): 2 is [cellCents] (v1's rounding,
-/// unchanged). Any other count refuses (null) a cell with a finer fraction than the currency has (`10.5` yen, `1.2345`
-/// dinar): a silent rounding would change the money. Null also for what [cellCents] refuses, and beyond
-/// [maxAmountCents] minor units.
-int? cellMinor(double x, int digits) {
-  if (digits == 2) return cellCents(x);
+/// Amount in stored minor units of a currency with [digits] storage digits (`storageDigitsOf`: 2 for every fiat
+/// currency, BTC 8). 2 is [cellCents] (v1's rounding, unchanged) unless [strict]: then, as for any other count, a cell
+/// with a finer fraction (`1.235` dinar, `0.000000001` BTC) is refused (null), never rounded. Profiles pass [strict] for
+/// a currency with more ISO digits than it is stored with (KWD, BHD, …: the third decimal is not supported). Null also
+/// for what [cellCents] refuses, and beyond [maxAmountCents] minor units.
+int? cellMinor(double x, int digits, {bool strict = false}) {
+  if (digits == 2 && !strict) return cellCents(x);
   final c = x * pow10(digits);
   if (!c.isFinite || c.abs() > maxAmountCents) return null;
   final r = c.roundToDouble();

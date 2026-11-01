@@ -2,7 +2,7 @@
 import 'package:logging/logging.dart';
 import 'package:xml/xml.dart';
 
-import '../currencies.dart' show minorDigitsOf;
+import '../currencies.dart' show storageDigitsOf;
 import '../log.dart';
 import 'common.dart';
 import 'model.dart';
@@ -98,8 +98,8 @@ NormalizedBill? _read(String xml, Map<String, Object?> log) {
 
   final payable = _path(root, ['LegalMonetaryTotal', 'PayableAmount']);
   final currency = (payable?.getAttribute('currencyID') ?? _text(root, ['DocumentCurrencyCode']) ?? 'EUR').trim().toUpperCase();
-  // Amounts in the currency's own minor units (Stage UX-A: JPY 0 digits, KWD 3).
-  final digits = minorDigitsOf(RegExp(r'^[A-Z]{3}$').hasMatch(currency) ? currency : 'EUR');
+  // Amounts in the currency's stored units (UX-A: fiat hundredths, a non-zero third decimal is refused; BTC 8).
+  final digits = storageDigitsOf(RegExp(r'^[A-Z]{3}$').hasMatch(currency) ? currency : 'EUR');
   final total = payable == null ? null : decimalCents(payable.innerText, digits: digits);
 
   final items = <BillItem>[];

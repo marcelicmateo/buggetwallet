@@ -1,5 +1,5 @@
 /// Currencies (Stage UX-A): every circulating ISO 4217 code with its English name and minor digits, plus Bitcoin. Pure
-/// data, no bank format. The importer reads amounts with these digits; `wallet_core` re-exports the table
+/// data, no bank format. The importer reads amounts at [storageDigitsOf]; `wallet_core` re-exports the table
 /// (`src/currencies.dart`).
 ///
 /// Left out on purpose: ISO fund codes and units of account (BOV, CHE, CHW, CLF, COU, MXV, USN, UYI, UYW, XDR, XSU,
@@ -191,6 +191,21 @@ CurrencyInfo? currencyInfo(String code) => _byCode[code];
 /// The minor digits of [code] ([CurrencyInfo.minorDigits]); 2 for a code the table does not hold (the scale every
 /// amount had before Stage UX-A).
 int minorDigitsOf(String code) => _byCode[code]?.minorDigits ?? 2;
+
+/// The digits [code]'s amounts are STORED with (UX-A, owner rule 2026-11-01): 2 (hundredths) for every fiat currency,
+/// exactly as every build before schema 20 stored them (1,000 yen = 100000, 1.23 dinar = 123), so no stored amount is
+/// ever read differently; a crypto currency's own digits (BTC 8: satoshis). Unknown codes: 2.
+int storageDigitsOf(String code) {
+  final c = _byCode[code];
+  return c != null && c.crypto ? c.minorDigits : 2;
+}
+
+/// The digits an amount in [code] is shown and typed with: the ISO digits ([minorDigitsOf]) as far as storage holds
+/// them ([storageDigitsOf]): JPY 0, EUR 2, KWD 2 (its third decimal is not supported), BTC 8.
+int displayDigitsOf(String code) {
+  final iso = minorDigitsOf(code), stored = storageDigitsOf(code);
+  return iso < stored ? iso : stored;
+}
 
 /// 10^[digits] for 0..18 (an int on the VM; exact on the web up to 10^15).
 int pow10(int digits) {

@@ -323,6 +323,20 @@ extension WalletRepoSettings on WalletRepo {
     return newId;
   }
 
+  /// Sets the wallet currency to [code] (UX-A; the app offers it, e.g. from `prevalentCurrency`): one synced setting
+  /// write, nothing else. Existing rows, accounts, IOUs and bills keep their own currency and amounts; budgets, salary and
+  /// goals keep their numbers (now read in [code]); rows in the old wallet currency then count only at a rate the owner
+  /// sets (`setFxRate`). Throws [ArgumentError] for a code not in [allCurrencies] or a crypto currency
+  /// ([CurrencyInfo.crypto]). Writes nothing when it is already the wallet currency.
+  void setWalletCurrency(String code) {
+    final info = currencyInfo(code);
+    if (info == null) throw ArgumentError.value(code, 'code', 'not a known currency');
+    if (info.crypto) throw ArgumentError.value(code, 'code', 'a crypto currency cannot be the wallet currency');
+    if (_readSettings(db, table: categoryTable()).currency == code) return;
+    _write(_settingChanges({'currency': code}));
+    logEvent(_log, Level.INFO, 'settings.walletCurrency', {'set': true});
+  }
+
   // ---------- built-in rules (UX-A) ----------
 
   /// The built-in rule [id] names (`builtIn:<slug>`, or `builtIn:<index>` from before UX-A), or an [ArgumentError].

@@ -85,9 +85,6 @@ const Map<String, EntityDef> entitySchema = {
     ColumnDef('transfer_to', nullable: true),
     // v19 (D2 Unlink): a hand-added entry's bank rows the owner unlinked it from, a JSON list (`matchOffIds`).
     ColumnDef('match_off', nullable: true),
-    // v20 (UX-A): the minor digits `amount` is stored in, for a currency without 2 (JPY 0, KWD 3, BTC 8); null = 2,
-    // the scale every build before schema 20 used for every currency (`legacyMinor` reads those rows).
-    ColumnDef.integer('digits', nullable: true),
   ], indexes: {
     'tx_date': 'date',
     'tx_amount': 'amount'

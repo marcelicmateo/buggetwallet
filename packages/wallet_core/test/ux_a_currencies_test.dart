@@ -1,8 +1,9 @@
 // Stage UX-A core, points 1-2 (docs/context/UX_SPEC.md): currency table, minor digits through FX, prevalentCurrency.
 // Written from the spec, not the implementation. All data SYNTHETIC.
 //
-// FX convention assumed (spec: "use minorDigitsOf of the right currency"): a rate is wallet MAJOR units per foreign MAJOR
-// unit x FxRate.scale, so home minor = foreign minor x rate / scale x 10^(homeDigits - foreignDigits).
+// FX convention: a rate is wallet units per foreign unit x FxRate.scale. Updated by core-builder to the lead's storage
+// rule (2026-11-01): amounts are stored at storageDigitsOf (every fiat currency in hundredths as before, BTC in
+// satoshis), so home stored = foreign stored x rate / scale x 10^(homeStorage - foreignStorage).
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
@@ -29,6 +30,14 @@ void main() {
       expect(minorDigitsOf('ZZZ'), 2);
       expect(minorDigitsOf(''), 2);
       expect(minorDigitsOf('eur'), 2, reason: 'codes are upper case; anything else is unknown');
+      expect([
+        for (final c in ['JPY', 'KWD', 'EUR', 'BTC']) storageDigitsOf(c)
+      ], [
+        2,
+        2,
+        2,
+        8
+      ], reason: 'storage rule');
     }, timeout: _t);
 
     test('allCurrencies: unique three-capital codes, EUR present, BTC is the crypto one', () {
@@ -64,15 +73,15 @@ void main() {
 
     int? home(Tx t) => homeAmount(t, repo.settings());
 
-    test('JPY: 1,000 yen at 0.0065 EUR per yen = 6.50 EUR = 650 cents (not 65 or 65,000)', () {
+    test('JPY: 1,000 yen (stored 100000 hundredths) at 0.0065 EUR per yen = 6.50 EUR = 650 cents', () {
       repo.setFxRate('JPY', 6500);
-      expect(home(row('JPY', -1000)), -650);
+      expect(home(row('JPY', -100000)), -650);
     }, timeout: _t);
 
-    test('KWD: 1.000 dinar (1000 minor) at 3 EUR per dinar = 300 cents; 2.500 KWD = 750 cents', () {
+    test('KWD: 1.00 dinar (stored 100) at 3 EUR per dinar = 300 cents; 2.50 KWD = 750 cents', () {
       repo.setFxRate('KWD', 3000000);
-      expect(home(row('KWD', 1000)), 300);
-      expect(home(row('KWD', -2500)), -750);
+      expect(home(row('KWD', 100)), 300);
+      expect(home(row('KWD', -250)), -750);
     }, timeout: _t);
 
     test('BTC: 1 BTC (10^8 minor) at 50 EUR = 5,000 cents; 0.01 BTC = 50 cents', () {

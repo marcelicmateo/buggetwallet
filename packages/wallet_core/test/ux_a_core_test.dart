@@ -1,10 +1,11 @@
-// Stage UX-A core (docs/context/UX_SPEC.md), the builder's own tests: stored minor digits (schema 20 `tx.digits`, rows of
-// older builds read from cents), digits through typed input, CSV export and FX, account kinds without rows, a crypto
-// account's value, built-in rule ids, and per-bill reminder days (owner correction 2026-11-01). All data SYNTHETIC.
+// Stage UX-A core (docs/context/UX_SPEC.md), the builder's own tests: the storage rule (lead, 2026-11-01: fiat stored in
+// hundredths as always, BTC in satoshis), typed input, CSV export and FX at storage digits, the wallet currency setter,
+// account kinds without rows, a crypto account's value, built-in rule ids, and per-bill reminder days. All SYNTHETIC.
 import 'dart:io';
 import 'dart:math';
 
 import 'package:test/test.dart';
+import 'package:wallet_core/src/schema.dart' show entitySchema;
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart' show ImportBatch, NormalizedBill, NormalizedTransaction, BillSource;
 
@@ -23,98 +24,84 @@ void main() {
   setUp(() => repo = WalletRepo.inMemory(now: () => _now));
   tearDown(() => repo.close());
 
-  /// A row as a build before schema 20 stored it: the amount in cents whatever the currency, no `digits`.
-  void legacyRow(String id, int cents, String currency) => repo.db.execute(
-      "INSERT INTO tx(id, source, date, amount, currency, bank_type, description) VALUES(?, 'revolut', '2026-10-04', ?, ?, 'Card Payment', 'Old shop')",
-      [id, cents, currency]);
-
-  group('stored digits (tx.digits)', () {
-    test('legacyMinor: cents to the currency own units, both ways, and nothing for 2 digits', () {
-      expect(legacyMinor(100000, 'JPY', null), 1000);
-      expect(legacyMinor(-100000, 'JPY', null), -1000);
-      expect(legacyMinor(150, 'JPY', null), 2, reason: 'half a yen rounds away from zero (never seen in a real export)');
-      expect(legacyMinor(123, 'KWD', null), 1230);
-      expect(legacyMinor(1, 'BTC', null), 1000000);
-      expect(legacyMinor(1234, 'EUR', null), 1234);
-      expect(legacyMinor(1000, 'JPY', 0), 1000, reason: 'a schema-20 row is already in yen');
-      expect(legacyMinor(1234, 'ZZZ', null), 1234, reason: 'unknown code = 2 digits');
+  group('storage scale', () {
+    test('storage digits: 2 for every fiat currency, 8 for BTC; display digits for showing and typing', () {
+      expect([
+        for (final c in ['EUR', 'JPY', 'KWD', 'BTC', 'ZZZ']) storageDigitsOf(c)
+      ], [
+        2,
+        2,
+        2,
+        8,
+        2
+      ]);
+      expect([
+        for (final c in ['EUR', 'JPY', 'KWD', 'BTC']) displayDigitsOf(c)
+      ], [
+        2,
+        0,
+        2,
+        8
+      ]);
     }, timeout: _t);
 
-    test('a row an older build stored in cents reads in its own units', () {
-      legacyRow('old-jpy', -100000, 'JPY');
-      legacyRow('old-eur', -1234, 'EUR');
-      expect(repo.transaction('old-jpy')!.amount, -1000);
-      expect(repo.transaction('old-eur')!.amount, -1234);
-    }, timeout: _t);
-
-    test('an import writes digits for a non-2-digit currency only; EUR ops are unchanged', () {
-      repo.importBatch(ImportBatch(source: 'revolut', transactions: [_row('j1', -1000, 'JPY'), _row('e1', -1000, 'EUR')]));
-      final ops = {
+    test('a row an older build stored reads unchanged; ops carry no new tx field', () {
+      repo.db.execute(
+          "INSERT INTO tx(id, source, date, amount, currency, bank_type, description) VALUES('old', 'revolut', '2026-10-04', -100000, 'JPY', 'Card Payment', 'Old shop')");
+      expect(repo.transaction('old')!.amount, -100000, reason: '1,000 yen in hundredths, as always');
+      repo.importBatch(ImportBatch(source: 'revolut', transactions: [_row('j1', -100000, 'JPY')]));
+      final f = [
         for (final (_, op) in repo.pendingOps())
-          if (op.entity == 'tx') op.id: op.fields
-      };
-      expect(ops['j1']!['digits'], 0);
-      expect(ops['e1']!.containsKey('digits'), isFalse);
-      expect(repo.transaction('j1')!.amount, -1000);
-      expect(repo.db.select("SELECT amount, digits FROM tx WHERE id = 'j1'").first['digits'], 0);
-    }, timeout: _t);
-
-    test('re-importing a row an older build stored in cents is a duplicate, not a collision', () {
-      legacyRow('again', -100000, 'JPY');
-      final s = repo.importBatch(ImportBatch(source: 'revolut', transactions: [_row('again', -1000, 'JPY', desc: 'Old shop')]));
-      expect((s.added, s.duplicates, s.collisions), (0, 1, 0));
-    }, timeout: _t);
-
-    test('a hand-added yen expense is stored in yen with its digits', () {
-      final id = repo.addTransaction(date: '2026-10-03', amount: 1500, category: 'Shopping', currency: 'JPY');
-      final r = repo.db.select('SELECT amount, digits FROM tx WHERE id = ?', [id]).first;
-      expect((r['amount'], r['digits']), (-1500, 0));
-      expect(repo.transaction(id)!.amount, -1500);
+          if (op.entity == 'tx' && op.id == 'j1') op.fields
+      ].single;
+      expect(f.keys.toSet().difference(entitySchema['tx']!.columnNames.toSet()), isEmpty);
+      expect(f.containsKey('digits'), isFalse);
     }, timeout: _t);
   });
 
   group('typed amounts and the CSV export', () {
-    test('parseMoneyCents with digits', () {
+    test('parseMoneyCents: digits = the typed decimals, the result in stored units', () {
       expect(parseMoneyCents('12,50'), 1250);
-      expect(parseMoneyCents('1000', digits: 0), 1000);
-      expect(parseMoneyCents('1,000', digits: 0), 1000, reason: 'a comma then three digits groups thousands');
-      expect(parseMoneyCents('1.000', digits: 0), 1, reason: 'a dot is the decimal point, as for cents');
-      expect(parseMoneyCents('10.5', digits: 0), isNull, reason: 'yen have no fraction: refused, never rounded');
-      expect(parseMoneyCents('1,234', digits: 3), 1234, reason: 'three digits after a comma: the dinar decimal');
-      expect(parseMoneyCents('2', digits: 3), 2000);
+      expect(parseMoneyCents('1000', digits: 0), 100000, reason: 'yen are typed whole and stored in hundredths');
+      expect(parseMoneyCents('1,000', digits: 0), 100000, reason: 'a comma then three digits groups thousands');
+      expect(parseMoneyCents('10.5', digits: 0), isNull, reason: 'yen are typed without a fraction: refused, never rounded');
+      expect(parseMoneyCents('10.00', digits: 0), 1000, reason: 'zeros past the point are no fraction');
       expect(parseMoneyCents('0.01', digits: 8), 1000000);
+      expect(parseMoneyCents('0,5', digits: 8), 50000000);
       expect(parseMoneyCents('0.00000001', digits: 8), 1);
       expect(parseMoneyCents('0.000000001', digits: 8), isNull);
     }, timeout: _t);
 
     test('centsToDecimal with digits', () {
       expect(centsToDecimal(-1234), '-12.34');
-      expect(centsToDecimal(-1000, digits: 0), '-1000');
-      expect(centsToDecimal(1234, digits: 3), '1.234');
+      expect(centsToDecimal(-100000), '-1000.00');
       expect(centsToDecimal(1000000, digits: 8), '0.01000000');
-      expect(centsToDecimal(0, digits: 0), '0');
+      expect(centsToDecimal(-1, digits: 8), '-0.00000001');
     }, timeout: _t);
 
-    test('the transactions CSV writes each row with its currency digits', () {
+    test('the transactions CSV writes each row at its storage digits', () {
       const rows = [
-        CategorizedTx(Tx(id: 'a', source: 'revolut', date: '2026-10-01', amount: -1000, currency: 'JPY', description: 'A'), 'Shopping',
+        CategorizedTx(Tx(id: 'a', source: 'revolut', date: '2026-10-01', amount: -100000, currency: 'JPY', description: 'A'), 'Shopping',
             BudgetKind.flex),
         CategorizedTx(Tx(id: 'b', source: 'revolut', date: '2026-10-02', amount: -1234, description: 'B'), 'Shopping', BudgetKind.flex),
+        CategorizedTx(Tx(id: 'c', source: 'revolut', date: '2026-10-03', amount: 1000000, currency: 'BTC', description: 'C'), 'Shopping',
+            BudgetKind.flex),
       ];
       final lines = transactionsCsv(rows).trim().split('\n');
-      expect(lines[1], startsWith('2026-10-01,-1000,'));
+      expect(lines[1], startsWith('2026-10-01,-1000.00,'));
       expect(lines[2], startsWith('2026-10-02,-12.34,'));
+      expect(lines[3], startsWith('2026-10-03,0.01000000,'));
     }, timeout: _t);
   });
 
   group('FX with digits', () {
-    test('convertMinor across digits, both directions, and a crypto rate', () {
-      expect(convertMinor(1000, 6500, fromDigits: 0, toDigits: 2), 650);
-      expect(convertMinor(-650, 153846154, fromDigits: 2, toDigits: 0), -1000, reason: 'EUR cents to yen');
+    test('fiat to fiat is the pre-20 math; BTC scales by 10^6; the function itself takes any digits', () {
+      expect(convertMinor(100000, 6500), 650, reason: '1,000 yen (hundredths) at 0.0065 EUR');
+      expect(convertMinor(100000, 6500), convertMinor(100000, 6500, fromDigits: 2, toDigits: 2));
       expect(convertMinor(100000000, 50000000000, fromDigits: 8, toDigits: 2), 5000000, reason: '1 BTC at 50,000 EUR');
       expect(convertMinor(1, 50000000000, fromDigits: 8, toDigits: 2), 0);
-      expect(convertMinor(2, 1000000, fromDigits: 3, toDigits: 2), 0, reason: '2 fils = 0.2 cents');
-      expect(convertMinor(5, 1000000, fromDigits: 3, toDigits: 2), 1, reason: 'half a cent rounds away from zero');
+      expect(convertMinor(-650, 153846154, fromDigits: 2, toDigits: 0), -1000);
+      expect(convertMinor(5, 1000000, fromDigits: 3, toDigits: 2), 1, reason: 'half a unit rounds away from zero');
       expect(convertMinor(-5, 1000000, fromDigits: 3, toDigits: 2), -1);
     }, timeout: _t);
 
@@ -134,6 +121,27 @@ void main() {
       expect(() => repo.setFxRate('XYZ', 2000000), throwsArgumentError);
       repo.removeFxRate('XYZ');
       expect(repo.settings().fxRates.keys, isNot(contains('XYZ')));
+    }, timeout: _t);
+  });
+
+  group('setWalletCurrency', () {
+    test('a known fiat code is set; rows keep their currency and amounts', () {
+      repo.importBatch(ImportBatch(source: 'revolut', transactions: [_row('e1', -1234, 'EUR')]));
+      repo.setWalletCurrency('USD');
+      expect(repo.settings().currency, 'USD');
+      expect((repo.transaction('e1')!.currency, repo.transaction('e1')!.amount), ('EUR', -1234));
+      final ops = repo.pendingOps().length;
+      repo.setWalletCurrency('USD');
+      expect(repo.pendingOps().length, ops, reason: 'already the wallet currency: no write');
+    }, timeout: _t);
+
+    test('unknown and crypto codes are refused and write nothing', () {
+      final ops = repo.pendingOps().length;
+      for (final c in ['ZZZ', 'usd', '', 'BTC']) {
+        expect(() => repo.setWalletCurrency(c), throwsArgumentError, reason: c);
+      }
+      expect(repo.pendingOps().length, ops);
+      expect(repo.settings().currency, 'EUR');
     }, timeout: _t);
   });
 
@@ -291,7 +299,7 @@ void main() {
       tmp.deleteSync(recursive: true);
     });
 
-    test('a bill reminder day and a yen row with its digits reach the other device', () async {
+    test('a bill reminder day and a bitcoin row reach the other device', () async {
       final a = device('a'), b = device('b');
       final (id, _) = a.repo.importBill(const NormalizedBill(
           source: BillSource.hub3,
@@ -301,10 +309,10 @@ void main() {
           total: 4599,
           payee: 'Synthetic'));
       a.repo.updateBill(id, returnReminderDays: 7);
-      a.repo.importBatch(ImportBatch(source: 'revolut', transactions: [_row('yen', -1000, 'JPY')]));
+      a.repo.importBatch(ImportBatch(source: 'revolut', transactions: [_row('sat', -12345, 'BTC')]));
       await syncAll([a, b]);
       expect(b.repo.bill(id)!.returnReminderDays, 7);
-      expect(b.repo.transaction('yen')!.amount, -1000);
+      expect((b.repo.transaction('sat')!.amount, b.repo.transaction('sat')!.currency), (-12345, 'BTC'));
       b.repo.updateBill(id, clearReturnReminderDays: true);
       await syncAll([a, b]);
       expect(a.repo.bill(id)!.returnReminderDays, isNull);

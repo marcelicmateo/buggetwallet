@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS tx(
   id TEXT PRIMARY KEY, source TEXT NOT NULL DEFAULT '', date TEXT NOT NULL DEFAULT '', amount INTEGER NOT NULL DEFAULT 0,
   currency TEXT NOT NULL DEFAULT 'EUR', bank_type TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '',
   category TEXT, note TEXT, manual INTEGER NOT NULL DEFAULT 0, matched_to TEXT, deleted INTEGER NOT NULL DEFAULT 0, seen_bank TEXT,
-  kind_hint TEXT, transfer_to TEXT, match_off TEXT, digits INTEGER);
+  kind_hint TEXT, transfer_to TEXT, match_off TEXT);
 CREATE INDEX IF NOT EXISTS tx_date ON tx(date);
 CREATE INDEX IF NOT EXISTS tx_amount ON tx(amount);
 CREATE TABLE IF NOT EXISTS goals(id TEXT PRIMARY KEY, name TEXT, target INTEGER NOT NULL DEFAULT 0, saved INTEGER NOT NULL DEFAULT 0,

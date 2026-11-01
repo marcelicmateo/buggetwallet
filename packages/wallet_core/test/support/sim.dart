@@ -33,8 +33,7 @@ const entityTables = {
       'seen_bank',
       'kind_hint',
       'transfer_to',
-      'match_off',
-      'digits'
+      'match_off'
     ]
   ),
   'goal': ('goals', ['name', 'target', 'saved', 'monthly', 'sort', 'deleted']),

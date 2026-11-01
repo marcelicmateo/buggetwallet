@@ -370,9 +370,9 @@ final _amountRes = {
 };
 
 /// Exact minor units of an amount cell in [decimal] style (thousands marks of the other kind, spaces allowed; a leading
-/// `+`, `-` or `−`) for a currency with [digits] minor digits (`minorDigitsOf`; 2 = cents). No doubles: at most [digits]
-/// decimals (a finer fraction is refused, never rounded), up to [maxRowAmountMinor].
-(int?, _AmountError?) _cents(String raw, CsvDecimal decimal, [int digits = 2]) {
+/// `+`, `-` or `−`) for a currency stored with [digits] digits (`storageDigitsOf`: 2 = cents for every fiat currency,
+/// BTC 8). No doubles: at most [digits] decimals (a finer fraction is refused, never rounded), up to [maxRowAmountMinor].
+(int?, _AmountError?) _cents(String raw, CsvDecimal decimal, [int digits = 2, bool zerosPast = false]) {
   var s = raw.replaceAll(_space, '');
   if (s.isEmpty) return (null, _AmountError.empty);
   var neg = false;
@@ -382,14 +382,13 @@ final _amountRes = {
   }
   final m = _amountRes[decimal]!.firstMatch(s);
   if (m == null) return (null, _AmountError.notAmount);
-  final frac = m[2] ?? '';
-  // For a currency with fewer digits than cents, zeros past them change nothing (`10,00` yen is 10 yen); any other
-  // digit there is refused.
-  final kept = digits < 2 && frac.length > digits && RegExp(r'^0*$').hasMatch(frac.substring(digits)) ? frac.substring(0, digits) : frac;
-  if (kept.length > digits) return (null, _AmountError.decimals);
+  var frac = m[2] ?? '';
+  // [zerosPast] (a currency with more ISO digits than it is stored with, KWD): `10,000` is 10.00; `1,235` is refused.
+  if (zerosPast && frac.length > digits && RegExp(r'^0+$').hasMatch(frac.substring(digits))) frac = frac.substring(0, digits);
+  if (frac.length > digits) return (null, _AmountError.decimals);
   final whole = m[1]!.replaceAll(decimal == CsvDecimal.comma ? '.' : ',', '').replaceFirst(RegExp(r'^0+(?=\d)'), '');
   if (whole.length > 15 - digits) return (null, _AmountError.tooBig);
-  final cents = int.parse(whole) * pow10(digits) + (digits == 0 ? 0 : int.parse(kept.padRight(digits, '0')));
+  final cents = int.parse(whole) * pow10(digits) + int.parse(frac.padRight(digits, '0'));
   if (cents > maxRowAmountMinor) return (null, _AmountError.tooBig);
   return (neg ? -cents : cents, null);
 }
@@ -398,12 +397,12 @@ final _amountRes = {
 /// the minor digits of the amount's currency (2 = cents).
 int? parseCsvCents(String s, CsvDecimal decimal, {int digits = 2}) => _cents(s, decimal, digits).$1;
 
-String _amountProblem(int row, String what, String cell, _AmountError e, int digits) => switch (e) {
+String _amountProblem(int row, String what, String cell, _AmountError e, String currency) => switch (e) {
       _AmountError.empty => 'Row ${row + 1}: no $what',
       _AmountError.notAmount => 'Row ${row + 1}: the $what ${_q(cell)} is not an amount',
-      _AmountError.decimals => digits == 0
-          ? 'Row ${row + 1}: the $what ${_q(cell)} has decimals, and its currency has none'
-          : 'Row ${row + 1}: the $what ${_q(cell)} has more than $digits decimals',
+      _AmountError.decimals => minorDigitsOf(currency) > storageDigitsOf(currency)
+          ? 'Row ${row + 1}: the $what ${_q(cell)} has more than ${storageDigitsOf(currency)} decimals (the third decimal of $currency is not supported)'
+          : 'Row ${row + 1}: the $what ${_q(cell)} has more than ${storageDigitsOf(currency)} decimals',
       _AmountError.tooBig => 'Row ${row + 1}: the $what ${_q(cell)} is too large',
     };
 
@@ -433,26 +432,26 @@ CsvPreviewRow _mapRow(List<String> cells, int row, CsvMapping m, String walletCu
       currency = up;
     }
   }
-  final digits = minorDigitsOf(currency);
+  final digits = storageDigitsOf(currency), zeros = minorDigitsOf(currency) > digits;
   int cents;
   if (m.amountCol != null) {
-    final (c, e) = _cents(cell(m.amountCol), m.decimal, digits);
-    if (e != null) return bad(_amountProblem(row, 'amount', cell(m.amountCol), e, digits), tooLarge: e == _AmountError.tooBig);
+    final (c, e) = _cents(cell(m.amountCol), m.decimal, digits, zeros);
+    if (e != null) return bad(_amountProblem(row, 'amount', cell(m.amountCol), e, currency), tooLarge: e == _AmountError.tooBig);
     cents = c!;
   } else {
     final debitCell = cell(m.debitCol), creditCell = cell(m.creditCol);
     if (debitCell.replaceAll(_space, '').isEmpty && creditCell.replaceAll(_space, '').isEmpty) return bad('Row ${row + 1}: no amount');
-    final (d, de) = debitCell.isEmpty ? (0, null) : _cents(debitCell, m.decimal, digits);
-    if (de != null) return bad(_amountProblem(row, 'debit', debitCell, de, digits), tooLarge: de == _AmountError.tooBig);
-    final (c, ce) = creditCell.isEmpty ? (0, null) : _cents(creditCell, m.decimal, digits);
-    if (ce != null) return bad(_amountProblem(row, 'credit', creditCell, ce, digits), tooLarge: ce == _AmountError.tooBig);
+    final (d, de) = debitCell.isEmpty ? (0, null) : _cents(debitCell, m.decimal, digits, zeros);
+    if (de != null) return bad(_amountProblem(row, 'debit', debitCell, de, currency), tooLarge: de == _AmountError.tooBig);
+    final (c, ce) = creditCell.isEmpty ? (0, null) : _cents(creditCell, m.decimal, digits, zeros);
+    if (ce != null) return bad(_amountProblem(row, 'credit', creditCell, ce, currency), tooLarge: ce == _AmountError.tooBig);
     if (d != 0 && c != 0) return bad('Row ${row + 1}: both debit and credit');
     // Exactly as written: credit − debit (a debit of −12,30 is a reversal, money in; a credit of −50,00 is money out).
     cents = c! - d!;
   }
   if (currencyProblem != null) return bad(currencyProblem);
   if (m.negate) cents = -cents;
-  final balance = m.balanceCol == null ? null : _cents(cell(m.balanceCol), m.decimal, digits).$1;
+  final balance = m.balanceCol == null ? null : _cents(cell(m.balanceCol), m.decimal, digits, zeros).$1;
   return CsvPreviewRow(row: row, date: date, amountMinor: cents, currency: currency, description: description, balanceAfter: balance);
 }
 
@@ -523,7 +522,7 @@ ImportBatch parseMappedCsv(Uint8List bytes, CsvMapping layout, {String? fileName
       if (r.tooLarge) tooLarge++;
     } else {
       out.add(NormalizedTransaction(
-        id: ctx.sourceId(source, r.date!, r.amountMinor!, r.description, digits: minorDigitsOf(r.currency!)),
+        id: ctx.sourceId(source, r.date!, r.amountMinor!, r.description, digits: storageDigitsOf(r.currency!)),
         source: source,
         date: r.date!,
         amountMinor: r.amountMinor!,

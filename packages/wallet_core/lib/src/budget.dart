@@ -1,4 +1,4 @@
-import 'package:wallet_importer/wallet_importer.dart' show minorDigitsOf, pow10;
+import 'package:wallet_importer/wallet_importer.dart' show pow10, storageDigitsOf;
 
 import 'bills.dart' show occurrenceKey, plannedReserves;
 import 'categories.dart';
@@ -739,11 +739,11 @@ int? changePermille(int now, int before) {
 }
 
 /// Budgets to propose for [month]: each category's average over the 6 months before it, rounded UP to the nearest
-/// 10 units of [currency] (1000 cents, 10 €; its own minor digits, UX-A). A category whose average is zero or negative (refunds) is omitted. Only rows in [currency] count.
+/// 10 units of [currency] (1000 cents, 10 €; its storage digits, UX-A). A category whose average is zero or negative (refunds) is omitted. Only rows in [currency] count.
 /// With [table], per top-level category (children rolled up, [rollUp]): budgets are set on top-level categories only.
 Map<String, int> suggestBudgets(List<CategorizedTx> txs, String month, {required String currency, CategoryTable? table}) {
   const months = 6;
-  final step = 10 * pow10(minorDigitsOf(currency));
+  final step = 10 * pow10(storageDigitsOf(currency));
   final sums = rollUp(_outByCategory(txs, _monthsBefore(month, months).toSet(), currency), table ?? CategoryTable.builtIn);
   return {
     for (final e in sums.entries)
@@ -793,8 +793,8 @@ int monthlyFlex(WalletSettings st, {List<Goal> goals = const [], CategoryTable? 
 BudgetPreset budgetPreset(BudgetPresetKind kind, List<CategorizedTx> txs, WalletSettings st, String month,
     {required String currency, CategoryTable? table, List<Goal> goals = const []}) {
   final t = table ?? CategoryTable.builtIn;
-  // Whole units and steps of 10 units of [currency] (UX-A: its own minor digits; EUR 100 cents, JPY 1 yen).
-  final unit = pow10(minorDigitsOf(currency)), step = 10 * unit;
+  // Whole units and steps of 10 units of [currency] (its storage digits: 100 for every fiat currency, as before).
+  final unit = pow10(storageDigitsOf(currency)), step = 10 * unit;
   BudgetPreset done(Map<String, int> b) => BudgetPreset(Map.unmodifiable(b), b.values.fold(0, (s, v) => s + v));
   Map<String, int> sums(int months) => rollUp(_outByCategory(txs, _monthsBefore(month, months).toSet(), currency), t);
   BudgetPreset average(int months) {

@@ -61,9 +61,10 @@ class RevolutProfile extends BankProfile {
     final amount = cellCents(a), feeCents = cellCents(fee);
     if (amount == null || feeCents == null) return const RowResult.invalid();
     final currency = ctx.column('Currency') >= 0 && cellText(at('Currency')).isNotEmpty ? cellText(at('Currency')) : 'EUR';
-    // The amount in the currency's own minor units (JPY 0 digits, BTC 8); the id keeps v1's cents (`cents` below).
-    final digits = minorDigitsOf(currency);
-    final minor = cellMinor(a, digits), feeMinor = cellMinor(fee, digits);
+    // The amount in the currency's stored units (fiat hundredths as always, BTC satoshis; a 3-decimal currency's third
+    // decimal is refused); the id keeps v1's cents (`cents` below).
+    final digits = storageDigitsOf(currency), strict = minorDigitsOf(currency) > digits;
+    final minor = cellMinor(a, digits, strict: strict), feeMinor = cellMinor(fee, digits, strict: strict);
     if (minor == null || feeMinor == null) return const RowResult.invalid();
     final type = cellText(at('Type'));
     final desc = fixMojibake(cellText(at('Description')));
@@ -72,7 +73,7 @@ class RevolutProfile extends BankProfile {
     // Optional: the pocket's balance after the row. An empty or unreadable cell gives none; the row still imports.
     final balanceCell = ctx.column('Balance') >= 0 ? at('Balance') : '';
     final balanceNum = cellText(balanceCell).isEmpty ? null : cellNumber(balanceCell);
-    final balance = balanceNum == null ? null : cellMinor(balanceNum, digits);
+    final balance = balanceNum == null ? null : cellMinor(balanceNum, digits, strict: strict);
     return RowResult.transaction(NormalizedTransaction(
       id: ctx.v1Id(d, cents, desc),
       source: id,

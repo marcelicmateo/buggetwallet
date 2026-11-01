@@ -118,7 +118,16 @@ export 'src/categories.dart'
         spendingCategories;
 export 'src/changes.dart' show ChangeEntry;
 export 'src/currencies.dart'
-    show allCurrencies, CurrencyInfo, currencyInfo, legacyMinor, minorDigitsOf, prevalentCurrency, prevalentMinRows, prevalentPercent;
+    show
+        allCurrencies,
+        CurrencyInfo,
+        currencyInfo,
+        displayDigitsOf,
+        minorDigitsOf,
+        prevalentCurrency,
+        prevalentMinRows,
+        prevalentPercent,
+        storageDigitsOf;
 export 'src/dates.dart'
     show
         addDays,

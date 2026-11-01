@@ -1,13 +1,15 @@
-/// Currencies (Stage UX-A): the table ([allCurrencies], [currencyInfo], [minorDigitsOf]; the data lives in
-/// `wallet_importer`, which reads amounts with it), the wallet-currency offer ([prevalentCurrency]) and the read of
-/// amounts stored by builds before schema 20 ([legacyMinor]).
+/// Currencies (Stage UX-A): the table ([allCurrencies], [currencyInfo]; the data lives in `wallet_importer`, which
+/// reads amounts with it) and the wallet-currency offer ([prevalentCurrency]).
+///
+/// Storage rule (owner, 2026-11-01): amounts are stored at [storageDigitsOf] — hundredths for every fiat currency,
+/// exactly as every build before schema 20 (1,000 yen = 100000), and a crypto currency's own digits (BTC: satoshis).
+/// No stored amount is ever read differently. [minorDigitsOf] (ISO) and [displayDigitsOf] are for showing and typing.
 library;
-
-import 'package:wallet_importer/wallet_importer.dart' show minorDigitsOf, pow10;
 
 import 'models.dart';
 
-export 'package:wallet_importer/wallet_importer.dart' show allCurrencies, CurrencyInfo, currencyInfo, minorDigitsOf;
+export 'package:wallet_importer/wallet_importer.dart'
+    show allCurrencies, CurrencyInfo, currencyInfo, displayDigitsOf, minorDigitsOf, storageDigitsOf;
 
 /// Fewest payments [prevalentCurrency] counts before it offers anything.
 const prevalentMinRows = 10;
@@ -31,24 +33,4 @@ String? prevalentCurrency(Iterable<Tx> txs, String walletCurrency) {
     if (code != walletCurrency && n * 100 >= total * prevalentPercent) return code;
   }
   return null;
-}
-
-/// [stored] minor units of [currency] as written with [digits] minor digits (the tx row's `digits` column; null = the
-/// two digits every build before schema 20 used for every currency) in [currency]'s own minor units
-/// ([minorDigitsOf]): 100000 stored by an older build for 1,000 yen reads 1000; 1 stored for 0.01 BTC reads 1000000.
-/// Fewer digits round half away from zero (an older build's yen row is always whole yen, so nothing is lost).
-int legacyMinor(int stored, String currency, int? digits) {
-  final from = digits ?? 2, to = minorDigitsOf(currency);
-  if (from == to) return stored;
-  if (to > from) return stored * pow10(to - from);
-  final p = pow10(from - to), a = stored.abs();
-  final q = a ~/ p + (a % p * 2 >= p ? 1 : 0);
-  return stored < 0 ? -q : q;
-}
-
-/// The value the tx `digits` column gets for a row in [currency]: null for a 2-digit currency (the scale before
-/// schema 20, so those rows' ops stay as they were), else its [minorDigitsOf].
-int? digitsColumn(String currency) {
-  final d = minorDigitsOf(currency);
-  return d == 2 ? null : d;
 }

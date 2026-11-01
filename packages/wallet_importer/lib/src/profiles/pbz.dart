@@ -104,9 +104,10 @@ class PbzProfile extends BankProfile {
     final amount = cellCents(a);
     if (amount == null) return const RowResult.invalid();
     final currency = row.length > 4 && cellText(row[4]).isNotEmpty ? cellText(row[4]) : 'EUR';
-    // The amount in the currency's own minor units; the id keeps v1's cents (`amount`).
-    final digits = minorDigitsOf(currency);
-    final minor = cellMinor(a, digits);
+    // The amount in the currency's stored units (fiat hundredths as always, BTC satoshis; a 3-decimal currency's third
+    // decimal is refused); the id keeps v1's cents (`amount`).
+    final digits = storageDigitsOf(currency), strict = minorDigitsOf(currency) > digits;
+    final minor = cellMinor(a, digits, strict: strict);
     if (minor == null) return const RowResult.invalid();
     final type = cellText(row[1]);
     final bc = ctx.column('balance');
@@ -121,7 +122,7 @@ class PbzProfile extends BankProfile {
       description: desc,
       kindHint: _kind(type, desc),
       account: ctx.account,
-      balanceAfter: balanceNum == null ? null : cellMinor(balanceNum, digits),
+      balanceAfter: balanceNum == null ? null : cellMinor(balanceNum, digits, strict: strict),
     ));
   }
 

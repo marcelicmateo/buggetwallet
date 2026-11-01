@@ -63,7 +63,7 @@ String? checkIso(String? s) {
 
 /// Cents from a plain decimal (`12`, `12.5`, `12.50`, `-3.10`; [comma] also allows `,` as the decimal point).
 /// Exact: no doubles; digits past the cents must be zeros, else `null`. [digits]: the minor digits of the amount's
-/// currency (`minorDigitsOf`; JPY 0, KWD 3): minor units of that currency, the same zero rule past them.
+/// storage scale (`storageDigitsOf`: 2 for fiat, BTC 8): stored units of that currency, the same zero rule past them.
 int? decimalCents(String s, {bool comma = false, int digits = 2}) {
   final m = (comma ? RegExp(r'^(-?)(\d{1,13})(?:[.,](\d+))?$') : RegExp(r'^(-?)(\d{1,13})(?:\.(\d+))?$')).firstMatch(s.trim());
   if (m == null) return null;

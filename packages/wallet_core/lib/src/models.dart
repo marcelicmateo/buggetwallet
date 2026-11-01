@@ -4,7 +4,7 @@ import 'dart:math' show min;
 import 'package:wallet_importer/wallet_importer.dart' show CsvMapping, TxKind;
 
 import 'categories.dart';
-import 'currencies.dart' show currencyInfo, legacyMinor;
+import 'currencies.dart' show currencyInfo;
 import 'dates.dart';
 import 'logs.dart';
 import 'rules.dart' show MerchantPattern, merchantPatternId;
@@ -112,8 +112,7 @@ class Tx {
         id: r['id'] as String,
         source: _str(r['source']) ?? '',
         date: _str(r['date']) ?? '',
-        // Schema 20: in the currency's own minor units; a row an older build wrote (no `digits`) is read from cents.
-        amount: legacyMinor(_int(r['amount']) ?? 0, _str(r['currency']) ?? 'EUR', _int(r['digits'])),
+        amount: _int(r['amount']) ?? 0,
         currency: _str(r['currency']) ?? 'EUR',
         bankType: _str(r['bank_type']) ?? '',
         description: _str(r['description']) ?? '',

@@ -2,7 +2,7 @@
 /// exact decimals from the cents (never through a double).
 library;
 
-import 'package:wallet_importer/wallet_importer.dart' show minorDigitsOf, pow10;
+import 'package:wallet_importer/wallet_importer.dart' show pow10, storageDigitsOf;
 
 import 'categories.dart';
 import 'dates.dart';
@@ -10,8 +10,8 @@ import 'models.dart';
 import 'tags.dart' show TagTable;
 
 /// [cents] as a decimal with a dot and two fractional digits: `-1234.56`, `0.01`, `1000000.00`. Exact for every int;
-/// zero is `0.00` (never `-0.00`). [digits]: the minor digits of the amount's currency (`minorDigitsOf`, UX-A): JPY
-/// `1000`, KWD `1.234`, BTC `0.01000000`.
+/// zero is `0.00` (never `-0.00`). [digits]: the stored digits of the amount's currency (`storageDigitsOf`, UX-A): 2
+/// for every fiat currency (1,000 yen is `1000.00`), BTC 8 (`0.01000000`).
 String centsToDecimal(int cents, {int digits = 2}) {
   final abs = cents.abs(), p = pow10(digits);
   final whole = abs ~/ p, frac = abs % p;
@@ -56,7 +56,7 @@ String transactionsCsv(List<CategorizedTx> txs, {CategoryTable? table, TagTable?
     final c = table == null ? t.category : table.label(t.category);
     sb.write(_record([
       t.date,
-      centsToDecimal(t.amount, digits: minorDigitsOf(t.tx.currency)),
+      centsToDecimal(t.amount, digits: storageDigitsOf(t.tx.currency)),
       c,
       if (tags != null) t.tags.map(tags.label).join('; '),
       if (t.part case final p?) (t.tx.description.isEmpty ? '#${p + 1}' : '${t.tx.description} #${p + 1}') else t.tx.description,
@@ -113,7 +113,7 @@ String monthlySummaryCsv(List<CategorizedTx> txs, {required String currency, Cat
     m[c] = (m[c] ?? 0) - t.amount;
   }
   final months = byMonth.keys.toList()..sort();
-  final digits = minorDigitsOf(currency);
+  final digits = storageDigitsOf(currency);
   final sb = StringBuffer('${monthlySummaryCsvHeaderFor(t0)}\n');
   for (final month in months) {
     final sums = byMonth[month]!;
