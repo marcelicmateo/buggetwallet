@@ -99,6 +99,13 @@ longer matches). One targeted check at the end (`tools/build.sh core` + `sync` +
 - **B4 Today customisation**: choose which Today tiles show and their order (stored per device).
 
 ## UX-C — theme + tightening (after the owner picks a mockup)
+**Owner picked option 1 "Clean neutral" (2026-11-01;** mockup https://claude.ai/artifact/4WfkJv2w4c3aJPjVjmwaVT): light bg
+`#F6F7F9`, surface `#FFFFFF`, ink `#1F2933`, muted `#5B6673`, line `#E3E7ED`, track `#E7EAEF`, accent `#2F5FC4`,
+accent-soft `#EAF0FC`, ok `#2B7A4B`/`#E7F4EC`, bad `#B3412F`/`#FBEAE6`; dark bg `#14171C`, surface `#1C2027`, ink
+`#E6E9EE`, muted `#9AA4B1`, line `#2A303A`, accent `#8AAAF0`, ok `#6CC38F`, bad `#F0907D`. White cards lifted by a soft
+shadow (no borders, radius ~14), rail white with a hairline, active tab = accent-soft pill; Inter for text (bundled, OFL),
+mono (IBM Plex Mono) only for amounts — eyebrow labels become sans. **UX-C1** (tokens, fonts, card/rail surfaces) runs
+during UX-A; **UX-C2** (tightening pass over every screen) after UX-B.
 New palette and surfaces from the chosen mockup (`theme.dart`, light + dark, design-system artifact re-synced), normal
 sans for text, mono only for amounts; then a pass over every screen (phone + wide screenshots) cutting repeated text,
 double controls and boxes that carry nothing.

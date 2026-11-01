@@ -37,10 +37,12 @@ Theme waits for the owner's mockup pick; crypto rate by hand. Merge order A-core
 | UX-A-core | currencies + digits, prevalentCurrency, account kinds (schema 20), built-in rule overrides | core-builder (worktree) | – | running |
 | UX-A-ui | bill dates (calendar, chips, length), inline reminder, Today hero wide, Month → Period sheet | ui-builder (worktree) | – | running |
 | UX-A-tests | spec tests for A-core money/migration edges | test-writer (worktree) | – | running |
-| UX-C-mock | 3 theme mockups (Today + Plan, light/dark) published for the owner | general-purpose (sonnet) | – | running |
+| UX-C-mock | 3 theme mockups (Today + Plan, light/dark) published for the owner | general-purpose (sonnet) | – | done: owner picked 1 Clean neutral |
+| UX-A-tests | (above) | | | done 7c0d879 (core-builder cherry-picks it) |
+| UX-C1 | Clean neutral tokens, Inter, card/rail surfaces, light + dark | ui-builder (worktree) | – | running |
 | UX-A-ui2 | currency picker + offer, account form by kind, editable built-ins | ui-builder | A-core merged | queued |
 | UX-B | Plan window, Tags window, Settings = setup, Today tiles | ui-builder (+ core if needed) | UX-A | queued |
-| UX-C | theme + tightening pass | ui-builder | owner pick, UX-B | queued |
+| UX-C2 | tightening pass over every screen | ui-builder | UX-B | queued |
 
 ## Stages BP, WS, DK (owner picked 2026-10-28; plan `STAGE_Y_PLAN.md`; one at a time after Stage M)
 | # | Item | Agent | Depends on | Status |
