@@ -44,8 +44,14 @@
 #   tools/build.sh importer|core|sync|relay|app <test file or dir>…   only those tests (paths relative to the package or the repo root),
 #                           no analyze; step name <pkg>:one, so the full-suite medians stay clean
 #   tools/build.sh mutate <importer|core|sync> <lib file>… [--max N] [--seed S] [--tests <test file>…] [--timeout SECS] [--list]
-#                           mutation testing (tools/mutate.py): seeded sample of simple mutants per lib file, each run against the
-#                           package tests (one at a time, file restored after each), survivors listed; dist/mutation/<pkg>-<file>.json
+#                           mutation testing (wallet-build, in the container): seeded sample of simple mutants per lib file, each run
+#                           against the package tests (one at a time, in a copy under dist/mutation/work), survivors listed;
+#                           dist/mutation/<pkg>-<file>.json
+#   GO4-A helpers (no container; also make fixtures | fixtures-embed | token-usage | log-summary | lsp-query):
+#   wallet-build fixtures <out_dir> [all|banks|bills|generic]   synthetic importer fixtures (seeded, byte-identical; the two Excel
+#                           files are frozen); fixtures embed writes app/integration_test/support/fixtures.dart from the bank files
+#   wallet-build token-usage [--since D] [--until D] [--json F]   Claude Code tokens per day/session/model/commit (local transcripts)
+#   wallet-build log-summary <log>…   summary of an app log     wallet-build lsp-query refs|def <path:line:col>…   symbol lookup
 #   tools/build.sh shell    interactive shell in the container;  shell -c '<command>' runs one command non-interactively
 #   tools/build.sh image    (re)build the container image (first build ~15 min)
 #   tools/build.sh lsp      Dart language server on stdin/stdout, for editors (repo mounted at its host path)
@@ -179,7 +185,8 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
   case "$CMD" in
     image) build_image; exit ;;
     image-name) podman image exists "$IMAGE" || build_image; echo "$IMAGE"; exit ;;
-    test|lint|apk|linux|all|importer|core|sync|relay|app|mutate|desktop-test|desktop-smoke|perf|web|web-test|analyze|outdated|relay-bin) run_begin "$CMD" ;;
+    mutate) (($# > 2)) || usage; run_begin "$CMD" ;;  # usage errors before the run dir, as wallet-build does
+    test|lint|apk|linux|all|importer|core|sync|relay|app|desktop-test|desktop-smoke|perf|web|web-test|analyze|outdated|relay-bin) run_begin "$CMD" ;;
     stage) host_stage; exit ;;
     relay-native-test)
       run_begin "$CMD"
