@@ -24,6 +24,7 @@ func withUnformatted(t *testing.T, repo string) func() {
 	if err := os.WriteFile(p, []byte("void   main( ) {  }\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = os.Remove(p) }) // also runs when a case fails; TestMain removes leftovers of a killed run
 	return func() { _ = os.Remove(p) }
 }
 
@@ -62,13 +63,17 @@ func checkLintClean(t *testing.T, s *side) {
 			got[f[0]] = f[1]
 		}
 	}
+	// go-check (host step, first) runs in both implementations; its own failure must not hide the seven others
+	if gc := got["go-check"]; gc != "ok" && gc != "failed" {
+		t.Errorf("%s last.status: step go-check is %q, want ok or failed", s.impl, gc)
+	}
 	for _, st := range lintSteps {
 		if got[st] != "ok" {
 			t.Errorf("%s last.status: step %q is %q, want ok (all of %v)", s.impl, st, got[st], lintSteps)
 		}
 	}
-	if strings.TrimSpace(s.file(0, "last-failed.txt")) != "" {
-		t.Errorf("%s last-failed.txt is not empty on a green run", s.impl)
+	if lf := strings.TrimSpace(s.file(0, "last-failed.txt")); lf != "" && !(got["go-check"] == "failed" && strings.HasPrefix(lf, "go-check ")) {
+		t.Errorf("%s last-failed.txt is not empty on a green run (only a go-check line is tolerated): %q", s.impl, lf)
 	}
 	if strings.TrimSpace(s.file(0, "format.log")) == "" {
 		t.Errorf("%s format.log is empty", s.impl)
@@ -192,6 +197,9 @@ func cheapCases(t *testing.T, repo string) []Case {
 		}
 		checkNoRunDir(t, s)
 	}
+	fwd := mk("forwarded_timeout_env_lint", -1, "lint")
+	fwd.Env = []string{"BW_TIMEOUT_FORMAT=1"}
+	fwd.Loose = true
 	relay := mk("relay_bin_x64", 0, "relay-bin", "x64")
 	relay.Artifacts = []string{"dist/relay"}
 	unknown := usage("usage_unknown_command", "no-such-command")
@@ -206,7 +214,7 @@ func cheapCases(t *testing.T, repo string) []Case {
 		mk("analyze_core", 0, "analyze", "core"),
 		shellExit,
 		imageName,
-		relay,
+		relay, fwd,
 		{Name: "lsp_initialize", WantExit: -1, Custom: lspRoundTrip},
 	}
 }

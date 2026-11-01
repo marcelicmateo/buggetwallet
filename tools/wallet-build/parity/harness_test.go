@@ -69,6 +69,9 @@ type Case struct {
 	WantExit int
 	// Check runs extra assertions on each side (run dir, stdout, ...).
 	Check func(t *testing.T, s *side)
+	// Loose: the variable under test changes behaviour on one side only (bash forwards BW_TIMEOUT_* but applies no
+	// timeout), so only the run dir list, file names and step names are compared.
+	Loose bool
 	// Custom replaces the whole run-and-compare flow: it returns comparable lines per implementation.
 	Custom func(t *testing.T, repo, impl string) []string
 	// SkipIf returns a skip reason, or "".
@@ -148,6 +151,9 @@ func buildEnv(data, impl string, extra []string) []string {
 		env = append(env, e)
 	}
 	env = append(env, "BW_DATA_DIR="+data, "BW_IMPL="+impl)
+	if v := os.Getenv("BW_SIGNING_DIR"); v != "" { // the same key for the build and for the secret grep
+		env = append(env, "BW_SIGNING_DIR="+v)
+	}
 	return append(env, extra...)
 }
 
@@ -363,6 +369,14 @@ func compareSides(t *testing.T, c Case, a, b *side) {
 	if !diffLines(t, cn, "run dir list (runs/)", an, bn) {
 		return
 	}
+	if c.Loose {
+		for i := range a.runs {
+			fa, fb := runFiles(a.runs[i]), runFiles(b.runs[i])
+			diffLines(t, cn, "run dir file names", fa, fb)
+			diffLines(t, cn, "last.status step names", sorted(stepNames(a, i)), sorted(stepNames(b, i)))
+		}
+		return
+	}
 	for i := range a.runs {
 		compareRun(t, c, a, b, i)
 	}
@@ -390,4 +404,32 @@ func stepTable(s *side) []string {
 		res = append(res, strings.TrimSpace(ln))
 	}
 	return res
+}
+
+func stepNames(s *side, run int) []string {
+	var out []string
+	for _, ln := range lines(s.file(run, "last.status")) {
+		if f := strings.Fields(ln); len(f) > 0 && f[0] != "pub" {
+			out = append(out, f[0])
+		}
+	}
+	return out
+}
+
+// TestMain removes the unformatted file of a killed earlier run (a panic on -timeout or SIGKILL skips cleanups).
+func TestMain(m *testing.M) {
+	dir, _ := os.Getwd()
+	for d := dir; ; d = filepath.Dir(d) {
+		if _, err := os.Stat(filepath.Join(d, "tools", "build.sh")); err == nil {
+			old, _ := filepath.Glob(filepath.Join(d, "app", "lib", "zz_*unformatted*.dart"))
+			for _, f := range old {
+				_ = os.Remove(f)
+			}
+			break
+		}
+		if d == filepath.Dir(d) {
+			break
+		}
+	}
+	os.Exit(m.Run())
 }
