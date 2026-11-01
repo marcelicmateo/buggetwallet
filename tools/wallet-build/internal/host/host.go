@@ -103,7 +103,11 @@ func (h *Host) timedLog(name, logPath string, split bool, cold string, history b
 	if split {
 		ew = c.Red.Writer(io.MultiWriter(lf, errDst))
 	}
-	timeout := run.StepTimeout(c.Env, name, run.DefaultTimeout(c.Env, name))
+	limitEnv := c.Env
+	if strings.HasPrefix(name, "emulator-") { // never limited before: only BW_TIMEOUT_EMULATOR_<CMD> sets one, not BW_STEP_TIMEOUT
+		limitEnv = c.Env.Without("BW_STEP_TIMEOUT")
+	}
+	timeout := run.StepTimeout(limitEnv, name, run.DefaultTimeout(c.Env, name))
 	ctx, cancel := c.Ctx, context.CancelFunc(func() {})
 	if timeout > 0 {
 		ctx, cancel = context.WithTimeout(c.Ctx, timeout)

@@ -38,6 +38,13 @@ env:
   BW_SOURCE: ci
   BW_NATIVE: 1
   BW_APK_ABIS: arm64
+  # Step limits for the slow runners (the wallet-build defaults are set for the laptop, ~4.6x faster). About 3x the CI medians of
+  # ci-logs history.jsonl (app 128 s, desktop 591 s, apk 134 s) and not below the slowest runs seen (app 565 s, desktop 1341 s,
+  # apk 475 s cold): the other steps keep the defaults (their CI maxima are far below them). `ci step` itself sets no limit.
+  BW_TIMEOUT_APP: 1800
+  BW_HEADLESS_TIMEOUT: 1800 # each desktop test
+  BW_TIMEOUT_DESKTOP: 3600 # the whole desktop job step
+  BW_TIMEOUT_APK: 2400
 jobs:
   lint:
     if: ${{ inputs.tests }}
@@ -206,12 +213,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup
-        with: { flutter: false }
+      - { id: setup, uses: ./.github/actions/setup, with: { flutter: false } }
       - uses: actions/download-artifact@v4
         continue-on-error: true
         with: { pattern: "ci-log-*", path: "${{ runner.temp }}/logs" }
       - name: Publish log
+        if: steps.setup.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
           NEEDS: ${{ toJSON(needs) }}
@@ -219,3 +226,13 @@ jobs:
         run: |
           wallet-build ci merge --artifacts "$RUNNER_TEMP/logs" --needs-json "$NEEDS" --out "$RUNNER_TEMP/ci.txt" --history "$RUNNER_TEMP/history.jsonl"
           wallet-build ci publish-log "$NAME" "$RUNNER_TEMP/ci.txt" "$RUNNER_TEMP/history.jsonl"
+      # wallet-build did not build: a short latest.txt with plain git (the old script), so ci-logs still says what happened
+      - name: Publish log without wallet-build
+        if: always() && steps.setup.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEEDS: ${{ toJSON(needs) }}
+          NAME: ${{ inputs.release && 'release-android-linux' || 'latest' }}
+        run: |
+          { echo "wallet-build=failure(did not build)"; echo "$NEEDS" | jq -r 'to_entries | map("job:\(.key)=\(.value.result) ") | join("")'; } > "$RUNNER_TEMP/ci.txt"
+          .github/scripts/publish-log.sh "$NAME" "$RUNNER_TEMP/ci.txt"

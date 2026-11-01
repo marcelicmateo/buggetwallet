@@ -94,23 +94,32 @@ func TestStepTimeout(t *testing.T) {
 	}
 }
 
-func TestStepTimeoutOfSmokeIsTheDesktopSmokeLimit(t *testing.T) {
+func TestStepHasNoDefaultLimit(t *testing.T) {
 	var deadline time.Duration
+	var has bool
 	h := newHX(t, &sys.Fake{HandleCtx: func(ctx context.Context, c sys.Cmd) int {
-		d, ok := ctx.Deadline()
-		if ok {
-			deadline = time.Until(d)
-		}
+		var d time.Time
+		d, has = ctx.Deadline()
+		deadline = time.Until(d)
 		return 0
 	}})
-	_, _ = h.x.Step([]string{"smoke", "--", "true"})
-	if deadline < 19*time.Minute || deadline > 20*time.Minute+time.Second {
-		t.Errorf("smoke limit %v", deadline)
+	for _, name := range []string{"app", "smoke", "desktop", "apk"} { // the wrapped step has its own default
+		has = false
+		_, _ = h.x.Step([]string{name, "--", "true"})
+		if has {
+			t.Errorf("%s: unexpected limit %v", name, deadline)
+		}
 	}
-	deadline = 0
-	_, _ = h.x.Step([]string{"lint-tools", "--", "true"}) // a step without a default limit has no deadline
-	if deadline != 0 {
-		t.Errorf("unexpected limit %v", deadline)
+	h.x.C.Setenv("BW_TIMEOUT_APP", "1800")
+	_, _ = h.x.Step([]string{"app", "--", "true"})
+	if !has || deadline < 29*time.Minute || deadline > 30*time.Minute {
+		t.Errorf("explicit limit: has %v %v", has, deadline)
+	}
+	has = false
+	h.x.C.Setenv("BW_STEP_TIMEOUT", "60")
+	_, _ = h.x.Step([]string{"smoke", "--", "true"})
+	if !has || deadline > time.Minute {
+		t.Errorf("BW_STEP_TIMEOUT: has %v %v", has, deadline)
 	}
 }
 

@@ -858,3 +858,20 @@ func TestAppLogs(t *testing.T) {
 }
 
 var _ = context.Background
+
+func TestVMDispatch(t *testing.T) {
+	for _, args := range [][]string{{"vm"}, {"vm", "info"}, {"vm", "bogus"}} {
+		r := newRig(t)
+		if rc := r.host(args...); rc != 2 {
+			t.Errorf("%v: exit %d", args, rc)
+		}
+		if !strings.Contains(r.errb.String(), "live vm info") {
+			t.Errorf("%v: usage not on stderr: %q", args, r.errb.String())
+		}
+	}
+	r := newRig(t)
+	write(t, filepath.Join(r.root, "m.jsonl"), "")
+	if rc := r.host("vm", "info", filepath.Join(r.root, "m.jsonl")); rc != 0 {
+		t.Errorf("vm info: exit %d", rc)
+	}
+}

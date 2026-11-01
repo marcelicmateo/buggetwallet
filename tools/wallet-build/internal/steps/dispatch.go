@@ -67,6 +67,7 @@ func GoCheck(sc *run.StepCtx) int {
 
 var (
 	reModGo  = regexp.MustCompile(`(?m)^go (\d+)\.(\d+)(?:\.(\d+))?\s*$`)
+	reModTC  = regexp.MustCompile(`(?m)^toolchain go(\d+)\.(\d+)(?:\.(\d+))?\s*$`)
 	reGoVers = regexp.MustCompile(`go(\d+)\.(\d+)(?:\.(\d+))?`)
 )
 
@@ -85,6 +86,9 @@ func goTooOld(sc *run.StepCtx) bool {
 		return false
 	}
 	want := reModGo.FindStringSubmatch(string(mod))
+	if tc := reModTC.FindStringSubmatch(string(mod)); tc != nil { // CI must build with the toolchain the laptop uses
+		want = tc
+	}
 	var out strings.Builder
 	sc.Do(sys.Cmd{Argv: []string{"go", "version"}, Stdout: &out})
 	have := reGoVers.FindStringSubmatch(out.String())

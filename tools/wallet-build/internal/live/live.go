@@ -159,6 +159,8 @@ func Host(h *host.Host, args []string) int {
 		}
 		c.Printf("%s\n", l.pod)
 		return 0
+	case "vm": // the subcommands of tools/live_vm.py, run on the host
+		return vmservice.Main(c.Ctx, rest, c.Env, c.Out, c.Err)
 	case "mcp":
 		if err := c.R.Exec(sys.Cmd{Argv: append([]string{filepath.Join(c.Root, "tools", "build.sh"), "mcp"}, rest...), Env: c.Env}); err != nil {
 			c.Eprintf("exec build.sh: %v\n", err)

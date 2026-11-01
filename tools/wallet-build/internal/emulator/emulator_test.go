@@ -2,9 +2,11 @@ package emulator
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -655,5 +657,42 @@ func TestDefaultCommandIsScreens(t *testing.T) {
 	}
 	if runs := r.podmanRuns("run"); !strings.HasSuffix(runs[1], " emulator screens") {
 		t.Errorf("%v", runs)
+	}
+}
+
+// The old script never limited emulator runs: BW_STEP_TIMEOUT (meant for the build steps) must not stop them;
+// BW_TIMEOUT_EMULATOR_<CMD> does (the container is stopped, exit 124).
+func TestEmulatorRunsIgnoreStepTimeout(t *testing.T) {
+	for _, tc := range []struct {
+		env     string
+		limited bool
+	}{{"BW_STEP_TIMEOUT=1", false}, {"BW_TIMEOUT_SCREENS=1", false}, {"BW_TIMEOUT_EMULATOR_SCREENS=1", true}} {
+		r := newRig(t, tc.env)
+		r.allImages()
+		stopped := make(chan struct{})
+		var once sync.Once
+		r.fake.HandleCtx = func(ctx context.Context, c sys.Cmd) int {
+			a := c.Argv
+			switch {
+			case len(a) > 3 && a[0] == "podman" && a[1] == "run" && a[2] == "--rm":
+				select {
+				case <-stopped:
+					return 143
+				case <-time.After(1500 * time.Millisecond): // longer than the 1 s limit
+					return 0
+				}
+			case len(a) > 1 && a[0] == "podman" && a[1] == "stop":
+				once.Do(func() { close(stopped) })
+			}
+			return r.handle(c)
+		}
+		rc := r.host("screens")
+		if tc.limited && rc == 0 || !tc.limited && rc != 0 {
+			t.Errorf("%s: exit %d, limited %v", tc.env, rc, tc.limited)
+		}
+		timedOut := strings.Contains(file(t, filepath.Join(r.runDir(), "emulator-screens.log")), "timed out after 1 s")
+		if timedOut != tc.limited {
+			t.Errorf("%s: timed out %v, want %v", tc.env, timedOut, tc.limited)
+		}
 	}
 }

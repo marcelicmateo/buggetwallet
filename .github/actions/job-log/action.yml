@@ -14,7 +14,14 @@ runs:
   using: composite
   steps:
     - shell: bash
-      run: wallet-build ci job-log --job "$JOB" --outcomes "$OUTCOMES"
+      run: |
+        if command -v wallet-build >/dev/null; then
+          wallet-build ci job-log --job "$JOB" --outcomes "$OUTCOMES"
+        else # setup could not build the tool: still publish what happened (the log job merges this)
+          d="$RUNNER_TEMP/joblog"; mkdir -p "$d"
+          echo "$JOB=failure(wallet-build did not build)" > "$d/outcome.txt"
+          cp "$LOG" "$d/ci.log" 2>/dev/null || true
+        fi
       env:
         JOB: ${{ inputs.job }}
         OUTCOMES: ${{ inputs.outcomes }}

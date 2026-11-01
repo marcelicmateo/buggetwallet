@@ -33,9 +33,6 @@ func (w *consoleWriter) Write(p []byte) (int, error) {
 	return len(p), err
 }
 
-// timeoutAlias maps a CI step name to the build step whose time limit applies to it.
-var timeoutAlias = map[string]string{"smoke": "desktop-smoke"}
-
 // tempDir is $RUNNER_TEMP, or the system temp directory outside Actions.
 func (x *CI) tempDir() string {
 	if d := x.C.Getenv("RUNNER_TEMP"); d != "" {
@@ -46,7 +43,7 @@ func (x *CI) tempDir() string {
 
 // Step is `ci step <name> -- <cmd…>` (what timed.sh did): prints "=== name ===" to $LOG and the console, runs the command with
 // stdout and stderr appended to $LOG and shown live, records "<name> <seconds> <exit>" in $RUNNER_TEMP/times.txt and returns
-// the command's exit code (124 after the step's time limit, see run.StepTimeout). No pipe, no pipefail needed.
+// the command's exit code (124 after an explicit time limit, see run.StepTimeout). No pipe, no pipefail needed.
 func (x *CI) Step(args []string) (rc int, ok bool) {
 	c := x.C
 	if len(args) < 3 || args[1] != "--" || args[0] == "" {
@@ -66,11 +63,8 @@ func (x *CI) Step(args []string) (rc int, ok bool) {
 	red := c.Red.Writer(&syncWriter{w: io.MultiWriter(logw, &consoleWriter{c: c})})
 	_, _ = io.WriteString(red, "=== "+name+" ===\n")
 	start := c.Clock().Unix()
-	limitName := name
-	if a, ok := timeoutAlias[name]; ok {
-		limitName = a
-	}
-	timeout := run.StepTimeout(c.Env, name, run.DefaultTimeout(c.Env, limitName))
+	// no default limit: the wrapped wallet-build step has its own (run.DefaultTimeout); only BW_TIMEOUT_<NAME> or BW_STEP_TIMEOUT cap this
+	timeout := run.StepTimeout(c.Env, name, 0)
 	ctx := c.Ctx
 	if timeout > 0 {
 		var cancel context.CancelFunc
