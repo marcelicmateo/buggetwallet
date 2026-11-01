@@ -124,6 +124,41 @@ void main() {
     }, timeout: _t);
   });
 
+  group('rate range in any wallet currency (review item 3)', () {
+    test('a JPY wallet sets USD at 150 yen and BTC at 15,000,000 yen, both exact', () {
+      repo.setWalletCurrency('JPY');
+      repo.setFxRate('USD', 150000000); // 150 yen per dollar
+      repo.setFxRate('BTC', 15000000000000); // 15,000,000 yen per coin
+      final st = repo.settings();
+      expect(homeAmount(const Tx(id: 'u', source: 'x', date: '2026-10-01', amount: -1234, currency: 'USD'), st), -185100,
+          reason: '12.34 USD = 1,851 yen, stored in hundredths');
+      expect(homeAmount(const Tx(id: 'b', source: 'x', date: '2026-10-01', amount: 1000000, currency: 'BTC'), st), 15000000,
+          reason: '0.01 BTC = 150,000 yen = 15,000,000 hundredths');
+      expect(() => repo.setFxRate('USD', FxRate.maxRate + 1), throwsArgumentError);
+      expect(() => repo.setFxRate('BTC', FxRate.maxCryptoRate + 1), throwsArgumentError);
+      repo.setFxRate('EUR', FxRate.maxRate);
+      expect(repo.settings().fxRates['EUR']!.rate, FxRate.maxRate, reason: 'the top of the range is accepted');
+    }, timeout: _t);
+
+    test('conversion at the top rates stays exact and never past 2^53', () {
+      expect(convertMinor(123456789, FxRate.maxRate), 123456789000000);
+      expect(convertMinor(WalletSettings.maxAmount, FxRate.maxRate), 9007199254740991);
+      expect(convertMinor(100000000, FxRate.maxCryptoRate, fromDigits: 8, toDigits: 2), 100000000000, reason: '1 BTC at 10^9');
+    }, timeout: _t);
+  });
+
+  group('wallet currency from a synced row (review item 5)', () {
+    test('a crypto or unknown code reads as EUR and is logged by key only', () {
+      resetInvalidSettingLog();
+      for (final c in ['BTC', 'ZZZ', 'eur', 12]) {
+        expect(WalletSettings.fromMap({'currency': c}).currency, 'EUR', reason: '$c');
+      }
+      expect(WalletSettings.fromMap({'currency': 'JPY'}).currency, 'JPY');
+      repo.db.execute("INSERT OR REPLACE INTO settings(id, value, deleted) VALUES('currency', '\"BTC\"', 0)");
+      expect(repo.settings().currency, 'EUR');
+    }, timeout: _t);
+  });
+
   group('setWalletCurrency', () {
     test('a known fiat code is set; rows keep their currency and amounts', () {
       repo.importBatch(ImportBatch(source: 'revolut', transactions: [_row('e1', -1234, 'EUR')]));

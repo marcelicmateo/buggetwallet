@@ -9,17 +9,21 @@ import 'models.dart';
 /// 2^53 − 1: the largest whole number a web number holds exactly.
 const _maxExact = 9007199254740991;
 
+/// The highest rate of the split fast path: q (≤ 10^5 for amounts up to `WalletSettings.maxAmount`) × rate stays exact.
+const _fastRate = 100000000;
+
 /// [amount] minor units of another currency in wallet-currency minor units at [rate] ([FxRate.rate]: home units per
 /// [FxRate.scale] foreign units): `amount × rate / 1,000,000 × 10^(toDigits − fromDigits)`, rounded half away from zero,
 /// exactly. [fromDigits] / [toDigits]: the storage digits of the foreign and the wallet currency (`storageDigitsOf`: 2
-/// for fiat, so 1,000 yen (100000) at 6500 is 650 cents; BTC 8: 0.01 BTC (1000000) at 50,000 EUR is 50000 cents). With equal digits and a rate up to [FxRate.maxRate] the product is split
+/// for fiat, so 1,000 yen (100000) at 6500 is 650 cents; BTC 8: 0.01 BTC (1000000) at 50,000 EUR is 50000 cents).
+/// With equal digits and a rate up to 10^8 the product is split
 /// (`amount = q × scale + r`), so no step goes past 2^53 for any amount up to `WalletSettings.maxAmount`: the same
 /// result on the VM and on the web; anything else (other digits, a crypto rate) is computed with BigInt.
 int convertMinor(int amount, int rate, {int fromDigits = 2, int toDigits = 2}) {
   const s = FxRate.scale;
   final a = amount.abs();
   final int whole;
-  if (fromDigits == toDigits && rate <= FxRate.maxRate) {
+  if (fromDigits == toDigits && rate <= _fastRate) {
     final q = a ~/ s, r = a % s;
     final frac = r * rate; // < 10^6 × 10^9
     whole = q * rate + frac ~/ s + (frac % s * 2 >= s ? 1 : 0);

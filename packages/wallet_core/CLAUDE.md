@@ -694,9 +694,16 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
 
 ## Known limits (for the sync redesign)
 - Schema 20 (UX-A) amounts: every fiat currency is stored in hundredths as before; a currency with 3 ISO decimals (KWD,
-  BHD, JOD, OMR, TND, LYD, IQD) has no third decimal: the importer refuses a row whose third decimal is not zero (never
-  rounded), typed input allows 2. BTC is stored in satoshis from schema 20 on: a BTC row an older build imported (in
-  cents) reads 10^6 too small, and an older build shows and edits BTC amounts wrongly: update every device first.
+  BHD, JOD, OMR, TND, LYD, IQD) has no third decimal: typed input allows 2. Every importer (PBZ, Revolut, mapped CSV,
+  e-invoice) refuses an amount, fee or balance with non-zero digits past the storage scale, per row with a reason
+  (`ImportBatch.problems`), never rounded: a 3-decimal EUR cell that v1 rounded (half cents, `-3.333`) is now refused.
+  BTC is stored in satoshis from schema 20 on, no migration (owner 2026-11-01): BTC rows imported before schema 20
+  would read 10^6 too small; the owner had none. An older build shows and edits BTC amounts wrongly: update every
+  device first. Crypto row ids hash the satoshis (`transactionId(..., digits: 8)`); fiat ids stay v1's.
+- FX rate range (UX-A review): fiat 1..10^12 (up to 1,000,000 home units per foreign unit), crypto to 10^15 (10^9 per
+  coin), so any wallet currency fits (a JPY wallet's USD ≈ 150, BTC ≈ 15,000,000). Exact BigInt above 10^8; a
+  converted value past `WalletSettings.maxAmount` stays out of the sums. A synced or restored wallet currency that is
+  unknown or crypto reads as EUR (`settings.invalid` key `currency`).
 - Built-in rules (UX-A) are one rule per brand with stable slugs (`builtIn:lidl`); `builtIn:<index>` (the 10 grouped
   rules before) resolves to that group's first brand. Overrides are rows `builtInRule:<slug>`; a slug is never reused.
 - D2 Unlink (`tx.match_off`, schema 19): a build older than 19 ignores the field, so it can match the unlinked pair

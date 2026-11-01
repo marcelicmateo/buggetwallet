@@ -3,7 +3,8 @@
 ///
 /// Storage rule (owner, 2026-11-01): amounts are stored at [storageDigitsOf] — hundredths for every fiat currency,
 /// exactly as every build before schema 20 (1,000 yen = 100000), and a crypto currency's own digits (BTC: satoshis).
-/// No stored amount is ever read differently. [minorDigitsOf] (ISO) and [displayDigitsOf] are for showing and typing.
+/// No fiat amount is ever read differently (a BTC row an older build stored in cents would read 10^6 too small; the
+/// owner's wallet had none). [minorDigitsOf] (ISO) and [displayDigitsOf] are for showing and typing.
 library;
 
 import 'models.dart';

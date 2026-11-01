@@ -58,24 +58,24 @@ class RevolutProfile extends BankProfile {
     // An empty Fee is 0; a Fee that is there but not a number would silently change the amount.
     final fee = ctx.column('Fee') >= 0 && cellText(at('Fee')).isNotEmpty ? cellNumber(at('Fee')) : 0.0;
     if (d == null || d == impossibleDate || a == null || fee == null) return const RowResult.invalid();
-    final amount = cellCents(a), feeCents = cellCents(fee);
-    if (amount == null || feeCents == null) return const RowResult.invalid();
-    final currency = ctx.column('Currency') >= 0 && cellText(at('Currency')).isNotEmpty ? cellText(at('Currency')) : 'EUR';
-    // The amount in the currency's stored units (fiat hundredths as always, BTC satoshis; a 3-decimal currency's third
-    // decimal is refused); the id keeps v1's cents (`cents` below).
-    final digits = storageDigitsOf(currency), strict = minorDigitsOf(currency) > digits;
-    final minor = cellMinor(a, digits, strict: strict), feeMinor = cellMinor(fee, digits, strict: strict);
-    if (minor == null || feeMinor == null) return const RowResult.invalid();
+    final currency = cellCurrency(ctx.column('Currency') >= 0 ? at('Currency') : null);
+    // The amount in the currency's stored units (fiat hundredths as always, BTC satoshis); a finer fraction is refused
+    // with its reason, never rounded (UX-A).
+    final (minor, amountProblem) = cellAmount(a, currency, 'amount', at('Amount'));
+    final (feeMinor, feeProblem) = cellAmount(fee, currency, 'fee', ctx.column('Fee') >= 0 ? at('Fee') : '0');
+    if (minor == null || feeMinor == null) return RowResult.invalid(amountProblem ?? feeProblem);
     final type = cellText(at('Type'));
     final desc = fixMojibake(cellText(at('Description')));
     final product = cellText(at('Product'));
-    final cents = amount - feeCents;
-    // Optional: the pocket's balance after the row. An empty or unreadable cell gives none; the row still imports.
+    // Optional: the pocket's balance after the row. An empty or unreadable cell gives none; the row still imports. A
+    // balance with a finer fraction than the currency is stored with is refused like the amount (never rounded).
     final balanceCell = ctx.column('Balance') >= 0 ? at('Balance') : '';
     final balanceNum = cellText(balanceCell).isEmpty ? null : cellNumber(balanceCell);
-    final balance = balanceNum == null ? null : cellMinor(balanceNum, digits, strict: strict);
+    final (balance, balanceProblem) = balanceNum == null ? (null, null) : cellAmount(balanceNum, currency, 'balance', balanceCell);
+    if (balanceProblem != null) return RowResult.invalid(balanceProblem);
+    // Fiat ids hash the cents (exact here, so the ids v1 gave); a crypto row its satoshis ([ImportContext.v1Id]).
     return RowResult.transaction(NormalizedTransaction(
-      id: ctx.v1Id(d, cents, desc),
+      id: ctx.v1Id(d, minor - feeMinor, desc, digits: storageDigitsOf(currency)),
       source: id,
       date: d,
       amountMinor: minor - feeMinor,

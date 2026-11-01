@@ -40,9 +40,10 @@ Theme waits for the owner's mockup pick; crypto rate by hand. Merge order A-core
 | UX-A-tests | (above) | | | done 7c0d879 (core-builder cherry-picks it) |
 | UX-C1 | Clean neutral tokens, Inter, card/rail surfaces, light + dark | ui-builder (worktree) | – | done 97dccd7 + review fixes 80934aa, merged b60355e |
 | UX-A-ui2 | currency picker + offer, account form by kind, editable built-ins | ui-builder | A-core merged | queued |
+| UX-FX | ECB daily rates per payment date (`UX_SPEC.md` UX-FX), in schema 20 | scout → core (Cols) + ui | F1-core merged, UX-A-ui2 merged | queued (owner yes 2026-11-01) |
 | UX-B | Plan window, Tags window, Settings = setup, Today tiles | ui-builder (+ core if needed) | UX-A | queued |
 | UX-C2 | tightening pass over every screen | ui-builder | UX-B | queued |
-| F1 | field refactor pilot (Bill + Account), plan `FIELDS_PLAN.md` | scout → core + test-writer + ui | UX-A, owner OK | queued (owner OK 2026-11-01), starts after UX-A merges |
+| F1 | field refactor pilot (Bill + Account), plan `FIELDS_PLAN.md` | scout → core + test-writer + ui | owner OK | F0 done; F1-core + F1-tests running (core-only, no overlap with UX-A-ui2); F1-ui after UX-A-ui2 |
 | F2 | field refactor roll-out to the other entities | core + ui | F1, UX-B | planned |
 
 ## Stages BP, WS, DK (owner picked 2026-10-28; plan `STAGE_Y_PLAN.md`; one at a time after Stage M)

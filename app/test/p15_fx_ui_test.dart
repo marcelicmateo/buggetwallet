@@ -185,10 +185,11 @@ void main() {
       expect(wc.settings.fxRates, isEmpty);
     });
 
-    testWidgets('empty, a 7th decimal, zero and above 100 are refused; 100 itself is accepted', (t) async {
+    // UX-A review: the fiat cap is 1,000,000 home units per foreign unit (any wallet currency), was 100.
+    testWidgets('empty, a 7th decimal, zero and above 1,000,000 are refused; 1,000,000 itself is accepted', (t) async {
       final wc = fxWallet();
       await pumpApp(t, sheet(wc, 'USD'));
-      for (final text in ['', 'abc', '0.1234567', '0', '100.000001', '5000']) {
+      for (final text in ['', 'abc', '0.1234567', '0', '1000000.000001', '5000000']) {
         await t.enterText(find.byKey(const ValueKey('fxRateField')), text);
         await t.tap(find.byKey(const ValueKey('fxSave')));
         await t.pump();
@@ -196,12 +197,12 @@ void main() {
         expect(wc.settings.fxRates, isEmpty, reason: '"$text"');
       }
       // Typing clears the message; a good value saves.
-      await t.enterText(find.byKey(const ValueKey('fxRateField')), '100');
+      await t.enterText(find.byKey(const ValueKey('fxRateField')), '1000000');
       await t.pump();
       expect(find.byKey(const ValueKey('fxError')), findsNothing);
       await t.tap(find.byKey(const ValueKey('fxSave')));
       await t.pump();
-      expect(wc.settings.fxRates['USD']!.rate, 100000000, reason: 'the largest rate, 100 per unit');
+      expect(wc.settings.fxRates['USD']!.rate, 1000000000000, reason: 'the largest rate, 1,000,000 per unit');
       await settle(t);
     });
   });

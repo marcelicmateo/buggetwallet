@@ -32,8 +32,11 @@ String minorIdText(int minor, int digits) {
 }
 
 /// `yymmdd` + hash of date|amount|description, plus `_n` for the n-th identical row in one file.
-String transactionId(String date, int amountMinor, String description, int occurrence) {
-  final key = '$date|${formatCents(amountMinor)}|$description';
+///
+/// [digits] (UX-A): 2 for every fiat row (the key holds [formatCents], exactly v1's); a crypto row's satoshis with 8
+/// ([minorIdText]: `0.001`, `0.002`), so amounts below a cent never share a key.
+String transactionId(String date, int amountMinor, String description, int occurrence, {int digits = 2}) {
+  final key = '$date|${minorIdText(amountMinor, digits)}|$description';
   final base = date.replaceAll('-', '').substring(2) + fnv1a36(key);
   return occurrence == 0 ? base : '${base}_$occurrence';
 }

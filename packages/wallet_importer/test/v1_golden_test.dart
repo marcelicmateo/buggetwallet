@@ -96,9 +96,9 @@ void main() {
       [46814.0, 'POS plaćanje', 'Big', -12345678.9, 'EUR'],
       [46815.0, 'POS plaćanje', 'Float', -0.1, 'EUR'],
     ];
+    // UX-A review: a half cent (0.125) is no longer rounded as v1 did (13, id 28030114wzqsc); the row is refused.
     expect(view(parseRows(rows)!), const <Golden>[
       ('2028-02-29', -705, 'Leap 2028', '2802291k9hh6j'),
-      ('2028-03-01', 13, 'Half cent pos', '28030114wzqsc'),
       ('2028-03-02', -1234567890, 'Big', '28030217rwc9e'),
       ('2028-03-03', -10, 'Float', '28030313whyj7'),
     ]);
@@ -113,12 +113,14 @@ void main() {
     ]);
   });
 
-  test('a negative half-cent amount rounds like v1 (Math.round: half towards +infinity)', () {
+  test('a half-cent amount is refused with its reason, never rounded (UX-A review; v1 rounded it to -0.12)', () {
     final rows = <List<Object>>[
       ['DATUM', 'VRSTA TRANSAKCIJE', 'OPIS PLAĆANJA', 'IZNOS', 'VALUTA'],
       [46813.0, 'POS plaćanje', 'Half cent', -0.125, 'EUR'],
     ];
-    // v1: r2(-0.125) = Math.round(-12.5) / 100 = -0.12 -> id 280301lxfin4 (Math.round takes halves towards +infinity).
-    expect(view(parseRows(rows)!), const <Golden>[('2028-03-01', -12, 'Half cent', '280301lxfin4')]);
+    final b = parseRows(rows)!;
+    expect(view(b), isEmpty);
+    expect(b.invalid, 1);
+    expect(b.problems, ['Row 2: the amount -0.125 has more than 2 decimals']);
   });
 }
