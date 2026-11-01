@@ -177,6 +177,12 @@ dart:io code ever be needed, it goes in a `*_io.dart` file with a `*_web.dart` t
   `sent` ops, `received` fields changed, `filesRead` (snapshots count), `problems`, `caughtUp`, `waiting`, `devices`
   (short ids, `lastSeen`, `isThis`). Fatal `SyncException`s (short, no address): unreachable, refused (401), relay
   full, newer relay API, older relay API, other; `SyncException.failure` names the `TransportFailure` (null when none), so the app never matches the message. Opening a database from the old folder-sync builds drops its `peer_files` table (`repo.peerFiles.dropped`).
+- `ecb_fetch.dart` (UX-FX) — `fetchEcbFile(EcbFile f, {http.Client? client, Duration timeout = 30 s})` → the bytes for
+  `WalletRepo.importEcbHistory`: a plain HTTPS GET of `f.url` (core's `ecbHistoryUrl`/`ecbRecentUrl`; no query, no
+  header of ours), at most `maxEcbDownloadBytes` (8 MiB, by `Content-Length` or while reading); failures are
+  `EcbFetchException(EcbFetchFailure.unreachable|timeout|status|tooLarge)` with a short owner text. Logs `fx.ecbFetch`
+  (file enum word, outcome, status, bytes, ms; never the address). App order: `ecbFetchPlan` → `noteEcbAttempt` →
+  `fetchEcbFile` → `importEcbHistory`. Web-safe. Tests: `test/ecb_fetch_test.dart`.
 - `blob_store.dart` — `BlobStore(repo, key, maxCacheBytes:)`: `add` (async: seal, hash = SHA-256 of the sealed bytes, cached with `uploaded` 0), `read(hash, transport:)` (cache, else
   fetch, hash checked, unsealed, cached as uploaded). 
 
