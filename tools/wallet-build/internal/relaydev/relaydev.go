@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/term"
+
 	"wallet-build/internal/run"
 	"wallet-build/internal/sys"
 )
@@ -51,6 +53,8 @@ type Relay struct {
 	C *run.Ctx
 	// In answers the question of reset.
 	In io.Reader
+	// IsTTY says whether In is a terminal: bash's `read -p` shows its question only then.
+	IsTTY func() bool
 	// Get fetches one URL with a time limit and returns the body (curl -fsS --max-time 3): an HTTP status >= 400 is an error.
 	Get func(url string) (string, error)
 	// Sleep is a variable for the tests.
@@ -59,7 +63,7 @@ type Relay struct {
 
 // New returns a Relay with the real HTTP client, stdin and sleep.
 func New(c *run.Ctx) *Relay {
-	return &Relay{C: c, In: os.Stdin, Get: httpGet, Sleep: time.Sleep}
+	return &Relay{C: c, In: os.Stdin, IsTTY: func() bool { return term.IsTerminal(int(os.Stdin.Fd())) }, Get: httpGet, Sleep: time.Sleep}
 }
 
 func httpGet(url string) (string, error) {
@@ -226,7 +230,9 @@ func (r *Relay) start(cfg config) int {
 func (r *Relay) reset(cfg config) int {
 	c := r.C
 	if c.Getenv("BW_YES") != "1" {
-		c.Eprintf("Delete %s (all relay wallets)? [y/N] ", cfg.data)
+		if r.IsTTY != nil && r.IsTTY() { // M6: rename with the scripts
+			c.Eprintf("Delete %s (all relay wallets)? [y/N] ", cfg.data)
+		}
 		line, err := bufio.NewReader(r.In).ReadString('\n')
 		if err != nil && line == "" { // read fails at end of input: the script stops with status 1
 			return 1

@@ -76,7 +76,7 @@ func TestStatusFailedShowsFailingLines(t *testing.T) {
 		t.Fatalf("rc %d", rc)
 	}
 	out := e.out.String()
-	for _, want := range []string{"core  completed  failure", "\nlint=ok core=failure\n--- failing lines (full log: wallet-build ci log) ---\n", "6:Test failed: x\n", "9:an Exception happened\n"} {
+	for _, want := range []string{"core  completed  failure", "\nlint=ok core=failure\n--- failing lines (full log: tools/ci-status.sh --log) ---\n", "6:Test failed: x\n", "9:an Exception happened\n"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("lacks %q:\n%s", want, out)
 		}

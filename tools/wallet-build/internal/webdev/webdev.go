@@ -127,7 +127,7 @@ func (w *Web) pidInfo() string {
 
 func (w *Web) needBuild() bool {
 	if _, err := os.Stat(filepath.Join(w.C.Root, "dist", "web", "index.html")); err != nil {
-		w.C.Eprintf("no dist/web: run wallet-build web first\n")
+		w.C.Eprintf("no dist/web: run tools/build.sh web first\n") // M6: rename with the scripts
 		return false
 	}
 	return true
