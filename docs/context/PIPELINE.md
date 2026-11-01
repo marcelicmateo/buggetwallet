@@ -51,6 +51,19 @@ Theme waits for the owner's mockup pick; crypto rate by hand. Merge order A-core
 | F1 | field refactor pilot (Bill + Account), plan `FIELDS_PLAN.md` | scout → core + test-writer + ui | owner OK | F0 done; F1-core + F1-tests running (core-only, no overlap with UX-A-ui2); F1-ui after UX-A-ui2 |
 | F2 | field refactor roll-out to the other entities | core + ui | F1, UX-B | planned |
 
+## Stage GO: build tools in Go (owner 2026-11-01, queued after Stage UX)
+Replace the bash/Python build tooling (~4,400 lines: `build.sh` 751, `emulator.sh`, `live.sh`, `relay-deploy.sh`,
+`build_log.py`, `timing.sh`, `live_vm.py`, …) with one Go program (Go is on the owner's host; static binary, no container
+needed to build the tool). Built in from the start: quiet mode (exit code only), logging per step by default, timeouts
+and kill of hung steps, parallel workers, structured status files (`last.status`, `last-failed.txt`), unit tests for the
+tool. Order: `build.sh` first, then `emulator.sh` and `live.sh`; the bash scripts stay as thin wrappers until every
+command is proven identical (a parity test per command: same steps, logs, status files and exit codes; CI calls the same
+entry points). Agents: scout → devops (sonnet/high for the rewrite) + test-writer (parity tests); reviewer on the whole.
+| # | Item | Agent | Depends on | Status |
+|---|---|---|---|---|
+| GO1 | Go build tool: build.sh commands, quiet, logs, status files, parity tests | devops + test-writer | Stage UX done | queued |
+| GO2 | emulator.sh, live.sh (+ live_vm.py) into the same tool | devops | GO1 | queued |
+
 ## Stages BP, WS, DK (owner picked 2026-10-28; plan `STAGE_Y_PLAN.md`; one at a time after Stage M)
 | # | Item | Agent | Depends on | Status |
 |---|---|---|---|---|
