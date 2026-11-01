@@ -43,6 +43,8 @@ Theme waits for the owner's mockup pick; crypto rate by hand. Merge order A-core
 | UX-A-ui2 | currency picker + offer, account form by kind, editable built-ins | ui-builder | A-core merged | queued |
 | UX-B | Plan window, Tags window, Settings = setup, Today tiles | ui-builder (+ core if needed) | UX-A | queued |
 | UX-C2 | tightening pass over every screen | ui-builder | UX-B | queued |
+| F1 | field refactor pilot (Bill + Account), plan `FIELDS_PLAN.md` | scout → core + test-writer + ui | UX-A, owner OK | planned, awaits owner OK |
+| F2 | field refactor roll-out to the other entities | core + ui | F1, UX-B | planned |
 
 ## Stages BP, WS, DK (owner picked 2026-10-28; plan `STAGE_Y_PLAN.md`; one at a time after Stage M)
 | # | Item | Agent | Depends on | Status |
