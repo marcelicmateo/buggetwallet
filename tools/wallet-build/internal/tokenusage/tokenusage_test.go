@@ -110,7 +110,7 @@ func TestMatchesPython(t *testing.T) {
 	}
 }
 
-func TestPercentileOfRequestsKeepsMostOutputPerID(t *testing.T) {
+func TestKeepsTheLineWithTheMostOutputPerRequest(t *testing.T) {
 	// one request logged as three lines: the line with the most output tokens counts once
 	dir := t.TempDir()
 	p := filepath.Join(dir, "s.jsonl")
