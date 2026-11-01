@@ -14,7 +14,7 @@ import '../integration_test/support/dash_gallery.dart';
 import 'support/layout.dart';
 
 Future<void> _loadFonts() async {
-  for (final (fam, prefix) in [('IBM Plex Sans', 'IBMPlexSans'), ('IBM Plex Mono', 'IBMPlexMono')]) {
+  for (final (fam, prefix) in [('Inter', 'Inter'), ('IBM Plex Mono', 'IBMPlexMono')]) {
     final l = FontLoader(fam);
     for (final w in ['Regular', 'Medium', 'SemiBold']) {
       l.addFont(File('assets/fonts/$prefix-$w.ttf').readAsBytes().then(ByteData.sublistView));
@@ -227,15 +227,18 @@ void main() {
   });
 
   group('Tile', () {
-    testWidgets('12 dp radius, line border, surface ground, no shadow', (tester) async {
+    testWidgets('14 dp radius, no border, surface ground, soft shadow', (tester) async {
       await _pump(tester, _grid(1));
       final mat = tester.widget<Material>(find.descendant(of: find.byType(Tile), matching: find.byType(Material)).first);
       final shape = mat.shape! as RoundedRectangleBorder;
-      expect(shape.borderRadius, BorderRadius.circular(12));
-      expect(shape.side.color, WalletColors.light.line);
-      expect(shape.side.width, 1);
+      expect(shape.borderRadius, BorderRadius.circular(14));
+      expect(shape.side, BorderSide.none);
       expect(mat.color, WalletColors.light.surface);
       expect(mat.elevation, 0);
+      final deco = tester.widget<DecoratedBox>(find
+          .descendant(of: find.byType(Tile), matching: find.byWidgetPredicate((w) => w is DecoratedBox && w.decoration is BoxDecoration))
+          .first);
+      expect((deco.decoration as BoxDecoration).boxShadow, isNotEmpty);
     });
 
     testWidgets('a tap calls onTap; the gallery hero, goal and add tiles answer', (tester) async {

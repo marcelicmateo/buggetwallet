@@ -1,4 +1,4 @@
-// Font assets: six unmodified IBM Plex TTFs, the OFL licence, pubspec declarations, and the glyphs the app needs.
+// Font assets: six unmodified TTFs (Inter and IBM Plex Mono), the two OFL licences, pubspec declarations, and the glyphs the app needs.
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const _dir = 'assets/fonts';
-const _families = {'IBM Plex Sans': 'IBMPlexSans', 'IBM Plex Mono': 'IBMPlexMono'};
+const _families = {'Inter': 'Inter', 'IBM Plex Mono': 'IBMPlexMono'};
 const _weights = ['Regular', 'Medium', 'SemiBold'];
 
 void main() {
@@ -25,11 +25,13 @@ void main() {
     }
   });
 
-  test('OFL.txt exists with the licence text', () {
-    final f = File('$_dir/OFL.txt');
-    expect(f.existsSync(), isTrue);
-    expect(f.readAsStringSync().toUpperCase(), contains('SIL OPEN FONT LICENSE'));
-  });
+  for (final name in ['OFL.txt', 'OFL-Inter.txt']) {
+    test('$name exists with the licence text', () {
+      final f = File('$_dir/$name');
+      expect(f.existsSync(), isTrue);
+      expect(f.readAsStringSync().toUpperCase(), contains('SIL OPEN FONT LICENSE'));
+    });
+  }
 
   test('pubspec declares both families with weights 500 and 600, and the licence asset', () {
     final p = File('pubspec.yaml').readAsStringSync();
@@ -42,6 +44,7 @@ void main() {
       expect(p, contains(f), reason: f);
     }
     expect(p, contains('$_dir/OFL.txt'));
+    expect(p, contains('$_dir/OFL-Inter.txt'));
   });
 
   group('glyphs lay out after FontLoader', () {

@@ -1,4 +1,5 @@
-// The Ledger theme (see docs/design/ledger-spec.md): paper and ink colours, IBM Plex, ruled lines instead of cards.
+// The Clean neutral theme (UX-C1, docs/context/UX_SPEC.md): near-white page, white cards lifted by a soft shadow (no borders), one calm blue
+// accent, Inter for text, IBM Plex Mono only for amounts. (It replaced the Ledger theme of docs/design/ledger-spec.md.)
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -8,12 +9,11 @@ class WalletColors extends ThemeExtension<WalletColors> {
   final Color bg, surface, surface2, ink, ink2, muted, line, lineStrong, accent, accentSoft, pos, neg, good, bad, warnBg, warnInk, bar;
 
   /// Chart-only colours (never text or buttons; status stays `bad`/`good`). [chartPos] saved/spent bars, [chartNeg] lost, [chart2] the
-  /// second series that is not a polarity ("went out" next to "came in"). Checked with the dataviz validator, `--mode` light/dark, on both
-  /// chart surfaces (light #F9F6EE/#F2EEE4, dark #21242B/#1B1D23): {chartPos, chartNeg} and {chartPos, chart2} each pass lightness band,
-  /// chroma floor, CVD (light 17.4 / 22.9 protan, dark 18.1 / 25.3), normal-vision floor (light 23.9 / 26.2, dark 22.2 / 25.5) and contrast.
+  /// second series that is not a polarity ("went out" next to "came in"). All three keep 3:1 on [bg] and [surface] in both themes
+  /// (`test/theme_contrast_test.dart`).
   final Color chartPos, chartNeg, chart2;
 
-  /// Dashboard tiles (RX2, `widgets/dash.dart`): [desk] is the ground behind the tiles (darker than [surface]); [s1] flexible spending,
+  /// Dashboard tiles (RX2, `widgets/dash.dart`): [desk] is the ground behind the tiles (the page colour, darker than [surface] in both themes); [s1] flexible spending,
   /// [s2] bills and fixed costs, [s3] saved and goals (series colours: charts and fills only, never text; checked with the dataviz
   /// validator, light and dark, 3:1 on bg and surface); [goodSoft]/[badSoft] are the chip grounds under `good` / `bad` text.
   final Color desk, s1, s2, s3, goodSoft, badSoft;
@@ -46,64 +46,64 @@ class WalletColors extends ThemeExtension<WalletColors> {
     required this.badSoft,
   });
 
-  /// Paper and ink.
+  /// Clean neutral, light: near-white page, white cards.
   static const light = WalletColors(
-    bg: Color(0xFFF2EEE4),
-    surface: Color(0xFFF9F6EE),
-    surface2: Color(0xFFEAE5D9),
-    ink: Color(0xFF2C313C),
-    ink2: Color(0xFF50566A),
-    muted: Color(0xFF5E6372),
-    line: Color(0xFFDAD4C5),
-    lineStrong: Color(0xFF87847C),
-    accent: Color(0xFF3A559E),
-    accentSoft: Color(0xFFE6E8F0),
-    pos: Color(0xFF3A559E),
-    neg: Color(0xFFA93A32),
-    good: Color(0xFF3E6B3E),
-    bad: Color(0xFFA93A32),
-    warnBg: Color(0xFFF6EBCB),
+    bg: Color(0xFFF6F7F9),
+    surface: Color(0xFFFFFFFF),
+    surface2: Color(0xFFE7EAEF),
+    ink: Color(0xFF1F2933),
+    ink2: Color(0xFF3E4A57),
+    muted: Color(0xFF5B6673),
+    line: Color(0xFFE3E7ED),
+    lineStrong: Color(0xFF7F8A97),
+    accent: Color(0xFF2F5FC4),
+    accentSoft: Color(0xFFEAF0FC),
+    pos: Color(0xFF2F5FC4),
+    neg: Color(0xFFB3412F),
+    good: Color(0xFF2B7A4B),
+    bad: Color(0xFFB3412F),
+    warnBg: Color(0xFFFBF0D2),
     warnInk: Color(0xFF5C4210),
-    bar: Color(0xFF3A559E),
-    chartPos: Color(0xFF3A559E),
-    chartNeg: Color(0xFFA93A32),
+    bar: Color(0xFF2F5FC4),
+    chartPos: Color(0xFF2F5FC4),
+    chartNeg: Color(0xFFB3412F),
     chart2: Color(0xFFA8650F),
-    desk: Color(0xFFE6E1D3),
-    s1: Color(0xFF3A559E),
-    s2: Color(0xFFB0721A),
-    s3: Color(0xFF008F96),
-    goodSoft: Color(0xFFE3EBDD),
-    badSoft: Color(0xFFF3DEDA),
+    desk: Color(0xFFF6F7F9),
+    s1: Color(0xFF2F5FC4),
+    s2: Color(0xFFA8650F),
+    s3: Color(0xFF0B8A8F),
+    goodSoft: Color(0xFFE7F4EC),
+    badSoft: Color(0xFFFBEAE6),
   );
 
-  /// Night ledger.
+  /// Clean neutral, dark.
   static const dark = WalletColors(
-    bg: Color(0xFF1B1D23),
-    surface: Color(0xFF21242B),
-    surface2: Color(0xFF272A32),
-    ink: Color(0xFFDAD7CD),
-    ink2: Color(0xFFAFB3BE),
-    muted: Color(0xFF8F94A1),
-    line: Color(0xFF343842),
-    lineStrong: Color(0xFF6B707D),
-    accent: Color(0xFF9DAEE6),
-    accentSoft: Color(0xFF2A3050),
-    pos: Color(0xFF9DAEE6),
-    neg: Color(0xFFEE9C94),
-    good: Color(0xFF88C791),
-    bad: Color(0xFFEE9C94),
+    bg: Color(0xFF14171C),
+    surface: Color(0xFF1C2027),
+    surface2: Color(0xFF262B34),
+    ink: Color(0xFFE6E9EE),
+    ink2: Color(0xFFBFC6D0),
+    muted: Color(0xFF9AA4B1),
+    line: Color(0xFF2A303A),
+    lineStrong: Color(0xFF6E7886),
+    accent: Color(0xFF8AAAF0),
+    accentSoft: Color(0xFF243049),
+    pos: Color(0xFF8AAAF0),
+    neg: Color(0xFFF0907D),
+    good: Color(0xFF6CC38F),
+    bad: Color(0xFFF0907D),
     warnBg: Color(0xFF2F2916),
     warnInk: Color(0xFFE6CF92),
-    bar: Color(0xFF9DAEE6),
-    chartPos: Color(0xFF6F8FE0),
-    chartNeg: Color(0xFFD56F66),
-    chart2: Color(0xFFC27F20),
-    desk: Color(0xFF15171C),
-    s1: Color(0xFF7088D6),
-    s2: Color(0xFFBD7F22),
-    s3: Color(0xFF1A9AA0),
-    goodSoft: Color(0xFF243126),
-    badSoft: Color(0xFF3A2523),
+    bar: Color(0xFF8AAAF0),
+    chartPos: Color(0xFF6F93E6),
+    chartNeg: Color(0xFFD9705F),
+    chart2: Color(0xFFC9892B),
+    desk: Color(0xFF14171C),
+    s1: Color(0xFF7C9CEB),
+    s2: Color(0xFFC9892B),
+    s3: Color(0xFF2BA8AE),
+    goodSoft: Color(0xFF1F3328),
+    badSoft: Color(0xFF3A2421),
   );
 
   @override
@@ -129,15 +129,18 @@ double _luminance(Color c) {
   return 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b);
 }
 
-const sansFamily = 'IBM Plex Sans';
+const sansFamily = 'Inter';
 const monoFamily = 'IBM Plex Mono';
 
-/// Money and other figures: Plex Mono with tabular figures, so columns line up.
+/// Money and other figures: IBM Plex Mono with tabular figures, so columns line up.
 const numStyle = TextStyle(
   fontFamily: monoFamily,
   fontFamilyFallback: ['monospace'],
   fontFeatures: [FontFeature.tabularFigures()],
 );
+
+/// Axis, date and name labels in charts: Inter with tabular figures (mono is for amounts only).
+const labelStyle = TextStyle(fontFamily: sansFamily, fontFeatures: [FontFeature.tabularFigures()]);
 
 /// Type scale: the only font sizes in the app. Nothing is under 12 dp except [eyebrow] (ALL CAPS, 11 dp, letter-spaced).
 /// Sizes are plain constants (usable in `const TextStyle`); the styles below add family, weight and spacing.
@@ -154,14 +157,12 @@ class BwType {
   static const double entrySize = 30;
   static const double heroSize = 78;
 
-  /// Section labels and table heads: mono, caps, wide.
+  /// Section labels and table heads: sans, caps, a little wide (mono is for amounts only).
   static const eyebrow = TextStyle(
-    fontFamily: monoFamily,
-    fontFamilyFallback: ['monospace'],
-    fontFeatures: [FontFeature.tabularFigures()],
+    fontFamily: sansFamily,
     fontSize: eyebrowSize,
-    letterSpacing: eyebrowSize * 0.08,
-    fontWeight: FontWeight.w500,
+    letterSpacing: eyebrowSize * 0.06,
+    fontWeight: FontWeight.w600,
   );
 
   /// Secondary lines: dates, categories, explainers.
@@ -189,48 +190,22 @@ class BwType {
   static const hero = TextStyle(fontSize: heroSize);
 }
 
-/// Notebook-style red double rule colour (the margin line on wide windows).
-Color marginLineColor(Brightness b) => b == Brightness.light ? const Color(0xFFE9CBC5) : const Color(0xFF674343);
+/// The notebook margin line of the old Ledger theme: kept as a layout gutter, no longer drawn (Clean neutral has no margin rule).
+Color marginLineColor(Brightness b) => Colors.transparent;
 
-/// Rectangle with a rule along the top edge only (bottom sheets).
-class _TopRuleBorder extends ShapeBorder {
-  final Color color;
-  final double width;
-  const _TopRuleBorder({required this.color, this.width = 2});
-  @override
-  EdgeInsetsGeometry get dimensions => EdgeInsets.only(top: width);
-  @override
-  Path getInnerPath(Rect rect, {TextDirection? textDirection}) => Path()..addRect(rect.deflate(0));
-  @override
-  Path getOuterPath(Rect rect, {TextDirection? textDirection}) => Path()..addRect(rect);
-  @override
-  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) {
-    canvas.drawRect(Rect.fromLTWH(rect.left, rect.top, rect.width, width), Paint()..color = color);
-  }
+/// Corner radius of cards, tiles and panels.
+const double cardRadius = 14;
 
-  @override
-  ShapeBorder scale(double t) => _TopRuleBorder(color: color, width: width * t);
-}
-
-/// Rectangle with a bar along the left edge (the selected item of the rail).
-class _LeftBarBorder extends ShapeBorder {
-  final Color color;
-  final double width;
-  const _LeftBarBorder({required this.color, this.width = 3});
-  @override
-  EdgeInsetsGeometry get dimensions => EdgeInsets.zero;
-  @override
-  Path getInnerPath(Rect rect, {TextDirection? textDirection}) => Path()..addRect(rect);
-  @override
-  Path getOuterPath(Rect rect, {TextDirection? textDirection}) => Path()..addRect(rect);
-  @override
-  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) {
-    canvas.drawRect(Rect.fromLTWH(rect.left, rect.top, width, rect.height), Paint()..color = color);
-  }
-
-  @override
-  ShapeBorder scale(double t) => _LeftBarBorder(color: color, width: width * t);
-}
+/// The soft shadow that lifts a white card off the page (cards have no border). Dark: a deeper, tighter shadow on a lighter surface.
+List<BoxShadow> cardShadow(Brightness b) => b == Brightness.light
+    ? const [
+        BoxShadow(color: Color(0x0F1F2933), blurRadius: 2, offset: Offset(0, 1)),
+        BoxShadow(color: Color(0x141F2933), blurRadius: 14, offset: Offset(0, 4)),
+      ]
+    : const [
+        BoxShadow(color: Color(0x66000000), blurRadius: 2, offset: Offset(0, 1)),
+        BoxShadow(color: Color(0x40000000), blurRadius: 14, offset: Offset(0, 4)),
+      ];
 
 /// Accent-outlined button style (what used to be the tonal button).
 ButtonStyle accentOutlined(BuildContext context) {
@@ -281,7 +256,8 @@ ThemeData buildTheme(Brightness b) {
   final tt = base.textTheme.apply(fontFamily: sansFamily, bodyColor: w.ink, displayColor: w.ink);
   OutlinedBorder shape(double r) => RoundedRectangleBorder(borderRadius: BorderRadius.circular(r));
   OutlineInputBorder field(Color c, double width) =>
-      OutlineInputBorder(borderRadius: BorderRadius.circular(2), borderSide: BorderSide(color: c, width: width));
+      OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: c, width: width));
+  final shadow = b == Brightness.light ? const Color(0x331F2933) : const Color(0xB3000000);
   const w6 = FontWeight.w600;
   final onAccent = scheme.onPrimary;
   return base.copyWith(
@@ -307,15 +283,16 @@ ThemeData buildTheme(Brightness b) {
     highlightColor: w.accentSoft,
     splashFactory: NoSplash.splashFactory,
     iconTheme: IconThemeData(color: w.ink),
-    // Navigation: bar = ink top border, a transparent indicator (the accent top bar is drawn by the shell), rail = right border and
-    // a 3 px accent bar on the left of the selected item.
+    // Navigation: white bar with a hairline on top (drawn by the shell) and the selected tab as an accent-soft pill; the rail is
+    // white with a hairline on its right (drawn by the shell) and the same pill.
     navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: w.bg,
+      backgroundColor: w.surface,
       surfaceTintColor: Colors.transparent,
       shadowColor: Colors.transparent,
       elevation: 0,
-      height: 64,
-      indicatorColor: Colors.transparent,
+      height: 68,
+      indicatorColor: w.accentSoft,
+      indicatorShape: const StadiumBorder(),
       iconTheme:
           WidgetStateProperty.resolveWith((s) => IconThemeData(size: 22, color: s.contains(WidgetState.selected) ? w.accent : w.ink2)),
       labelTextStyle: WidgetStateProperty.resolveWith((s) => TextStyle(
@@ -325,11 +302,11 @@ ThemeData buildTheme(Brightness b) {
           color: s.contains(WidgetState.selected) ? w.accent : w.ink2)),
     ),
     navigationRailTheme: NavigationRailThemeData(
-      backgroundColor: w.bg,
+      backgroundColor: w.surface,
       elevation: 0,
       minWidth: 80,
       indicatorColor: w.accentSoft,
-      indicatorShape: _LeftBarBorder(color: w.accent),
+      indicatorShape: const StadiumBorder(),
       selectedIconTheme: IconThemeData(color: w.accent),
       unselectedIconTheme: IconThemeData(color: w.ink2),
       selectedLabelTextStyle: TextStyle(fontFamily: sansFamily, fontSize: BwType.metaSize, fontWeight: w6, color: w.accent),
@@ -361,7 +338,7 @@ ThemeData buildTheme(Brightness b) {
         disabledBackgroundColor: w.surface2,
         disabledForegroundColor: w.muted,
         minimumSize: const Size(64, 44),
-        shape: shape(3),
+        shape: shape(10),
         elevation: 0,
         textStyle: const TextStyle(fontFamily: sansFamily, fontSize: BwType.headingSize, fontWeight: w6),
       ),
@@ -371,7 +348,7 @@ ThemeData buildTheme(Brightness b) {
         foregroundColor: w.ink,
         side: BorderSide(color: w.lineStrong),
         minimumSize: const Size(64, 44),
-        shape: shape(3),
+        shape: shape(10),
         textStyle: const TextStyle(fontFamily: sansFamily, fontSize: BwType.headingSize, fontWeight: w6),
       ),
     ),
@@ -379,25 +356,26 @@ ThemeData buildTheme(Brightness b) {
       style: TextButton.styleFrom(
         foregroundColor: w.accent,
         minimumSize: const Size(44, 44),
-        shape: shape(3),
+        shape: shape(10),
         textStyle: const TextStyle(fontFamily: sansFamily, fontSize: BwType.headingSize, fontWeight: w6),
       ),
     ),
-    iconButtonTheme: IconButtonThemeData(style: IconButton.styleFrom(foregroundColor: w.ink, shape: shape(3))),
+    iconButtonTheme: IconButtonThemeData(style: IconButton.styleFrom(foregroundColor: w.ink, shape: shape(10))),
     segmentedButtonTheme: SegmentedButtonThemeData(
       style: ButtonStyle(
-        shape: WidgetStatePropertyAll(shape(2)),
+        shape: WidgetStatePropertyAll(shape(10)),
         side: WidgetStatePropertyAll(BorderSide(color: w.lineStrong)),
         minimumSize: const WidgetStatePropertyAll(Size(44, 44)),
-        backgroundColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? w.ink : Colors.transparent),
-        foregroundColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? w.bg : w.ink),
-        iconColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? w.bg : w.ink),
+        // The chosen segment is a solid accent fill with its check icon (accentSoft is too close to the page to be a cue).
+        backgroundColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? w.accent : Colors.transparent),
+        foregroundColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? onAccent : w.ink),
+        iconColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? onAccent : w.ink),
         textStyle: const WidgetStatePropertyAll(TextStyle(fontFamily: sansFamily, fontSize: BwType.bodySize, fontWeight: w6)),
       ),
       selectedIcon: const Icon(Icons.check),
     ),
     chipTheme: ChipThemeData(
-      shape: shape(2),
+      shape: shape(8),
       side: BorderSide(color: w.lineStrong),
       backgroundColor: Colors.transparent,
       selectedColor: w.accent,
@@ -410,8 +388,9 @@ ThemeData buildTheme(Brightness b) {
     dialogTheme: DialogThemeData(
       backgroundColor: w.surface,
       surfaceTintColor: Colors.transparent,
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(3), side: BorderSide(color: w.lineStrong)),
+      elevation: 6,
+      shadowColor: shadow,
+      shape: shape(16),
       titleTextStyle: TextStyle(fontFamily: sansFamily, fontSize: BwType.titleSize, fontWeight: w6, color: w.ink),
       contentTextStyle: TextStyle(fontFamily: sansFamily, fontSize: BwType.bodySize, color: w.ink2, height: 1.4),
     ),
@@ -419,10 +398,11 @@ ThemeData buildTheme(Brightness b) {
       backgroundColor: w.surface,
       surfaceTintColor: Colors.transparent,
       modalBackgroundColor: w.surface,
-      modalElevation: 0,
-      elevation: 0,
+      modalElevation: 8,
+      elevation: 8,
+      shadowColor: shadow,
       showDragHandle: false,
-      shape: _TopRuleBorder(color: w.lineStrong, width: 1),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
       modalBarrierColor: Colors.black.withValues(alpha: 0.4),
     ),
     snackBarTheme: SnackBarThemeData(
@@ -430,11 +410,11 @@ ThemeData buildTheme(Brightness b) {
       contentTextStyle: TextStyle(fontFamily: sansFamily, fontSize: BwType.bodySize, color: w.bg),
       actionTextColor: w.accentSoft,
       behavior: SnackBarBehavior.floating,
-      elevation: 0,
-      shape: shape(2),
+      elevation: 3,
+      shape: shape(10),
     ),
     tooltipTheme: TooltipThemeData(
-      decoration: BoxDecoration(color: w.ink, borderRadius: BorderRadius.circular(2)),
+      decoration: BoxDecoration(color: w.ink, borderRadius: BorderRadius.circular(6)),
       textStyle: TextStyle(fontFamily: sansFamily, fontSize: BwType.metaSize, color: w.bg),
     ),
     switchTheme: SwitchThemeData(
@@ -443,7 +423,7 @@ ThemeData buildTheme(Brightness b) {
       trackOutlineColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? w.accent : w.lineStrong),
     ),
     checkboxTheme: CheckboxThemeData(
-      shape: shape(2),
+      shape: shape(4),
       side: BorderSide(color: w.lineStrong, width: 1.5),
       fillColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? w.accent : Colors.transparent),
       checkColor: WidgetStatePropertyAll(onAccent),
@@ -454,8 +434,11 @@ ThemeData buildTheme(Brightness b) {
     popupMenuTheme: PopupMenuThemeData(
       color: w.surface,
       surfaceTintColor: Colors.transparent,
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2), side: BorderSide(color: w.lineStrong)),
+      elevation: 4,
+      shadowColor: shadow,
+      // Dark: the surface is hardly lighter than the page, so the menu gets a hairline.
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12), side: b == Brightness.dark ? BorderSide(color: w.line) : BorderSide.none),
     ),
     listTileTheme: ListTileThemeData(iconColor: w.ink2, textColor: w.ink),
     textSelectionTheme: TextSelectionThemeData(cursorColor: w.accent, selectionColor: w.accent.withValues(alpha: 0.3)),

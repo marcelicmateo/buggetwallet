@@ -1,6 +1,7 @@
-// Ledger theme on every tab: three window sizes, both brightnesses, no error/overflow, bar vs rail, no Card, square Panels.
+// Clean neutral theme on every tab: three window sizes, both brightnesses, no error/overflow, bar vs rail, no Card, Panels are 14 dp cards.
 // SYNTHETIC data only.
 import 'package:budget_wallet/src/layout.dart';
+import 'package:budget_wallet/src/theme.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,7 +16,7 @@ void main() {
   for (final size in _sizes) {
     for (final b in Brightness.values) {
       final name = '${size.width.toInt()}x${size.height.toInt()} ${b.name}';
-      testWidgets('$name: tabs scroll through, right navigation, no Card, square Panels', (tester) async {
+      testWidgets('$name: tabs scroll through, right navigation, no Card, Panels are 14 dp cards', (tester) async {
         tester.platformDispatcher.platformBrightnessTestValue = b;
         addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
         await withErrors((errors) async {
@@ -32,10 +33,12 @@ void main() {
             expect(tester.takeException(), isNull, reason: tab);
             expect(find.byType(Card), findsNothing, reason: '$tab has a Card');
             for (final p in find.byType(Panel).evaluate()) {
-              // The Panel's own box (the first DecoratedBox under it). Tags, chips and fields inside it keep their own 2 px radius.
+              // The Panel's own box (the first DecoratedBox under it). Tags, chips and fields inside it keep their own radius.
               final own = find.descendant(of: find.byElementPredicate((e) => e == p), matching: find.byType(DecoratedBox)).evaluate().first;
               final dec = (own.widget as DecoratedBox).decoration;
-              if (dec is BoxDecoration) expect(dec.borderRadius, anyOf(isNull, BorderRadius.zero), reason: '$tab Panel radius');
+              if (dec is BoxDecoration) {
+                expect(dec.borderRadius, anyOf(isNull, BorderRadius.circular(cardRadius)), reason: '$tab Panel radius');
+              }
             }
           }
           errors.check();

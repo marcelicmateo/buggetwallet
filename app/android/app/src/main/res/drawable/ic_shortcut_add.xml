@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A plain plus on the ledger blue, for the "Add expense" launcher shortcut. -->
+<!-- A plain plus on the accent blue, for the "Add expense" launcher shortcut. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="48dp"
     android:height="48dp"
     android:viewportWidth="48"
     android:viewportHeight="48">
     <path
-        android:fillColor="#3A559E"
+        android:fillColor="#2F5FC4"
         android:pathData="M24,24m-22,0a22,22 0,1 1,44 0a22,22 0,1 1,-44 0"/>
     <path
         android:fillColor="#FFFFFF"

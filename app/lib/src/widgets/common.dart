@@ -10,8 +10,8 @@ import 'tag_picker.dart';
 export '../layout.dart' show gapped;
 export '../theme.dart' show numStyle;
 
-/// A ruled section (no card): a 1 px strong rule on top, a hairline below, vertical padding only (the page margin belongs to
-/// layout.dart). With [color] it is a flat band with a 3 px bar on the left; the content keeps its own icon and words.
+/// A section card: white surface lifted by a soft shadow, radius 14, no border. With [color] it is a flat tinted band with a 3 px bar on
+/// the left (warning / info); the content keeps its own icon and words. Vertical padding comes from [padding]; the sides get 16 dp.
 class Panel extends StatelessWidget {
   final List<Widget> children;
   final Color? color;
@@ -23,17 +23,21 @@ class Panel extends StatelessWidget {
     final c = context.c;
     final band = color != null;
     final bar = color == c.warnBg ? c.warnInk : c.accent;
-    return Container(
-      decoration: BoxDecoration(
-        color: color,
-        border: Border(
-          top: BorderSide(color: c.lineStrong),
-          bottom: BorderSide(color: c.line),
-          left: band ? BorderSide(color: bar, width: 3) : BorderSide.none,
+    final radius = BorderRadius.circular(cardRadius);
+    // The ground is a Material (not a coloured DecoratedBox) so ListTiles and InkWells inside still paint their ink.
+    return DecoratedBox(
+      decoration: BoxDecoration(borderRadius: radius, boxShadow: band ? null : cardShadow(Theme.of(context).brightness)),
+      child: Material(
+        color: color ?? c.surface,
+        shape: RoundedRectangleBorder(
+            borderRadius: radius,
+            side: !band && Theme.of(context).brightness == Brightness.dark ? BorderSide(color: c.line) : BorderSide.none),
+        child: Container(
+          foregroundDecoration: band ? BoxDecoration(borderRadius: radius, border: Border(left: BorderSide(color: bar, width: 3))) : null,
+          padding: padding + const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: gapped(children, gap: 12)),
         ),
       ),
-      padding: band ? padding + const EdgeInsets.symmetric(horizontal: 12) : padding,
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: gapped(children, gap: 12)),
     );
   }
 }
@@ -45,7 +49,7 @@ class Eyebrow extends StatelessWidget {
   Widget build(BuildContext context) => Text(text.toUpperCase(), style: BwType.eyebrow.copyWith(color: context.c.muted));
 }
 
-/// A section title: mono 11 px capitals over a strong underline, with something on the right if given.
+/// A section title: 11 px sans capitals over a hairline, with something on the right if given.
 class SectionHead extends StatelessWidget {
   final String text;
   final Widget? trailing;
@@ -290,7 +294,7 @@ class Tag extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
         decoration:
-            BoxDecoration(color: context.c.surface2, borderRadius: BorderRadius.circular(2), border: Border.all(color: context.c.line)),
+            BoxDecoration(color: context.c.surface2, borderRadius: BorderRadius.circular(6), border: Border.all(color: context.c.line)),
         child: Text(text, style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
       );
 }
@@ -316,7 +320,7 @@ class _LogoPainter extends CustomPainter {
         Offset(8.5 * k, 3 * k),
         Offset(8.5 * k, 23 * k),
         p
-          ..color = const Color(0xFFF0A59B)
+          ..color = Colors.white.withValues(alpha: 0.55)
           ..strokeWidth = 1.1 * k);
     p
       ..color = paper
@@ -399,7 +403,7 @@ class TxHeaderRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.c;
-    final st = numStyle.copyWith(fontSize: BwType.eyebrowSize, letterSpacing: 0.8, fontWeight: FontWeight.w500, color: c.muted);
+    final st = BwType.eyebrow.copyWith(color: c.muted);
     Widget cell(String t, {TextAlign align = TextAlign.start}) => Text(t.toUpperCase(), textAlign: align, style: st);
     final bottom = BoxDecoration(border: Border(bottom: BorderSide(color: c.line)));
     if (!_columnsFit(context)) {
@@ -856,35 +860,16 @@ class ToastClearer extends NavigatorObserver {
   void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) => onPopped?.call();
 }
 
-/// The bottom bar with a 1 px ink rule on top and a 3 px accent bar over the selected destination (the bar's destinations
-/// share the width equally).
+/// The bottom bar with a hairline on top. (The selected tab is the theme's accent-soft pill; [selected] and [count] are kept for callers.)
 class NavBarFrame extends StatelessWidget {
   final int selected, count;
   final Widget child;
   const NavBarFrame({super.key, required this.selected, required this.count, required this.child});
   @override
   Widget build(BuildContext context) {
-    final c = context.c;
     return Stack(children: [
       child,
-      Positioned(left: 0, right: 0, top: 0, height: 1, child: IgnorePointer(child: ColoredBox(color: c.lineStrong))),
-      Positioned.fill(
-        child: IgnorePointer(
-          child: LayoutBuilder(builder: (context, box) {
-            final w = box.maxWidth / count;
-            return Stack(children: [
-              AnimatedPositioned(
-                duration: const Duration(milliseconds: 150),
-                left: selected * w + 16,
-                width: w - 32,
-                top: 0,
-                height: 3,
-                child: ColoredBox(color: c.accent),
-              ),
-            ]);
-          }),
-        ),
-      ),
+      Positioned(left: 0, right: 0, top: 0, height: 1, child: IgnorePointer(child: ColoredBox(color: context.c.line))),
     ]);
   }
 }

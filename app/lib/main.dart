@@ -33,11 +33,15 @@ import 'src/widgets/sheets.dart';
 
 final _log = Logger('bw.app');
 
-/// Adds the IBM Plex licence (SIL OFL 1.1) to the licences page.
+/// Adds the Inter and IBM Plex Mono licences (SIL OFL 1.1) to the licences page.
 void registerFontLicense() {
   LicenseRegistry.addLicense(() async* {
     final text = await rootBundle.loadString('assets/fonts/OFL.txt');
-    yield LicenseEntryWithLineBreaks(['IBM Plex Sans', 'IBM Plex Mono'], text);
+    yield LicenseEntryWithLineBreaks(['IBM Plex Mono'], text);
+  });
+  LicenseRegistry.addLicense(() async* {
+    final text = await rootBundle.loadString('assets/fonts/OFL-Inter.txt');
+    yield LicenseEntryWithLineBreaks(['Inter'], text);
   });
 }
 
@@ -588,7 +592,7 @@ class _HomeShellState extends State<HomeShell> {
   Widget _periodBadge(BuildContext context, bool extended) {
     final p = widget.wc.period();
     final from = shortDate(p.start), to = shortDate(addDays(p.end, -1));
-    final radius = BorderRadius.circular(2);
+    final radius = BorderRadius.circular(10);
     return Tooltip(
       message: 'Pay-period report',
       child: Semantics(
@@ -605,11 +609,11 @@ class _HomeShellState extends State<HomeShell> {
             // The narrow rail grows with the text scale (like the rail itself), so large text still gets a box that fits it.
             width: extended ? 188 : (72 * MediaQuery.textScalerOf(context).scale(1)).clamp(72.0, 152.0),
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-            decoration: BoxDecoration(border: Border.all(color: context.c.ink), borderRadius: radius),
+            decoration: BoxDecoration(border: Border.all(color: context.c.lineStrong), borderRadius: radius),
             child: FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(extended ? '$from – $to' : '$from –\n$to',
-                  textAlign: TextAlign.center, style: numStyle.copyWith(fontSize: BwType.metaSize, fontWeight: FontWeight.w500)),
+                  textAlign: TextAlign.center, style: labelStyle.copyWith(fontSize: BwType.metaSize, fontWeight: FontWeight.w500)),
             ),
           ),
         ),
@@ -745,8 +749,8 @@ class _HomeShellState extends State<HomeShell> {
                                 label: FittedBox(
                                     fit: BoxFit.scaleDown,
                                     child: Text('${shortDate(p.start)} – ${shortDate(addDays(p.end, -1))}',
-                                        style: numStyle.copyWith(fontSize: BwType.metaSize, fontWeight: FontWeight.w500))),
-                                side: BorderSide(color: context.c.ink),
+                                        style: labelStyle.copyWith(fontSize: BwType.metaSize, fontWeight: FontWeight.w500))),
+                                side: BorderSide(color: context.c.lineStrong),
                                 visualDensity: VisualDensity.compact),
                           ),
                         ),
