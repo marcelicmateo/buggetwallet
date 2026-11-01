@@ -151,6 +151,9 @@ func dispatch(c *run.Ctx, cmd string, rest []string, self string, usage func() i
 			return usage()
 		}
 		return steps.SmokeRun(c.Out, rest[0], n, c.Getenv("SMOKE_OUT"), c.Env)
+	// ---- GO4-A helpers (ported Python tools; one block, GO4-B adds its own) ----
+	case "fixtures", "token-usage", "log-summary", "lsp-query":
+		return helpersA(c, cmd, rest, self)
 	}
 	// GO4-B helpers (relay, web serve/shot, web-shot, relay-native-check, signing-key, hook): host or container, no run directory
 	if rc, ok := shellhelpers.Dispatch(c, cmd, rest, self, usage, shellhelpers.Deps{HostSetup: d.HostSetup}); ok {

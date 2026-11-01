@@ -204,9 +204,6 @@ func TestGoldenArgvPackages(t *testing.T) {
 			return []string{"packages/wallet_importer$ dart pub outdated", "packages/wallet_core$ dart pub outdated", "packages/sync$ dart pub outdated",
 				"relay$ dart pub outdated", "app$ flutter pub outdated"}
 		}},
-		{[]string{"mutate", "core", "lib/x.dart", "--max", "5"}, func(r result) []string {
-			return []string{"$ python3 -I " + r.root + "/tools/mutate.py core lib/x.dart --max 5"}
-		}},
 		{[]string{"linux"}, func(r result) []string {
 			return []string{"app$ flutter build linux --release", "app$ tar -C build/linux/x64/release -czf ../dist/BudgetWallet-linux-x64.tar.gz bundle"}
 		}},

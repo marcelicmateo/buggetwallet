@@ -61,6 +61,21 @@ ci-status: $(BIN)
 ci-log: $(BIN)
 	$(WB) ci log $(ARGS)
 
+# ---- GO4-A helpers (ported Python tools; GO4-B adds its own block below, so the two never touch the same lines) ----
+#   make fixtures [DIR=packages/wallet_importer/test/fixtures] [SET=all|banks|bills|generic]   synthetic importer fixtures
+#   make fixtures-embed                 app/integration_test/support/fixtures.dart from the committed bank files
+#   make token-usage [ARGS="--since 2026-10-20 --json out.json"]
+#   make log-summary ARGS="app.log …"
+#   make lsp-query ARGS="refs path:line:col …"   (starts the language server in the container)
+# (mutate is above: make mutate ARGS="core lib/x.dart --max 5")
+.PHONY: fixtures fixtures-embed token-usage log-summary lsp-query
+fixtures: $(BIN)
+	$(WB) fixtures $(or $(DIR),packages/wallet_importer/test/fixtures) $(SET)
+fixtures-embed: $(BIN)
+	$(WB) fixtures embed
+token-usage log-summary lsp-query: $(BIN)
+	$(WB) $@ $(ARGS)
+
 # ---- GO4-B helpers (shell helpers ported to Go: relay.sh, web.sh, web_shot.py, relay-native-check.sh, make-signing-key.sh, no-poll-hook.sh)
 #   make relay-start|relay-stop|relay-status|relay-reset|relay-image    make relay-logs [ARGS=-f]      (BW_RELAY_PORT, BW_RELAY_ORIGINS, BW_YES)
 #   make web-serve [PORT=8080]    make web-stop    make web-status    make web-shot P=/ O=dist/shot.png [S=412x915]
