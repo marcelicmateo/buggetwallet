@@ -93,6 +93,25 @@ entry points). Agents: scout → devops (sonnet/high for the rewrite) + test-wri
 | PF | Perf (owner 2026-10-30): budgets for 60 Hz (build p90 ≤ 16.7 ms, ≤ 10 % frames over 16.7 ms, worst build ≤ 50 ms, raster only gated at ≤ 250 ms: software GL); Android asks 60 Hz (MainActivity preferred refresh rate); tab cross-fade ~180 ms (off with reduce motion); idle warm-up of every tab's derived data after the first frame and after each reload (Priority.idle, cancelled by a new data version, logs counts/ms only); hidden tabs built one per idle frame; perf action "first switch after new data" | ui-builder (sonnet/high) | worktree | perf A/B | done, merged 6244ce6 + PF2 bfebdf0 → 868e6c7 (A/B: pre-DD tab_switch 21.4 ms FAIL, DD 15.2 ms ok = host noise, not DD) |
 | ZC | Zoomable, scrollable graphs (spec `ZC_SPEC.md`, owner answers in §6) | scout → core + test-writer + ui | worktrees | DD, RX2 (chart look follows the picked direction) | on hold |
 
+## Resume here (end of day 2026-11-01, owner stopped for the token limit) — v2 NOT pushed
+Local v2 holds Stage UX work merged and reviewed, **unpushed on purpose until schema 20 is final** (one device update).
+Merged: UX-C1 theme (Clean neutral), UX-A-ui (dates/per-bill reminders/Today hero/Period), UX-A-core (+2 review
+rounds: fixed storage scale fiat 2/BTC 8, crypto ids, rate caps, strict importers), UX-A-ui2 (+review), F1-core
+(+review), F1-ui (+review), build `-q` mode, `_newId` 64-bit fix (2807f20), specs SCHEMA21 (folded into 20), UX-FX,
+STAGE_GO_DESIGN (owner answers recorded).
+**Next, in order:**
+1. UX-ACC + UX-FX core review fixes: branch `worktree-agent-a17ff24d7b222d77f` (c8da40e + v2 merged as cab67a3, no
+   fixes made yet). The 11 findings + the owner's balance rule are in the lead's message to that agent; re-send them
+   (or SendMessage to resume it): accounts: required + 4 app callers; fill rates from cache whenever fxMissing; early
+   rate frozen; manual CRC check (archive 4.5.2); re-import must not refill an owner-written null account;
+   balanceInHome per row at its own date (UX_SPEC); toMap keeps ecb; ignore future dates; docs; test wording.
+   Then review the delta, merge.
+2. UX-ACC + UX-FX UI (ask "Which account is this?" before importBatch, ECB fetch + "Get rates now" + rate source
+   shown, pass accounts: everywhere).
+3. Stage run (`tools/build.sh -q stage || cat dist/logs/last-failed.txt`, haiku watcher), screenshots, push, STATUS.
+4. UX-B (Plan window, Tags window with recommendations, Settings = setup, Today tiles + equal-height rows fix), F2,
+   UX-C2 (tightening pass: attention-tile outlines, Rules wording, "Built in" repeated). Then Stage GO.
+
 ## Resume here (end of day 2026-10-31) — done 2026-11-01, pushed (stage run green on ed85b27)
 v2 is pushed up to 8fc7718. Merged locally and **not pushed** (no full stage run or review yet): D2 Unlink (core+UI), RX7f
 (20-day fallback), KL-A core, KL-B sync, RX8, setup.md/self-test fixes. That code includes **schema 19** (`tx.match_off`,

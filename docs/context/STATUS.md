@@ -7,6 +7,14 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 
 **Sync:** relay (stage R, 2026-10-22); Syncthing is no longer used. Hosting: owner chose a Hetzner Cloud server (2026-10-24, guide docs/setup.md §6; not set up yet), home server (§5) stays documented.
 
+**2026-11-01 (end of day, not pushed):** Stage UX in progress after the owner's UX feedback (13 points + "UX is
+really bad, theme heavy"): Clean neutral theme (owner picked from mockups), bill dates with calendar/chips/lengths and
+per-bill reminders, Today hero one row on wide, Month → pay-period page, all currencies (fiat stored in hundredths as
+always, BTC in satoshis), account kinds, editable built-in rules, wallet-currency switch sheet, field refactor F1 (one
+`Col` line per field + generic FieldEditor), build `-q` quiet mode, 64-bit row ids (a same-millisecond collision could
+merge two rows). **Schema 20** (accounts kind/institution/match_key, bill reminder days, tx.account, fx_day): relay,
+phone and laptop update together once it ships. Next and owner checks: PIPELINE "Resume here (end of day 2026-11-01)".
+
 **v2 downloads (GitHub releases, private repo):**
 - All platforms: release tag `dev-all` (Android .apk, Linux .tar.gz, Windows .zip, macOS .zip unsigned, iPhone .ipa unsigned)
 - Android + Linux, updated on every v2 push: release tag `dev`
