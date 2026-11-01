@@ -10,7 +10,7 @@ library;
 
 export 'package:wallet_importer/wallet_importer.dart' show BillItem, BillSource, NormalizedBill, TxKind;
 
-export 'src/accounts.dart' show AccountBalance, accountBalances, accountSourceLabel, balanceTotals;
+export 'src/accounts.dart' show AccountBalance, accountBalances, accountSourceLabel, balanceInHome, balanceTotals;
 export 'src/accounts.dart' show BalanceCheck, BankCheck, balanceTrusted, bankCheckTrustDays, checkBankBalance;
 export 'src/backup.dart'
     show
@@ -40,6 +40,8 @@ export 'src/bills.dart'
         BlobRef,
         blobTypes,
         descriptionHasToken,
+        effectiveReturnReminderDays,
+        effectiveWarrantyReminderDays,
         isBlobHash,
         maxAttachmentsPerTx,
         maxBillItemName,
@@ -100,6 +102,10 @@ export 'src/categories.dart'
     show
         BudgetKind,
         builtInMerchantRules,
+        BuiltInRule,
+        builtInRuleById,
+        builtInRulePrefix,
+        builtInRules,
         categories,
         Categorizer,
         CategoryRow,
@@ -111,6 +117,8 @@ export 'src/categories.dart'
         rollUp,
         spendingCategories;
 export 'src/changes.dart' show ChangeEntry;
+export 'src/currencies.dart'
+    show allCurrencies, CurrencyInfo, currencyInfo, legacyMinor, minorDigitsOf, prevalentCurrency, prevalentMinRows, prevalentPercent;
 export 'src/dates.dart'
     show
         addDays,
@@ -190,6 +198,8 @@ export 'src/matching.dart' show encodeMatchOff, MatchPlan, matchOffIds, maxMatch
 export 'src/models.dart'
     show
         Account,
+        AccountKind,
+        BuiltInRuleOverride,
         CategorizedTx,
         comparePart,
         FxRate,

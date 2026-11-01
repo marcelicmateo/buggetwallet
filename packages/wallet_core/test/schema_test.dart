@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS tx(
   id TEXT PRIMARY KEY, source TEXT NOT NULL DEFAULT '', date TEXT NOT NULL DEFAULT '', amount INTEGER NOT NULL DEFAULT 0,
   currency TEXT NOT NULL DEFAULT 'EUR', bank_type TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '',
   category TEXT, note TEXT, manual INTEGER NOT NULL DEFAULT 0, matched_to TEXT, deleted INTEGER NOT NULL DEFAULT 0, seen_bank TEXT,
-  kind_hint TEXT, transfer_to TEXT, match_off TEXT);
+  kind_hint TEXT, transfer_to TEXT, match_off TEXT, digits INTEGER);
 CREATE INDEX IF NOT EXISTS tx_date ON tx(date);
 CREATE INDEX IF NOT EXISTS tx_amount ON tx(amount);
 CREATE TABLE IF NOT EXISTS goals(id TEXT PRIMARY KEY, name TEXT, target INTEGER NOT NULL DEFAULT 0, saved INTEGER NOT NULL DEFAULT 0,
@@ -40,11 +40,12 @@ CREATE INDEX IF NOT EXISTS planned_date ON planned(date);
 CREATE TABLE IF NOT EXISTS bills(id TEXT PRIMARY KEY, source TEXT NOT NULL DEFAULT 'manual', status TEXT NOT NULL DEFAULT 'review',
   external_id TEXT, date TEXT, due_date TEXT, payee TEXT, iban TEXT, reference TEXT, description TEXT, category TEXT, note TEXT,
   total INTEGER, currency TEXT NOT NULL DEFAULT 'EUR', items TEXT NOT NULL DEFAULT '[]', unsure INTEGER NOT NULL DEFAULT 0, linked_tx TEXT,
-  warranty_until TEXT, return_by TEXT, blob TEXT, blob_type TEXT, blob_bytes INTEGER, deleted INTEGER NOT NULL DEFAULT 0, attached_tx TEXT);
+  warranty_until TEXT, return_by TEXT, blob TEXT, blob_type TEXT, blob_bytes INTEGER, deleted INTEGER NOT NULL DEFAULT 0, attached_tx TEXT,
+  return_reminder_days INTEGER, warranty_reminder_days INTEGER);
 CREATE INDEX IF NOT EXISTS bills_date ON bills(date);
 CREATE INDEX IF NOT EXISTS bills_linked ON bills(linked_tx);
 CREATE TABLE IF NOT EXISTS accounts(id TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '', source TEXT, currency TEXT NOT NULL DEFAULT 'EUR',
-  opening INTEGER NOT NULL DEFAULT 0, opening_date TEXT NOT NULL DEFAULT '', deleted INTEGER NOT NULL DEFAULT 0);
+  opening INTEGER NOT NULL DEFAULT 0, opening_date TEXT NOT NULL DEFAULT '', deleted INTEGER NOT NULL DEFAULT 0, kind TEXT, institution TEXT);
 CREATE TABLE IF NOT EXISTS categories(id TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL DEFAULT '', parent TEXT,
   position INTEGER, hidden INTEGER NOT NULL DEFAULT 0, deleted INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS tags(id TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '', position INTEGER, hidden INTEGER NOT NULL DEFAULT 0,

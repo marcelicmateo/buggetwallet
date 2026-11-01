@@ -65,8 +65,8 @@ class ImportContext {
   final _seen = <String, int>{};
 
   /// How many identical (date, amount, description) rows came before this one in the file.
-  int occurrence(String date, int amountMinor, String description) {
-    final key = '$date|${formatCents(amountMinor)}|$description';
+  int occurrence(String date, int amountMinor, String description, {int digits = 2}) {
+    final key = '$date|${minorIdText(amountMinor, digits)}|$description';
     final n = _seen[key] ?? 0;
     _seen[key] = n + 1;
     return n;
@@ -76,9 +76,11 @@ class ImportContext {
   String v1Id(String date, int amountMinor, String description) =>
       transactionId(date, amountMinor, description, occurrence(date, amountMinor, description));
 
-  /// The id for a row of a bank added after v1 ([sourceTransactionId]).
-  String sourceId(String source, String date, int amountMinor, String description) =>
-      sourceTransactionId(source, date, amountMinor, description, occurrence(date, amountMinor, description));
+  /// The id for a row of a bank added after v1 ([sourceTransactionId]); [digits] = the minor digits of [amountMinor]'s
+  /// currency.
+  String sourceId(String source, String date, int amountMinor, String description, {int digits = 2}) =>
+      sourceTransactionId(source, date, amountMinor, description, occurrence(date, amountMinor, description, digits: digits),
+          digits: digits);
 }
 
 /// Everything the importer knows about one bank's export. Stateless: per-file state lives in [ImportContext].

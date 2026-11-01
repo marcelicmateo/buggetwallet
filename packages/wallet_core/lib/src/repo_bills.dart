@@ -131,6 +131,8 @@ extension WalletRepoBills on WalletRepo {
   /// due date, total or category that leaves a confirmed, unpaid bill with a total and a due date from today on
   /// without a category: [ArgumentError] (its planned row would reserve money, and only the category tells whether the
   /// payday plan already holds it). Other edits (note, payee, dates of warranty or return …) never throw for it (BILLS_API.md §3).
+  /// UX-A: [returnReminderDays] / [warrantyReminderDays] are this bill's own reminder days (0..30 / 0..90, else
+  /// [ArgumentError]; the clear flags go back to the wallet setting, [effectiveReturnReminderDays]).
   void updateBill(String id,
       {String? date,
       String? dueDate,
@@ -147,9 +149,19 @@ extension WalletRepoBills on WalletRepo {
       bool clearDueDate = false,
       bool clearWarranty = false,
       bool clearReturnBy = false,
-      bool clearCategory = false}) {
+      bool clearCategory = false,
+      int? returnReminderDays,
+      int? warrantyReminderDays,
+      bool clearReturnReminderDays = false,
+      bool clearWarrantyReminderDays = false}) {
     for (final d in [date, dueDate, warrantyUntil, returnBy]) {
       if (d != null && !_okDate(d)) throw ArgumentError('Bad date.');
+    }
+    if (returnReminderDays != null && (returnReminderDays < 0 || returnReminderDays > WalletSettings.maxReturnReminderDays)) {
+      throw ArgumentError('Remind 0 to ${WalletSettings.maxReturnReminderDays} days before the return date.');
+    }
+    if (warrantyReminderDays != null && (warrantyReminderDays < 0 || warrantyReminderDays > WalletSettings.maxWarrantyReminderDays)) {
+      throw ArgumentError('Remind 0 to ${WalletSettings.maxWarrantyReminderDays} days before the warranty ends.');
     }
     if (total != null && !_okTotal(total)) throw ArgumentError('Bad amount.');
     final itemsText = items == null ? null : encodeBillItems(items);
@@ -168,6 +180,14 @@ extension WalletRepoBills on WalletRepo {
       if (itemsText != null) 'items': itemsText,
       if (clearWarranty) 'warranty_until': null else if (warrantyUntil != null) 'warranty_until': warrantyUntil,
       if (clearReturnBy) 'return_by': null else if (returnBy != null) 'return_by': returnBy,
+      if (clearReturnReminderDays)
+        'return_reminder_days': null
+      else if (returnReminderDays != null)
+        'return_reminder_days': returnReminderDays,
+      if (clearWarrantyReminderDays)
+        'warranty_reminder_days': null
+      else if (warrantyReminderDays != null)
+        'warranty_reminder_days': warrantyReminderDays,
     };
     if (fields.isEmpty) return;
     // Only an edit that changes the reserve (due date, total, category) is held to the category rule; a note,

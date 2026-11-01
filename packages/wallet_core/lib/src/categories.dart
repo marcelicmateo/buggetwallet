@@ -253,26 +253,136 @@ Map<String, int> rollUp(Map<String, int> byCategory, CategoryTable t) {
   return out;
 }
 
-/// Built-in rules: well-known chains and brands only. Personal merchants live in
-/// settings (merchantPatterns) so nobody's habits end up in the code.
-final List<(String, RegExp)> builtInMerchantRules = [
-  ('Food delivery', RegExp(r'wolt|bolt food|glovo')),
-  (
-    'Bills & subscriptions',
-    RegExp(r'netflix|spotify|1password|anthropic|linkedin|proton|telekom|\ba1\b|hbo|disney|youtube|icloud|openai|chatgpt|^google$')
-  ),
-  ('Games & apps', RegExp(r'steam|valve|google play|playstation|nintendo|epic games')),
-  ('Groceries', RegExp(r'\bspar|lidl|plodine|kaufland|konzum|studenac|tommy|pan-pek|mlinar|eurospin|ribola|pekar')),
-  (
-    'Car & transport',
-    RegExp(r'\bina\b|petrol|tifon|shell|crodux|autocest|e-vinjeta|jadrolinija|getbybus|\bbolt\b|uber|parking|\bhak\b|\bzet\b|flixbus')
-  ),
-  ('Eating out', RegExp(r'restoran|bistro|bar\b|fast food|mcdonald|pizz|grill|caffe|cafe|kafi|burger|kebab|sushi|konoba|\bpub\b')),
-  ('Health & care', RegExp(r'ljekarn|pharm|farmac|dm drog|m.ller|poliklinik|hzzo')),
-  ('Sport & fitness', RegExp(r'decathlon|fitness|gymbeam')),
-  ('Home & tools', RegExp(r'bauhaus|pevex|vidaxl|jysk|ikea|emmezeta|lesnina|\blinks|chipoteka|instar|\bmall\b|cyberport')),
-  ('To people', RegExp(r'keks pay')),
-];
+/// One built-in merchant rule (UX-A): a well-known chain or brand, [slug] its stable id (`builtIn:<slug>`, [id]: never
+/// renamed or reused, because the owner's edits of it are stored under it), the built-in [category] and [pattern] (a
+/// regex over the lower-cased, trimmed description). The owner can change both or turn it off
+/// (`WalletSettings.builtInRuleOverrides`); an app update that changes a rule does not touch one the owner edited.
+class BuiltInRule {
+  final String slug;
+  final String category;
+  final String pattern;
+  final RegExp re;
+  BuiltInRule(this.slug, this.category, this.pattern) : re = RegExp(pattern);
+
+  String get id => '$builtInRulePrefix$slug';
+}
+
+/// The prefix of a built-in rule's id (`builtIn:lidl`).
+const builtInRulePrefix = 'builtIn:';
+
+/// Built-in rules: well-known chains and brands only, one rule each, in match order (the first that matches wins; the
+/// category groups keep the order the grouped rules had before UX-A). Personal merchants live in settings
+/// (merchantPatterns) so nobody's habits end up in the code.
+final List<BuiltInRule> builtInRules = List.unmodifiable([
+  BuiltInRule('wolt', 'Food delivery', r'wolt'),
+  BuiltInRule('bolt-food', 'Food delivery', r'bolt food'),
+  BuiltInRule('glovo', 'Food delivery', r'glovo'),
+  BuiltInRule('netflix', 'Bills & subscriptions', r'netflix'),
+  BuiltInRule('spotify', 'Bills & subscriptions', r'spotify'),
+  BuiltInRule('1password', 'Bills & subscriptions', r'1password'),
+  BuiltInRule('anthropic', 'Bills & subscriptions', r'anthropic'),
+  BuiltInRule('linkedin', 'Bills & subscriptions', r'linkedin'),
+  BuiltInRule('proton', 'Bills & subscriptions', r'proton'),
+  BuiltInRule('telekom', 'Bills & subscriptions', r'telekom'),
+  BuiltInRule('a1', 'Bills & subscriptions', r'\ba1\b'),
+  BuiltInRule('hbo', 'Bills & subscriptions', r'hbo'),
+  BuiltInRule('disney', 'Bills & subscriptions', r'disney'),
+  BuiltInRule('youtube', 'Bills & subscriptions', r'youtube'),
+  BuiltInRule('icloud', 'Bills & subscriptions', r'icloud'),
+  BuiltInRule('openai', 'Bills & subscriptions', r'openai'),
+  BuiltInRule('chatgpt', 'Bills & subscriptions', r'chatgpt'),
+  BuiltInRule('google', 'Bills & subscriptions', r'^google$'),
+  BuiltInRule('steam', 'Games & apps', r'steam'),
+  BuiltInRule('valve', 'Games & apps', r'valve'),
+  BuiltInRule('google-play', 'Games & apps', r'google play'),
+  BuiltInRule('playstation', 'Games & apps', r'playstation'),
+  BuiltInRule('nintendo', 'Games & apps', r'nintendo'),
+  BuiltInRule('epic-games', 'Games & apps', r'epic games'),
+  BuiltInRule('spar', 'Groceries', r'\bspar'),
+  BuiltInRule('lidl', 'Groceries', r'lidl'),
+  BuiltInRule('plodine', 'Groceries', r'plodine'),
+  BuiltInRule('kaufland', 'Groceries', r'kaufland'),
+  BuiltInRule('konzum', 'Groceries', r'konzum'),
+  BuiltInRule('studenac', 'Groceries', r'studenac'),
+  BuiltInRule('tommy', 'Groceries', r'tommy'),
+  BuiltInRule('pan-pek', 'Groceries', r'pan-pek'),
+  BuiltInRule('mlinar', 'Groceries', r'mlinar'),
+  BuiltInRule('eurospin', 'Groceries', r'eurospin'),
+  BuiltInRule('ribola', 'Groceries', r'ribola'),
+  BuiltInRule('pekar', 'Groceries', r'pekar'),
+  BuiltInRule('ina', 'Car & transport', r'\bina\b'),
+  BuiltInRule('petrol', 'Car & transport', r'petrol'),
+  BuiltInRule('tifon', 'Car & transport', r'tifon'),
+  BuiltInRule('shell', 'Car & transport', r'shell'),
+  BuiltInRule('crodux', 'Car & transport', r'crodux'),
+  BuiltInRule('autocest', 'Car & transport', r'autocest'),
+  BuiltInRule('e-vinjeta', 'Car & transport', r'e-vinjeta'),
+  BuiltInRule('jadrolinija', 'Car & transport', r'jadrolinija'),
+  BuiltInRule('getbybus', 'Car & transport', r'getbybus'),
+  BuiltInRule('bolt', 'Car & transport', r'\bbolt\b'),
+  BuiltInRule('uber', 'Car & transport', r'uber'),
+  BuiltInRule('parking', 'Car & transport', r'parking'),
+  BuiltInRule('hak', 'Car & transport', r'\bhak\b'),
+  BuiltInRule('zet', 'Car & transport', r'\bzet\b'),
+  BuiltInRule('flixbus', 'Car & transport', r'flixbus'),
+  BuiltInRule('restoran', 'Eating out', r'restoran'),
+  BuiltInRule('bistro', 'Eating out', r'bistro'),
+  BuiltInRule('bar', 'Eating out', r'bar\b'),
+  BuiltInRule('fast-food', 'Eating out', r'fast food'),
+  BuiltInRule('mcdonald', 'Eating out', r'mcdonald'),
+  BuiltInRule('pizz', 'Eating out', r'pizz'),
+  BuiltInRule('grill', 'Eating out', r'grill'),
+  BuiltInRule('caffe', 'Eating out', r'caffe'),
+  BuiltInRule('cafe', 'Eating out', r'cafe'),
+  BuiltInRule('kafi', 'Eating out', r'kafi'),
+  BuiltInRule('burger', 'Eating out', r'burger'),
+  BuiltInRule('kebab', 'Eating out', r'kebab'),
+  BuiltInRule('sushi', 'Eating out', r'sushi'),
+  BuiltInRule('konoba', 'Eating out', r'konoba'),
+  BuiltInRule('pub', 'Eating out', r'\bpub\b'),
+  BuiltInRule('ljekarn', 'Health & care', r'ljekarn'),
+  BuiltInRule('pharm', 'Health & care', r'pharm'),
+  BuiltInRule('farmac', 'Health & care', r'farmac'),
+  BuiltInRule('dm', 'Health & care', r'dm drog'),
+  BuiltInRule('muller', 'Health & care', r'm.ller'),
+  BuiltInRule('poliklinik', 'Health & care', r'poliklinik'),
+  BuiltInRule('hzzo', 'Health & care', r'hzzo'),
+  BuiltInRule('decathlon', 'Sport & fitness', r'decathlon'),
+  BuiltInRule('fitness', 'Sport & fitness', r'fitness'),
+  BuiltInRule('gymbeam', 'Sport & fitness', r'gymbeam'),
+  BuiltInRule('bauhaus', 'Home & tools', r'bauhaus'),
+  BuiltInRule('pevex', 'Home & tools', r'pevex'),
+  BuiltInRule('vidaxl', 'Home & tools', r'vidaxl'),
+  BuiltInRule('jysk', 'Home & tools', r'jysk'),
+  BuiltInRule('ikea', 'Home & tools', r'ikea'),
+  BuiltInRule('emmezeta', 'Home & tools', r'emmezeta'),
+  BuiltInRule('lesnina', 'Home & tools', r'lesnina'),
+  BuiltInRule('links', 'Home & tools', r'\blinks'),
+  BuiltInRule('chipoteka', 'Home & tools', r'chipoteka'),
+  BuiltInRule('instar', 'Home & tools', r'instar'),
+  BuiltInRule('mall', 'Home & tools', r'\bmall\b'),
+  BuiltInRule('cyberport', 'Home & tools', r'cyberport'),
+  BuiltInRule('keks-pay', 'To people', r'keks pay'),
+]);
+
+/// [builtInRules] as (category, regex) pairs, in the same order.
+final List<(String, RegExp)> builtInMerchantRules = List.unmodifiable([for (final r in builtInRules) (r.category, r.re)]);
+
+/// Before UX-A a built-in rule's id was `builtIn:<index>` into a list of 10 grouped rules (one per category); such an
+/// id now names that group's first rule ([builtInRuleById]).
+const _legacyBuiltInHeads = ['wolt', 'netflix', 'steam', 'spar', 'ina', 'restoran', 'ljekarn', 'decathlon', 'bauhaus', 'keks-pay'];
+
+final Map<String, BuiltInRule> _builtInById = {for (final r in builtInRules) r.id: r};
+
+/// The built-in rule with [id] (`builtIn:<slug>`, or an id from before UX-A, `builtIn:<index>`), or null.
+BuiltInRule? builtInRuleById(String id) {
+  if (_builtInById[id] case final r?) return r;
+  if (!id.startsWith(builtInRulePrefix)) return null;
+  final n = id.substring(builtInRulePrefix.length);
+  final i = int.tryParse(n);
+  if (i == null || i < 0 || i >= _legacyBuiltInHeads.length || '$i' != n) return null;
+  return _builtInById['$builtInRulePrefix${_legacyBuiltInHeads[i]}'];
+}
 
 /// Default for the `rentCashThreshold` setting (minor units).
 const int defaultRentCashThreshold = 50000;
@@ -328,7 +438,8 @@ class Categorizer {
       CategoryTable? table,
       TagContext? tagContext,
       Map<String, List<SplitPart>> splits = const {},
-      Set<String> iouTx = const {}}) {
+      Set<String> iouTx = const {},
+      Map<String, BuiltInRuleOverride> builtInOverrides = const {}}) {
     final t = table ?? CategoryTable.builtIn;
     final rules = patternRules ??
         [
@@ -341,11 +452,47 @@ class Categorizer {
     ];
     // Counts only: merchant rules and patterns are personal.
     logEvent(_log, Level.FINE, 'categories.build', {'rules': merchantRules.length, 'patterns': rules.length, 'patternsUsed': used.length});
-    return Categorizer._(merchantRules, used, rentCashThreshold, t, tagContext, splits, iouTx);
+    return Categorizer._(merchantRules, used, rentCashThreshold, t, tagContext, splits, iouTx, _effectiveBuiltIns(builtInOverrides, t));
   }
 
-  Categorizer._(this.merchantRules, this._patterns, this.rentCashThreshold, this.table, this.tagContext, this.splits, this.iouTx)
+  Categorizer._(
+      this.merchantRules, this._patterns, this.rentCashThreshold, this.table, this.tagContext, this.splits, this.iouTx, this._builtIns)
       : userPatterns = List.unmodifiable([for (final p in _patterns) (p.rule.category, p.rule)]);
+
+  /// The built-in rules in use, in [builtInRules] order: (id, category, regex) after the owner's overrides.
+  final List<(String, String, RegExp)> _builtIns;
+
+  /// [builtInRules] with [overrides] applied (UX-A): an off rule is left out; an edited pattern is matched case-blind like
+  /// a personal regex (one that does not compile or matches everything keeps the built-in pattern, logged as
+  /// `categories.badPattern`); an edited category that is not live in [t] keeps the built-in category.
+  static List<(String, String, RegExp)> _effectiveBuiltIns(Map<String, BuiltInRuleOverride> overrides, CategoryTable t) {
+    if (overrides.isEmpty) return [for (final r in builtInRules) (r.id, r.category, r.re)];
+    final out = <(String, String, RegExp)>[];
+    for (final r in builtInRules) {
+      final o = overrides[r.id];
+      if (o == null) {
+        out.add((r.id, r.category, r.re));
+        continue;
+      }
+      if (o.off) continue;
+      var re = r.re;
+      if (o.pattern case final p?) {
+        try {
+          final x = RegExp(p, caseSensitive: false);
+          if (MerchantPattern.matchesEverything(x)) {
+            logEvent(_log, Level.WARNING, 'categories.badPattern', {'builtIn': true, 'matchesAll': true});
+          } else {
+            re = x;
+          }
+        } on FormatException catch (e) {
+          logEvent(_log, Level.WARNING, 'categories.badPattern', {'builtIn': true, 'offset': e.offset});
+        }
+      }
+      final c = o.category != null && t.isLive(o.category!) ? o.category! : r.category;
+      out.add((r.id, c, re));
+    }
+    return out;
+  }
 
   /// A pattern ready to match, or null (logged as `categories.badPattern`) when its text is empty (only spaces
   /// included: an empty pattern would match every merchant), a regex does not compile or matches the empty text
@@ -388,7 +535,7 @@ class Categorizer {
   /// ([foldText]). A pattern with an amount range matches only when [amount] is given and in range.
   String? merchantCategory(String description, {int? amount}) => _matchText(description, amount)?.$1;
 
-  /// [merchantCategory] with the id of the rule that matched: the pattern row id, or `builtIn:<index>`.
+  /// [merchantCategory] with the id of the rule that matched: the pattern row id, or `builtIn:<slug>`.
   (String, String)? _matchText(String description, int? amount) {
     final s = description.toLowerCase().trim();
     String? folded;
@@ -398,8 +545,8 @@ class Categorizer {
       final hit = p.re?.hasMatch(s) ?? (folded ??= foldText(s)).contains(p.folded!);
       if (hit) return (r.category, r.id);
     }
-    for (final (i, (c, re)) in builtInMerchantRules.indexed) {
-      if (re.hasMatch(s)) return (c, 'builtIn:$i');
+    for (final (id, c, re) in _builtIns) {
+      if (re.hasMatch(s)) return (c, id);
     }
     return null;
   }
@@ -467,7 +614,7 @@ class Categorizer {
   String categoryOf(Tx t) => _decide(t).$1;
 
   /// The id of the rule that decided [t]'s main tag ([categoryOf]): `payee:<merchantKey>` for a payee rule, the
-  /// pattern row id `pattern:<16 hex>`, `builtIn:<index in builtInMerchantRules>`; null when no rule did (an item
+  /// pattern row id `pattern:<16 hex>`, `builtIn:<slug>` ([BuiltInRule.id]); null when no rule did (an item
   /// override, a transfer or kind hint, a bank rule, a hand-added row's own category, the fallback).
   String? ruleFor(Tx t) => _decide(t).$2;
 

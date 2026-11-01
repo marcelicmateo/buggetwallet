@@ -1,6 +1,8 @@
 // Helpers shared by the bill readers: IBAN checks, references, exact money and date parsing. Pure Dart, web-safe.
 import 'package:logging/logging.dart';
 
+import '../currencies.dart' show pow10;
+
 final billsLog = Logger('bw.importer.bills');
 
 /// `true` when [iban] (spaces allowed) is a well-formed IBAN whose mod-97 check holds.
@@ -60,15 +62,16 @@ String? checkIso(String? s) {
 }
 
 /// Cents from a plain decimal (`12`, `12.5`, `12.50`, `-3.10`; [comma] also allows `,` as the decimal point).
-/// Exact: no doubles; digits past the cents must be zeros, else `null`.
-int? decimalCents(String s, {bool comma = false}) {
+/// Exact: no doubles; digits past the cents must be zeros, else `null`. [digits]: the minor digits of the amount's
+/// currency (`minorDigitsOf`; JPY 0, KWD 3): minor units of that currency, the same zero rule past them.
+int? decimalCents(String s, {bool comma = false, int digits = 2}) {
   final m = (comma ? RegExp(r'^(-?)(\d{1,13})(?:[.,](\d+))?$') : RegExp(r'^(-?)(\d{1,13})(?:\.(\d+))?$')).firstMatch(s.trim());
   if (m == null) return null;
   var frac = m[3] ?? '';
-  if (frac.length > 2) {
-    if (frac.length > 20 || frac.substring(2).replaceAll('0', '').isNotEmpty) return null;
-    frac = frac.substring(0, 2);
+  if (frac.length > digits) {
+    if (frac.length > 20 || frac.substring(digits).replaceAll('0', '').isNotEmpty) return null;
+    frac = frac.substring(0, digits);
   }
-  final cents = int.parse(m[2]!) * 100 + int.parse(frac.padRight(2, '0'));
+  final cents = int.parse(m[2]!) * pow10(digits) + (digits == 0 ? 0 : int.parse(frac.padRight(digits, '0')));
   return m[1] == '-' ? -cents : cents;
 }

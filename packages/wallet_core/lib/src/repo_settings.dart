@@ -10,6 +10,7 @@ String _logKey(String key) => switch (key) {
       _ when key.startsWith(WalletSettings.planPrefix) => 'planLines',
       _ when key.startsWith(WalletSettings.fxPrefix) => 'fx',
       _ when key.startsWith(WalletSettings.csvMapPrefix) => 'csvmap',
+      _ when key.startsWith(WalletSettings.builtInRuleRowPrefix) => 'builtInRules',
       _ => key,
     };
 
@@ -20,6 +21,7 @@ bool _perKeySetting(String key) =>
     key == 'fxRates' ||
     key == 'csvMappings' ||
     key.startsWith(WalletSettings.csvMapPrefix) ||
+    key.startsWith(WalletSettings.builtInRuleRowPrefix) ||
     key.startsWith(WalletSettings.planPrefix) ||
     key.startsWith(WalletSettings.fxPrefix) ||
     key.startsWith(WalletSettings.budgetPrefix) ||
@@ -132,14 +134,14 @@ extension WalletRepoSettings on WalletRepo {
   }
 
   /// Sets the owner's exchange rate for [code] (P15, [WalletSettings.fxRates], row `fx:<CODE>`): [rate] wallet-currency
-  /// minor units per 1,000,000 minor units of [code], dated [date] (default today; an Undo passes the old entry's date)
+  /// units per 1,000,000 units of [code] ([FxRate]), dated [date] (default today; an Undo passes the old entry's date)
   /// and recorded against the wallet currency
-  /// ([FxRate.home]; a rate left from another wallet currency, [WalletSettings.fxStale], is replaced). Throws [ArgumentError] for a code that is not three
-  /// capital letters (ISO 4217), the wallet currency itself, a rate outside [FxRate.minRate]..[FxRate.maxRate], or a
+  /// ([FxRate.home]; a rate left from another wallet currency, [WalletSettings.fxStale], is replaced). Throws [ArgumentError] for a code that is not in
+  /// [allCurrencies] (ISO 4217 and BTC), the wallet currency itself, a rate outside [FxRate.minRate]..[FxRate.maxRateOf], or a
   /// [date] that is not `YYYY-MM-DD` or is after today. Writes nothing when the same entry is already set.
   void setFxRate(String code, int rate, {String? date}) {
     final st = _checkFxCode(code);
-    if (rate < FxRate.minRate || rate > FxRate.maxRate) throw ArgumentError.value(rate, 'rate', 'out of range');
+    if (rate < FxRate.minRate || rate > FxRate.maxRateOf(code)) throw ArgumentError.value(rate, 'rate', 'out of range');
     final today = _today();
     if (date != null && (!isIsoDate(date) || date.compareTo(today) > 0)) throw ArgumentError.value(date, 'date', 'not a date up to today');
     final next = FxRate(rate, date ?? today, home: st.currency);
@@ -154,7 +156,7 @@ extension WalletRepoSettings on WalletRepo {
   /// currency ([WalletSettings.fxStale]). Throws [ArgumentError] like [setFxRate] for a bad code or the wallet
   /// currency. Writes nothing when [code] has no rate.
   void removeFxRate(String code) {
-    final st = _checkFxCode(code);
+    final st = _checkFxCode(code, remove: true);
     if (!st.fxRates.containsKey(code) && !st.fxStale.containsKey(code)) return;
     _write([
       ('setting', '${WalletSettings.fxPrefix}$code', {'value': null, 'deleted': 1})
@@ -162,9 +164,14 @@ extension WalletRepoSettings on WalletRepo {
     logEvent(_log, Level.INFO, 'settings.fx', {'set': false});
   }
 
-  WalletSettings _checkFxCode(String code) {
+  WalletSettings _checkFxCode(String code, {bool remove = false}) {
     if (!WalletSettings.currencyCode.hasMatch(code)) throw ArgumentError.value(code, 'code', 'not a currency code');
     final st = _readSettings(db, table: categoryTable());
+    // UX-A: a code of the table only; a rate stored for another code (an older build allowed any three letters) can
+    // still be removed.
+    if (currencyInfo(code) == null && !(remove && (st.fxRates.containsKey(code) || st.fxStale.containsKey(code)))) {
+      throw ArgumentError.value(code, 'code', 'not a known currency');
+    }
     if (code == st.currency) throw ArgumentError.value(code, 'code', 'the wallet currency needs no rate');
     return st;
   }
@@ -315,6 +322,63 @@ extension WalletRepoSettings on WalletRepo {
     logEvent(_log, Level.INFO, 'settings.pattern', {'op': 'update', 'match': m, 'range': next.hasRange, 'newId': newId != id});
     return newId;
   }
+
+  // ---------- built-in rules (UX-A) ----------
+
+  /// The built-in rule [id] names (`builtIn:<slug>`, or `builtIn:<index>` from before UX-A), or an [ArgumentError].
+  BuiltInRule _builtIn(String id) => builtInRuleById(id) ?? (throw ArgumentError.value(id, 'id', 'no such built-in rule'));
+
+  /// Writes [next] as built-in rule [r]'s override row (`builtInRule:<slug>`), or its tombstone when [next] changes
+  /// nothing; nothing when that is already stored.
+  void _writeBuiltIn(BuiltInRule r, BuiltInRuleOverride next, String op) {
+    final old = _readSettings(db, table: categoryTable()).builtInRuleOverrides[r.id];
+    final none = !next.edited && !next.off;
+    if (none ? old == null : old == next) return;
+    _write([
+      (
+        'setting',
+        '${WalletSettings.builtInRuleRowPrefix}${r.slug}',
+        none ? {'value': null, 'deleted': 1} : {'value': jsonEncode(next.toJson()), 'deleted': 0}
+      )
+    ]);
+    logEvent(_log, Level.INFO, 'settings.builtInRule', {'op': op, 'edited': next.edited, 'off': next.off});
+  }
+
+  /// Changes built-in rule [id]'s [pattern] (a regex over the lower-cased description, case-blind like a personal one)
+  /// and/or [category] (null = keep what it is now); a value equal to the built-in's clears that part of the edit. The
+  /// edit is the owner's: an app update that changes this built-in leaves it alone. Throws [ArgumentError] for an
+  /// unknown id, an empty pattern, one that does not compile or matches every text, or a category that is not live
+  /// ([CategoryTable.isLive]); the message never quotes the pattern. Writes nothing when unchanged.
+  void editBuiltInRule(String id, {String? pattern, String? category}) {
+    final r = _builtIn(id);
+    if (pattern != null) {
+      if (pattern.trim().isEmpty) throw ArgumentError('Enter a pattern.');
+      final RegExp re;
+      try {
+        re = RegExp(pattern, caseSensitive: false);
+      } on FormatException {
+        throw ArgumentError('The pattern is not a valid regular expression.');
+      }
+      if (MerchantPattern.matchesEverything(re)) throw ArgumentError('The pattern matches every payment.');
+    }
+    if (category != null && !categoryTable().isLive(category)) throw ArgumentError.value(category, 'category', 'not a live category');
+    final old = _readSettings(db, table: categoryTable()).builtInRuleOverrides[r.id] ?? const BuiltInRuleOverride();
+    final p = pattern == null ? old.pattern : (pattern == r.pattern ? null : pattern);
+    final c = category == null ? old.category : (category == r.category ? null : category);
+    _writeBuiltIn(r, BuiltInRuleOverride(pattern: p, category: c, off: old.off), 'edit');
+  }
+
+  /// Turns built-in rule [id] off (it no longer matches; an edit is kept) or on again. [ArgumentError] for an unknown
+  /// id. Writes nothing when unchanged.
+  void setBuiltInRuleOff(String id, bool off) {
+    final r = _builtIn(id);
+    final old = _readSettings(db, table: categoryTable()).builtInRuleOverrides[r.id] ?? const BuiltInRuleOverride();
+    _writeBuiltIn(r, BuiltInRuleOverride(pattern: old.pattern, category: old.category, off: off), off ? 'off' : 'on');
+  }
+
+  /// Built-in rule [id] as the app ships it again: the edit and the off switch are dropped (a tombstone row, so the
+  /// reset syncs). [ArgumentError] for an unknown id. Writes nothing for an untouched rule.
+  void resetBuiltInRule(String id) => _writeBuiltIn(_builtIn(id), const BuiltInRuleOverride(), 'reset');
 
   /// Moves pattern [id] one place up or down in the match order ([WalletSettings.patternRules]): it swaps `order`
   /// with its neighbour (two writes). When any two patterns share an order (a sync of two adds), the whole list is

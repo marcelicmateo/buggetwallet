@@ -1,3 +1,5 @@
+import 'package:wallet_importer/wallet_importer.dart' show minorDigitsOf, pow10;
+
 import 'bills.dart' show occurrenceKey, plannedReserves;
 import 'categories.dart';
 import 'dates.dart';
@@ -737,10 +739,11 @@ int? changePermille(int now, int before) {
 }
 
 /// Budgets to propose for [month]: each category's average over the 6 months before it, rounded UP to the nearest
-/// 1000 cents (10 €). A category whose average is zero or negative (refunds) is omitted. Only rows in [currency] count.
+/// 10 units of [currency] (1000 cents, 10 €; its own minor digits, UX-A). A category whose average is zero or negative (refunds) is omitted. Only rows in [currency] count.
 /// With [table], per top-level category (children rolled up, [rollUp]): budgets are set on top-level categories only.
 Map<String, int> suggestBudgets(List<CategorizedTx> txs, String month, {required String currency, CategoryTable? table}) {
-  const months = 6, step = 1000;
+  const months = 6;
+  final step = 10 * pow10(minorDigitsOf(currency));
   final sums = rollUp(_outByCategory(txs, _monthsBefore(month, months).toSet(), currency), table ?? CategoryTable.builtIn);
   return {
     for (final e in sums.entries)
@@ -790,7 +793,8 @@ int monthlyFlex(WalletSettings st, {List<Goal> goals = const [], CategoryTable? 
 BudgetPreset budgetPreset(BudgetPresetKind kind, List<CategorizedTx> txs, WalletSettings st, String month,
     {required String currency, CategoryTable? table, List<Goal> goals = const []}) {
   final t = table ?? CategoryTable.builtIn;
-  const step = 1000;
+  // Whole units and steps of 10 units of [currency] (UX-A: its own minor digits; EUR 100 cents, JPY 1 yen).
+  final unit = pow10(minorDigitsOf(currency)), step = 10 * unit;
   BudgetPreset done(Map<String, int> b) => BudgetPreset(Map.unmodifiable(b), b.values.fold(0, (s, v) => s + v));
   Map<String, int> sums(int months) => rollUp(_outByCategory(txs, _monthsBefore(month, months).toSet(), currency), t);
   BudgetPreset average(int months) {
@@ -810,7 +814,7 @@ BudgetPreset budgetPreset(BudgetPresetKind kind, List<CategorizedTx> txs, Wallet
     };
     if (s.values.every((v) => v <= 0)) return const BudgetPreset.none('No spending in the last 6 months.');
     if (flex.isEmpty) return const BudgetPreset.none('No flexible spending in the last 6 months.');
-    final euros = cents ~/ 100;
+    final euros = cents ~/ unit;
     if (euros <= 0) return const BudgetPreset.none('Nothing is left for flexible spending after your fixed costs and goals.');
     final total = flex.values.fold(0, (a, v) => a + v);
     final order = t.topLevelIds;
@@ -839,7 +843,7 @@ BudgetPreset budgetPreset(BudgetPresetKind kind, List<CategorizedTx> txs, Wallet
     }
     return done({
       for (final id in ids)
-        if (parts[id]! > 0) id: parts[id]! * 100,
+        if (parts[id]! > 0) id: parts[id]! * unit,
     });
   }
 

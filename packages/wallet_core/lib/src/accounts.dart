@@ -1,6 +1,7 @@
 import 'package:wallet_importer/wallet_importer.dart' show CsvMapping, bankProfiles, csvSourcePrefix;
 
 import 'dates.dart';
+import 'fx.dart' show homeAmount;
 import 'models.dart';
 
 /// What an account or import `source` is called: `Cash` for null, a bank profile's label, a saved CSV layout's name
@@ -37,11 +38,17 @@ class AccountBalance {
 /// balance at the end of that day), and the account's own: a bank account's imported rows from its source (every
 /// kind: spending, income, fees, ATM, own transfers, exchanges), or for cash the hand-added rows not matched (or
 /// pending a match) to a bank row, which the bank account already counts. ATM withdrawals are not added to cash.
+/// An account without a source that is not cash (investment, crypto, other; UX-A) counts no rows: its balance is the
+/// opening the owner sets ([WalletRepo.correctBalance]).
 bool _counts(Account a, Tx row) {
-  if (row.deleted || row.currency != a.currency || row.date.compareTo(a.openingDate) <= 0) return false;
+  if (!a.countsRows || row.deleted || row.currency != a.currency || row.date.compareTo(a.openingDate) <= 0) return false;
   if (a.isCash) return row.manual && row.matchedTo == null && !row.matchPending;
   return !row.manual && row.source == a.source;
 }
+
+/// The key under which [a] counts rows: (null, currency) for cash, (source, currency) for an account with a source;
+/// null for one that counts none (never a duplicate of another).
+(String?, String)? _rowKey(Account a) => !a.countsRows ? null : (a.isCash ? null : a.source, a.currency);
 
 /// The balance of each live account in [accounts] (input order; deleted accounts are skipped) from [rows]: opening +
 /// the amounts of the rows that count for it ([_counts]). Exact cents, one currency per account. Each (source,
@@ -51,14 +58,15 @@ List<AccountBalance> accountBalances(List<Account> accounts, List<Tx> rows) {
   final owner = <(String?, String), String>{}; // (source, currency) -> the counted account's id
   for (final a in accounts) {
     if (a.deleted) continue;
-    final k = (a.source, a.currency);
+    final k = _rowKey(a);
+    if (k == null) continue;
     final have = owner[k];
     if (have == null || a.id.compareTo(have) < 0) owner[k] = a.id;
   }
   final out = <AccountBalance>[];
   for (final a in accounts) {
     if (a.deleted) continue;
-    final counted = owner[(a.source, a.currency)]!;
+    final counted = switch (_rowKey(a)) { final k? => owner[k]!, null => a.id };
     if (counted != a.id) {
       out.add(AccountBalance(account: a, balance: a.opening, rowsCounted: 0, duplicateOf: counted));
       continue;
@@ -75,6 +83,11 @@ List<AccountBalance> accountBalances(List<Account> accounts, List<Tx> rows) {
   }
   return out;
 }
+
+/// [b]'s balance in the wallet currency of [st] (UX-A): itself when the account is in it, else at the owner's rate
+/// (`homeAmount`: each currency's own minor digits; a crypto account's coins at the hand-set rate); null without a rate.
+int? balanceInHome(AccountBalance b, WalletSettings st) =>
+    homeAmount(Tx(id: '', source: '', date: '', amount: b.balance, currency: b.account.currency, description: ''), st);
 
 /// The balances summed per currency (never mixed), keys sorted. Duplicates ([AccountBalance.duplicateOf]) are left out.
 Map<String, int> balanceTotals(List<AccountBalance> b) {

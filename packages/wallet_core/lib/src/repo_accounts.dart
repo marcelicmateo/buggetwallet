@@ -22,33 +22,79 @@ extension WalletRepoAccounts on WalletRepo {
     if (date.compareTo(_today()) > 0) throw ArgumentError('The date cannot be in the future.');
   }
 
-  /// Throws when another live account (not [exceptId]) has this (source, currency): its rows would count twice.
-  void _checkUnique(String? source, String currency, {String? exceptId}) {
-    final rs = db
-        .select('SELECT id FROM accounts WHERE deleted = 0 AND currency = ? AND source IS ? AND id IS NOT ?', [currency, source, exceptId]);
-    if (rs.isNotEmpty) {
-      throw ArgumentError(
-          source == null ? 'There is already a cash account in $currency.' : 'There is already an account for this bank in $currency.');
+  /// Throws when another live account (not [exceptId]) counts the same rows: a second cash account in [currency], or a
+  /// second account with this ([source], [currency]); their rows would count twice. An account that counts no rows
+  /// (investment, crypto, other, or a bank account without a source) never clashes.
+  void _checkUnique(String? source, String currency, {String? exceptId, AccountKind? kind}) {
+    final k = kind ?? (source == null ? AccountKind.cash : AccountKind.bank);
+    if (k != AccountKind.cash && source == null) return;
+    final clash = accounts().any((a) =>
+        a.id != exceptId && a.currency == currency && a.countsRows && (k == AccountKind.cash ? a.isCash : !a.isCash && a.source == source));
+    if (clash) {
+      throw ArgumentError(k == AccountKind.cash
+          ? 'There is already a cash account in $currency.'
+          : 'There is already an account for this bank in $currency.');
     }
   }
 
-  /// Adds an account and returns its id (`a…`). [source] is a bank profile id ([bankProfiles]), `csv:<shapeId>` with
-  /// a live saved CSV layout (P12, [WalletSettings.csvMappings]; labelled with its name, [accountSourceLabel]) or null
-  /// for cash; [opening] is the balance (signed cents) at the end of [openingDate]. A bad name, currency, source, date
-  /// or amount, or a second live account with the same (source, currency), is an [ArgumentError].
+  /// The trimmed [institution], null for none or blank; an [ArgumentError] past [Account.maxName] characters.
+  static String? _checkInstitution(String? institution) {
+    final t = institution?.trim();
+    if (t == null || t.isEmpty) return null;
+    if (t.runes.length > Account.maxName) throw ArgumentError('The institution is limited to ${Account.maxName} characters.');
+    return t;
+  }
+
+  /// The shape rules of UX-A: an import [source] only for a bank, card or savings account ([AccountKind.takesSource]), a
+  /// known one; a crypto account in a crypto currency ([CurrencyInfo.crypto], BTC).
+  void _checkShape(AccountKind kind, String? source, String currency) {
+    if (source != null && !kind.takesSource) throw ArgumentError('Only a bank, card or savings account can import bank files.');
+    if (source != null && !bankProfiles.any((p) => p.id == source) && !_liveCsvSource(source)) throw ArgumentError('Unknown bank.');
+    if (kind == AccountKind.crypto && !(currencyInfo(currency)?.crypto ?? false)) {
+      throw ArgumentError('A crypto account holds a crypto currency, like BTC.');
+    }
+  }
+
+  /// Adds an account and returns its id (`a…`). [kind] (UX-A; default: cash without a [source], bank with one) and
+  /// [institution] (free text, optional). [source] is a bank profile id ([bankProfiles]) or `csv:<shapeId>` with a
+  /// live saved CSV layout (P12, [WalletSettings.csvMappings]; labelled with its name, [accountSourceLabel]), for a
+  /// bank, card or savings account only; [opening] is the balance (signed minor units of [currency]: satoshis for
+  /// BTC) at the end of [openingDate]. A bad name, currency, kind and source, date or amount, a crypto account in
+  /// another currency, or a second live account counting the same rows ([_checkUnique]), is an [ArgumentError].
   Future<String> addAccount(
-      {required String name, String? source, required String currency, required int opening, required String openingDate}) async {
+      {required String name,
+      String? source,
+      required String currency,
+      required int opening,
+      required String openingDate,
+      AccountKind? kind,
+      String? institution}) async {
     final n = _checkName(name);
     if (!_currency.hasMatch(currency)) throw ArgumentError('Bad currency (three capital letters, like EUR).');
-    if (source != null && !bankProfiles.any((p) => p.id == source) && !_liveCsvSource(source)) throw ArgumentError('Unknown bank.');
+    final k = kind ?? (source == null ? AccountKind.cash : AccountKind.bank);
+    _checkShape(k, source, currency);
+    final inst = _checkInstitution(institution);
     _checkAmount(opening);
     _checkDate(openingDate);
-    _checkUnique(source, currency);
+    _checkUnique(source, currency, kind: k);
     final id = _newId('a');
     _write([
-      ('account', id, {'name': n, 'source': source, 'currency': currency, 'opening': opening, 'opening_date': openingDate, 'deleted': 0})
+      (
+        'account',
+        id,
+        {
+          'name': n,
+          'source': source,
+          'currency': currency,
+          'opening': opening,
+          'opening_date': openingDate,
+          'deleted': 0,
+          'kind': k.name,
+          if (inst != null) 'institution': inst,
+        }
+      )
     ]);
-    logEvent(_log, Level.INFO, 'account.add', {'cash': source == null});
+    logEvent(_log, Level.INFO, 'account.add', {'cash': k == AccountKind.cash, 'kind': k.name});
     return id;
   }
 
@@ -64,18 +110,39 @@ extension WalletRepoAccounts on WalletRepo {
 
   /// Changes the given fields only (null = unchanged). [opening] and [openingDate] are one pair: when either is given
   /// both are written (the other from the stored row), so they always share one clock and a sync merge never pairs
-  /// one device's balance with another device's date. Source and currency never change: delete the account and add
-  /// a new one. Unknown id or a bad value: [ArgumentError].
-  Future<void> updateAccount(String id, {String? name, int? opening, String? openingDate}) async {
+  /// one device's balance with another device's date. UX-A: [kind], [institution] (blank clears it) and [source]
+  /// ([clearSource] drops it), checked like [addAccount] on the result (a cash account with a source, or a crypto one
+  /// in a fiat currency, is refused: change the kind and clear the source in one call). The currency never changes:
+  /// delete the account and add a new one. Unknown id or a bad value: [ArgumentError], nothing written; no change: no
+  /// write.
+  Future<void> updateAccount(String id,
+      {String? name,
+      int? opening,
+      String? openingDate,
+      AccountKind? kind,
+      String? institution,
+      String? source,
+      bool clearSource = false}) async {
     final stored = Account.fromRow(_accountRow(id));
     final n = name == null ? null : _checkName(name);
     if (opening != null) _checkAmount(opening);
     if (openingDate != null) _checkDate(openingDate);
+    final k = kind ?? stored.kind;
+    final src = clearSource ? null : source ?? stored.source;
+    final inst = institution == null ? stored.institution : _checkInstitution(institution);
+    if (k != stored.kind || src != stored.source) {
+      _checkShape(k, src, stored.currency);
+      if (!stored.deleted) _checkUnique(src, stored.currency, exceptId: id, kind: k);
+    }
     final pair = opening != null || openingDate != null;
     final fields = {
-      if (n != null) 'name': n,
+      if (n != null && n != stored.name) 'name': n,
       if (pair) 'opening': opening ?? stored.opening,
       if (pair) 'opening_date': openingDate ?? stored.openingDate,
+      // The kind is written whenever the source changes too: a row from before schema 20 derives it from the source.
+      if (k != stored.kind || src != stored.source) 'kind': k.name,
+      if (src != stored.source) 'source': src,
+      if (inst != stored.institution) 'institution': inst,
     };
     if (fields.isEmpty) return;
     _write([('account', id, fields)]);
@@ -110,7 +177,7 @@ extension WalletRepoAccounts on WalletRepo {
     final r = _accountRow(id);
     if (r['deleted'] == 0) return;
     final a = Account.fromRow(r);
-    _checkUnique(a.source, a.currency, exceptId: id);
+    _checkUnique(a.source, a.currency, exceptId: id, kind: a.kind);
     _write([
       ('account', id, {'deleted': 0})
     ]);

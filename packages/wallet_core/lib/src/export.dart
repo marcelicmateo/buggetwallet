@@ -2,17 +2,20 @@
 /// exact decimals from the cents (never through a double).
 library;
 
+import 'package:wallet_importer/wallet_importer.dart' show minorDigitsOf, pow10;
+
 import 'categories.dart';
 import 'dates.dart';
 import 'models.dart';
 import 'tags.dart' show TagTable;
 
 /// [cents] as a decimal with a dot and two fractional digits: `-1234.56`, `0.01`, `1000000.00`. Exact for every int;
-/// zero is `0.00` (never `-0.00`).
-String centsToDecimal(int cents) {
-  final abs = cents.abs();
-  final whole = abs ~/ 100, frac = abs % 100;
-  return '${cents < 0 ? '-' : ''}$whole.${frac.toString().padLeft(2, '0')}';
+/// zero is `0.00` (never `-0.00`). [digits]: the minor digits of the amount's currency (`minorDigitsOf`, UX-A): JPY
+/// `1000`, KWD `1.234`, BTC `0.01000000`.
+String centsToDecimal(int cents, {int digits = 2}) {
+  final abs = cents.abs(), p = pow10(digits);
+  final whole = abs ~/ p, frac = abs % p;
+  return '${cents < 0 ? '-' : ''}$whole${digits == 0 ? '' : '.${frac.toString().padLeft(digits, '0')}'}';
 }
 
 /// [s] as one CSV field: quoted (quotes doubled) when it holds a quote, a comma, a newline or a carriage return.
@@ -53,7 +56,7 @@ String transactionsCsv(List<CategorizedTx> txs, {CategoryTable? table, TagTable?
     final c = table == null ? t.category : table.label(t.category);
     sb.write(_record([
       t.date,
-      centsToDecimal(t.amount),
+      centsToDecimal(t.amount, digits: minorDigitsOf(t.tx.currency)),
       c,
       if (tags != null) t.tags.map(tags.label).join('; '),
       if (t.part case final p?) (t.tx.description.isEmpty ? '#${p + 1}' : '${t.tx.description} #${p + 1}') else t.tx.description,
@@ -110,6 +113,7 @@ String monthlySummaryCsv(List<CategorizedTx> txs, {required String currency, Cat
     m[c] = (m[c] ?? 0) - t.amount;
   }
   final months = byMonth.keys.toList()..sort();
+  final digits = minorDigitsOf(currency);
   final sb = StringBuffer('${monthlySummaryCsvHeaderFor(t0)}\n');
   for (final month in months) {
     final sums = byMonth[month]!;
@@ -118,9 +122,9 @@ String monthlySummaryCsv(List<CategorizedTx> txs, {required String currency, Cat
     for (final c in cats) {
       final v = sums[c] ?? 0;
       total += v;
-      cells.add(centsToDecimal(v));
+      cells.add(centsToDecimal(v, digits: digits));
     }
-    sb.write(_record([month, ...cells, centsToDecimal(total)]));
+    sb.write(_record([month, ...cells, centsToDecimal(total, digits: digits)]));
   }
   return sb.toString();
 }

@@ -1,4 +1,5 @@
 // Revolut account statement (.xlsx or .csv). Layout: docs/context/IMPORT_FORMATS.md.
+import '../currencies.dart';
 import '../model.dart';
 import 'cells.dart';
 import 'profile.dart';
@@ -60,6 +61,10 @@ class RevolutProfile extends BankProfile {
     final amount = cellCents(a), feeCents = cellCents(fee);
     if (amount == null || feeCents == null) return const RowResult.invalid();
     final currency = ctx.column('Currency') >= 0 && cellText(at('Currency')).isNotEmpty ? cellText(at('Currency')) : 'EUR';
+    // The amount in the currency's own minor units (JPY 0 digits, BTC 8); the id keeps v1's cents (`cents` below).
+    final digits = minorDigitsOf(currency);
+    final minor = cellMinor(a, digits), feeMinor = cellMinor(fee, digits);
+    if (minor == null || feeMinor == null) return const RowResult.invalid();
     final type = cellText(at('Type'));
     final desc = fixMojibake(cellText(at('Description')));
     final product = cellText(at('Product'));
@@ -67,12 +72,12 @@ class RevolutProfile extends BankProfile {
     // Optional: the pocket's balance after the row. An empty or unreadable cell gives none; the row still imports.
     final balanceCell = ctx.column('Balance') >= 0 ? at('Balance') : '';
     final balanceNum = cellText(balanceCell).isEmpty ? null : cellNumber(balanceCell);
-    final balance = balanceNum == null ? null : cellCents(balanceNum);
+    final balance = balanceNum == null ? null : cellMinor(balanceNum, digits);
     return RowResult.transaction(NormalizedTransaction(
       id: ctx.v1Id(d, cents, desc),
       source: id,
       date: d,
-      amountMinor: cents,
+      amountMinor: minor - feeMinor,
       currency: currency,
       bankType: type,
       description: desc,

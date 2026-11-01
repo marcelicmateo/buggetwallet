@@ -85,6 +85,9 @@ const Map<String, EntityDef> entitySchema = {
     ColumnDef('transfer_to', nullable: true),
     // v19 (D2 Unlink): a hand-added entry's bank rows the owner unlinked it from, a JSON list (`matchOffIds`).
     ColumnDef('match_off', nullable: true),
+    // v20 (UX-A): the minor digits `amount` is stored in, for a currency without 2 (JPY 0, KWD 3, BTC 8); null = 2,
+    // the scale every build before schema 20 used for every currency (`legacyMinor` reads those rows).
+    ColumnDef.integer('digits', nullable: true),
   ], indexes: {
     'tx_date': 'date',
     'tx_amount': 'amount'
@@ -181,6 +184,9 @@ const Map<String, EntityDef> entitySchema = {
     // P16b never take one for the bill that paid a row. No index: the DDL (with its indexes) runs before the column
     // migration adds this column to an existing table.
     ColumnDef('attached_tx', nullable: true),
+    // v20 (UX-A): this bill's own reminder days before its return-by / warranty date; null = the wallet setting.
+    ColumnDef.integer('return_reminder_days', nullable: true),
+    ColumnDef.integer('warranty_reminder_days', nullable: true),
   ], indexes: {
     'bills_date': 'date',
     'bills_linked': 'linked_tx'
@@ -193,6 +199,9 @@ const Map<String, EntityDef> entitySchema = {
     ColumnDef.integer('opening'),
     ColumnDef('opening_date'),
     ColumnDef.flag('deleted'),
+    // v20 (UX-A): `AccountKind` wire name (null = from `source`: none → cash, any → bank) and free-text institution.
+    ColumnDef('kind', nullable: true),
+    ColumnDef('institution', nullable: true, searchable: true),
   ]),
   // Categories (v10, P1): custom categories and subcategories, and overrides of the built-ins (see `CategoryRow`).
   'category': EntityDef('categories', [

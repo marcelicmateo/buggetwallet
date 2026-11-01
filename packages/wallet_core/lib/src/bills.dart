@@ -66,6 +66,10 @@ class Bill {
   final String? attachedTx;
   final String? warrantyUntil, returnBy;
 
+  /// This bill's own reminder days before [returnBy] / [warrantyUntil] (UX-A, 0..[WalletSettings.maxReturnReminderDays] /
+  /// 0..[WalletSettings.maxWarrantyReminderDays]); null = the wallet setting ([effectiveReturnReminderDays]).
+  final int? returnReminderDays, warrantyReminderDays;
+
   /// The bill's file on the relay ([BlobRef.hash]), its type and plain size.
   final String? blob, blobType;
   final int? blobBytes;
@@ -92,6 +96,8 @@ class Bill {
     this.attachedTx,
     this.warrantyUntil,
     this.returnBy,
+    this.returnReminderDays,
+    this.warrantyReminderDays,
     this.blob,
     this.blobType,
     this.blobBytes,
@@ -136,6 +142,8 @@ class Bill {
         attachedTx: _s(r['attached_tx']),
         warrantyUntil: _s(r['warranty_until']),
         returnBy: _s(r['return_by']),
+        returnReminderDays: _days(r['return_reminder_days'], WalletSettings.maxReturnReminderDays),
+        warrantyReminderDays: _days(r['warranty_reminder_days'], WalletSettings.maxWarrantyReminderDays),
         blob: _s(r['blob']),
         blobType: _s(r['blob_type']),
         blobBytes: _i(r['blob_bytes']),
@@ -144,6 +152,16 @@ class Bill {
 }
 
 String? _s(Object? v) => v is String ? v : null;
+
+/// A stored reminder-day count within 0..[max]; anything else (a damaged or synced bad value) reads as none.
+int? _days(Object? v, int max) => v is int && v >= 0 && v <= max ? v : null;
+
+/// The days before [b]'s return-by date its reminder comes (UX-A): the bill's own [Bill.returnReminderDays], else the
+/// wallet setting [WalletSettings.returnReminderDays].
+int effectiveReturnReminderDays(Bill b, WalletSettings s) => b.returnReminderDays ?? s.returnReminderDays;
+
+/// The days before [b]'s warranty end its reminder comes: [Bill.warrantyReminderDays], else the wallet setting.
+int effectiveWarrantyReminderDays(Bill b, WalletSettings s) => b.warrantyReminderDays ?? s.warrantyReminderDays;
 int? _i(Object? v) => v is int ? v : null;
 String? _nonEmpty(String? s) => s == null || s.trim().isEmpty ? null : s;
 

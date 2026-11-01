@@ -20,7 +20,9 @@ void main() {
   setUp(() => repo = WalletRepo.inMemory(now: () => _now));
   tearDown(() => repo.close());
 
-  Tx row(String desc) => Tx(id: 'r-$desc', source: 'pbz', date: '2026-10-05', amount: -1500, description: desc);
+  // A PBZ card payment (`POS plaćanje`): only those go by the merchant text (fixed by core-builder: a PBZ row without a
+  // bank type is never categorised by a merchant rule, so ruleFor gave null).
+  Tx row(String desc) => Tx(id: 'r-$desc', source: 'pbz', date: '2026-10-05', amount: -1500, bankType: 'POS plaćanje', description: desc);
 
   String? cat(String desc) => repo.categorizer(withTags: false).merchantCategory(desc);
   String? ruleId(String desc) => repo.categorizer(withTags: false).ruleFor(row(desc));

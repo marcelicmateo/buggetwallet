@@ -10,6 +10,7 @@ import 'bills.dart';
 import 'budget.dart' show reviewStreak;
 import 'categories.dart';
 import 'changes.dart';
+import 'currencies.dart';
 import 'dates.dart';
 import 'hlc.dart';
 import 'import_preview.dart';
@@ -180,8 +181,12 @@ class WalletRepo {
   /// entity; no data migration, the legacy `lastReview` / `reviewStreak` settings stay the streak's base), version 19:
   /// unlinked cash matches (D2: `tx` gains `match_off`, [WalletRepoMatch.unlinkMatch]), auto-Paid Undo marks (KL-A:
   /// `planned` gains `auto_off`, `WalletRepoPlanned.reopenPlanned`) and slip payee aliases (KL-A: the `payee_alias`
-  /// entity); no data migration.
-  static const schemaVersion = 19;
+  /// entity); no data migration. Version 20 (UX-A): `tx` gains `digits` (the minor digits its amount is stored in for a
+  /// currency without 2; rows of older builds are read from cents, `legacyMinor`), `accounts` gains `kind` and
+  /// `institution` (an older row's kind is read from its source), `bills` gains `return_reminder_days` and
+  /// `warranty_reminder_days`, and per-rule settings rows `builtInRule:<slug>`; no data migration (every new value
+  /// reads from what an older build stored).
+  static const schemaVersion = 20;
 
   /// Device-local, set once by the schema-15 migration ([_migrateBlobTables]): the next sync runs PUT every cached file
   /// a live bill points to again (api-3 builds deleted files on the relay), cleared once all of them were stored.
@@ -313,7 +318,8 @@ class WalletRepo {
     }
     final t = PerfTimer('repo.write');
     _tx(() {
-      for (final (entity, id, fields) in changes) {
+      for (final (entity, id, given) in changes) {
+        final fields = entity == 'tx' ? _txDigits(id, given) : given;
         final op = Op(entity, id, fields, clock.tick().toString());
         _apply(op);
         db.execute('INSERT INTO outbox(op) VALUES(?)', [jsonEncode(op.toJson())]);
@@ -326,6 +332,26 @@ class WalletRepo {
       'ops': changes.length,
       'entities': {for (final c in changes) c.$1}.join(',')
     });
+  }
+
+  /// Schema 20: a tx write that sets `amount` or `currency` also sets the `digits` the amount is stored in
+  /// ([digitsColumn]: null for a 2-digit currency, so those ops stay as they were; cleared when the row had one). A
+  /// currency change alone keeps the amount's value: it is rescaled to the new currency's digits.
+  Map<String, Object?> _txDigits(String id, Map<String, Object?> fields) {
+    if (!fields.containsKey('amount') && !fields.containsKey('currency')) return fields;
+    final rs = db.select('SELECT amount, currency, digits FROM tx WHERE id = ?', [id]);
+    final old = rs.isEmpty ? null : rs.first;
+    final currency = fields['currency'] as String? ?? old?['currency'] as String? ?? 'EUR';
+    final digits = digitsColumn(currency);
+    final out = {...fields};
+    if (digits != null || old?['digits'] != null) out['digits'] = digits;
+    if (!fields.containsKey('amount') && old != null && old['amount'] is int && old['currency'] is String) {
+      final value = legacyMinor(old['amount'] as int, old['currency'] as String, old['digits'] as int?);
+      final now = legacyMinor(value, currency, minorDigitsOf(old['currency'] as String));
+      if (now != old['amount']) out['amount'] = now;
+    }
+    if (out.length == fields.length) return fields;
+    return out;
   }
 
   T _tx<T>(T Function() body) {
@@ -525,7 +551,8 @@ class WalletRepo {
         table: table,
         tagContext: withTags ? tagContext() : null,
         splits: withTags ? splits() : const {},
-        iouTx: WalletRepoIou(this).iouLinkedTx());
+        iouTx: WalletRepoIou(this).iouLinkedTx(),
+        builtInOverrides: st.builtInRuleOverrides);
   }
 
   // ---------- writes ----------
@@ -621,9 +648,11 @@ class WalletRepo {
       {Set<String> revive = const {}, Set<String> skip = const {}}) {
     final known = <String, (Object?, Object?)>{};
     final deleted = <String>{};
-    for (final r in db.select('SELECT id, amount, description, deleted FROM tx')) {
+    for (final r in db.select('SELECT id, amount, currency, digits, description, deleted FROM tx')) {
       final id = r['id'] as String;
-      known[id] = (r['amount'], r['description']);
+      // Schema 20: compared in the currency's own minor units (a row an older build stored in cents reads the same).
+      final (a, c) = (r['amount'], r['currency']);
+      known[id] = (a is int && c is String ? legacyMinor(a, c, r['digits'] as int?) : a, r['description']);
       if (r['deleted'] != 0) deleted.add(id);
     }
     final fates = <_RowFate>[];

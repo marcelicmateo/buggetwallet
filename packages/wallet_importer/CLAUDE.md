@@ -37,6 +37,12 @@ Pure Dart. **The only code that knows bank formats.** Turns PBZ .xls, Revolut .x
   several rows that day, the file's direction comes from the balance chain (`bal[i] == bal[i-1] + amount[i]`), and no
   balance when the chain does not tell; none for a currency mixing two `account`s (Revolut pockets). Tests:
   `test/q_balance_import_test.dart`.
+- `currencies.dart` — UX-A: `CurrencyInfo`, `allCurrencies` (circulating ISO 4217 + BTC), `currencyInfo`,
+  `minorDigitsOf` (unknown → 2), `pow10` (re-exported by wallet_core). `amountMinor` is in the row currency's own minor
+  units (JPY 0, KWD 3, BTC 8; `cellMinor` / CSV `_cents(…, digits)` / e-invoice `decimalCents(digits:)` refuse a finer
+  fraction, never round; 2 digits keep v1's rounding). Ids never change: Revolut/PBZ hash v1's cents
+  (`ctx.v1Id(… cents …)`), CSV ids use `minorIdText` (the hundredths text earlier builds hashed, the exact decimal only
+  where they refused the row). Tests: `test/ux_a_importer_test.dart`, `test/ux_a_digits_test.dart`.
 - `model.dart` — `NormalizedTransaction`, `TxKind`, `ImportBatch`. `ids.dart` — `transactionId` (v1),
   `sourceTransactionId` (banks added after v1); `fnv1a36`, `formatCents` are internal (tests import `src/ids.dart`).
 - `bills/` — bill readers (`docs/context/BILLS_API.md` §1), all pure Dart, web-safe, never throw: `model.dart`

@@ -398,7 +398,7 @@ void main() {
       final cz = repo.categorizer();
       expect(cz.ruleFor(payeeRow), 'payee:${merchantKey(payeeRow)}');
       expect(cz.ruleFor(pos('qwerty store', -500)), anyOf(patternRuleId('qwerty'), 'pattern:${patternRuleId('qwerty')}'));
-      final n = builtInMerchantRules.indexWhere((r) => r.$1 == 'Groceries');
+      const n = 'lidl'; // UX-A: built-in ids are slugs (`builtIn:lidl`), one rule per brand
       expect(cz.ruleFor(pos('lidl zagreb', -500)), 'builtIn:$n');
       expect(cz.ruleFor(pos('nothing known', -500)), isNull);
     });
@@ -424,7 +424,7 @@ void main() {
     test('a range miss reports the next rule that decided', () {
       repo.setMerchantPattern('Eating out', 'lidl', match: 'contains', minCents: 5000);
       final cz = repo.categorizer();
-      final n = builtInMerchantRules.indexWhere((r) => r.$1 == 'Groceries');
+      const n = 'lidl'; // UX-A: built-in ids are slugs (`builtIn:lidl`), one rule per brand
       expect(cz.ruleFor(pos('lidl', -100)), 'builtIn:$n');
       expect(cz.ruleFor(pos('lidl', -5000)), isNot('builtIn:$n'));
     });
@@ -446,7 +446,7 @@ void main() {
       final pid = hits.keys.firstWhere((k) => k.startsWith('pattern:'));
       expect(pid, anyOf(patternRuleId('qwerty'), 'pattern:${patternRuleId('qwerty')}'));
       expect(hits[pid], 3);
-      final n = builtInMerchantRules.indexWhere((r) => r.$1 == 'Groceries');
+      const n = 'lidl'; // UX-A: built-in ids are slugs (`builtIn:lidl`), one rule per brand
       expect(hits['builtIn:$n'], 2);
       expect(hits.values.fold<int>(0, (a, b) => a + b), 5, reason: 'unmatched, deleted and foreign rows count nowhere');
     });
@@ -487,12 +487,12 @@ void main() {
       expect(texts(repo), ['bbb', 'aaa'], reason: 'by order, not alphabetical');
     });
 
-    test('editable: patterns yes, built-ins no; ids are unique', () {
+    test('editable: patterns and built-ins (UX-A); ids are unique', () {
       repo.setMerchantPattern('Eating out', 'bbb', match: 'contains');
       final v = views(repo);
       expect(v.where((x) => x.kind.name == 'pattern').every((x) => x.editable), isTrue);
       expect(v.where((x) => x.kind.name == 'builtIn'), isNotEmpty);
-      expect(v.where((x) => x.kind.name == 'builtIn').every((x) => !x.editable), isTrue);
+      expect(v.where((x) => x.kind.name == 'builtIn').every((x) => x.editable), isTrue);
       final ids = [for (final x in v) x.id];
       expect(ids.toSet(), hasLength(ids.length));
     });

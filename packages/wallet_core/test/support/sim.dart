@@ -33,7 +33,8 @@ const entityTables = {
       'seen_bank',
       'kind_hint',
       'transfer_to',
-      'match_off'
+      'match_off',
+      'digits'
     ]
   ),
   'goal': ('goals', ['name', 'target', 'saved', 'monthly', 'sort', 'deleted']),
@@ -54,10 +55,10 @@ const entityTables = {
     [
       'source', 'status', 'external_id', 'date', 'due_date', 'payee', 'iban', 'reference', 'description', 'category', 'note', //
       'total', 'currency', 'items', 'unsure', 'linked_tx', 'warranty_until', 'return_by', 'blob', 'blob_type', 'blob_bytes', 'deleted',
-      'attached_tx',
+      'attached_tx', 'return_reminder_days', 'warranty_reminder_days',
     ]
   ),
-  'account': ('accounts', ['name', 'source', 'currency', 'opening', 'opening_date', 'deleted']),
+  'account': ('accounts', ['name', 'source', 'currency', 'opening', 'opening_date', 'deleted', 'kind', 'institution']),
   'category': ('categories', ['name', 'kind', 'parent', 'position', 'hidden', 'deleted']),
   'tag': ('tags', ['name', 'position', 'hidden', 'deleted']),
   'txtag': ('tx_tags', ['tx', 'tag', 'state']),

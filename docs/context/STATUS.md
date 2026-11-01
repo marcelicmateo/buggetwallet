@@ -496,6 +496,11 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
   Plan in `docs/context/PATH_FORWARD.md`.
 
 ## Known limits
+- **Schema 20 (Stage UX-A, 2026-11-01): update the relay and every device together.** New synced fields: `tx.digits`
+  (amounts in each currency's own minor units: yen 0, dinar 3, BTC 8; rows from older builds read from cents),
+  `accounts.kind` / `institution`, `bills.return_reminder_days` / `warranty_reminder_days`, setting rows
+  `builtInRule:<slug>`. An older build drops them (the schema-bump replay fills them in after its update) and shows a new
+  yen row 100× too small meanwhile. Details: `packages/wallet_core/CLAUDE.md` Known limits.
 - Upgrade every device together past the 2026-10-20 `dev` build 5b8fc13: that build paired transfers on amount alone;
   newer builds dissolve such pairs, but a device still on 5b8fc13 would re-create them on every sync.
 - Importer: v1-compatible rounding changed ids of rows with an exact negative half cent (3-decimal amounts, very rare);

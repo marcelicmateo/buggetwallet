@@ -38,6 +38,7 @@ export 'src/csv_generic.dart'
         sourceLogKey,
         tooManyColumnsMessage;
 export 'src/csv_mapping.dart' show CsvMapping, CsvDateFormat, CsvDecimal, maxCsvColumns, maxCsvHeaderChars;
+export 'src/currencies.dart' show CurrencyInfo, allCurrencies, currencyInfo, minorDigitsOf, pow10;
 export 'src/ids.dart' show transactionId, sourceTransactionId;
 export 'src/importer.dart' show importBankFile, parseRows, ImportException, unknownLayoutMessage;
 export 'src/limits.dart'

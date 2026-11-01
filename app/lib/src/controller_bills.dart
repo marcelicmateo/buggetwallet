@@ -684,7 +684,8 @@ extension BillsDb on WalletController {
     return true;
   }
 
-  /// Return-window and warranty reminders: 09:00 on (end date − days) for every confirmed bill with such a date still ahead.
+  /// Return-window and warranty reminders: 09:00 on (end date − days) for every confirmed bill with such a date still ahead
+  /// (days: the bill's own, else the wallet setting; core's `effectiveReturnReminderDays` / `effectiveWarrantyReminderDays`).
   /// The text has no payee, amount or item. Runs inside [rescheduleHeadsUps]'s chain, so it never overlaps another run.
   Future<void> _rescheduleBillRemindersNow() async {
     try {
@@ -696,9 +697,10 @@ extension BillsDb on WalletController {
       final items = <(String, bool, int)>[];
       for (final b in billsAll()) {
         if (!b.confirmed) continue;
-        if (b.returnBy != null && b.returnBy!.compareTo(t) >= 0) items.add((b.returnBy!, false, settings.returnReminderDays));
+        // UX-A: each bill's own reminder days, else the wallet setting.
+        if (b.returnBy != null && b.returnBy!.compareTo(t) >= 0) items.add((b.returnBy!, false, effectiveReturnReminderDays(b, settings)));
         if (b.warrantyUntil != null && b.warrantyUntil!.compareTo(t) >= 0) {
-          items.add((b.warrantyUntil!, true, settings.warrantyReminderDays));
+          items.add((b.warrantyUntil!, true, effectiveWarrantyReminderDays(b, settings)));
         }
       }
       final n = await nudges.scheduleBillReminders(billReminderSlots(_clock(), items));
