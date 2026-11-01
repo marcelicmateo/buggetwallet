@@ -110,8 +110,9 @@ STAGE_GO_DESIGN (owner answers recorded).
    (or SendMessage to resume it): accounts: required + 4 app callers; fill rates from cache whenever fxMissing; early
    rate frozen; manual CRC check (archive 4.5.2); re-import must not refill an owner-written null account;
    balanceInHome per row at its own date (UX_SPEC); toMap keeps ecb; ignore future dates; docs; test wording.
-   Then review the delta, merge. **2026-11-01 (after GO4):** fix agent (core-builder high) running in that worktree;
-   scout pack for step 2 running.
+   Then review the delta, merge. **2026-11-01 (after GO4):** fixes done (b2b0d71 merge v2, c0460e9 the 11 fixes, deedf31 `fetchEcbFile` in sync;
+   core 3542, sync 482, app 2583, lint green) → delta review (reviewer high) running; step 2 UI (ui-builder sonnet/high,
+   worktree on deedf31) running; GO bug: TestDesktopTestParallelShards flaked once (displays 101/102) → devops fix running.
 2. UX-ACC + UX-FX UI (ask "Which account is this?" before importBatch, ECB fetch + "Get rates now" + rate source
    shown, pass accounts: everywhere).
 3. Stage run (`tools/build.sh -q stage || cat dist/logs/last-failed.txt`, haiku watcher), screenshots, push, STATUS.
