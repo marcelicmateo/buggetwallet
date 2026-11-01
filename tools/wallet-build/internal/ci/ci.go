@@ -1,4 +1,5 @@
-// Package ci ports tools/ci-status.sh: CI results of a commit from the GitHub check runs and the ci-logs branch.
+// Package ci ports tools/ci-status.sh (CI results of a commit from the GitHub check runs and the ci-logs branch) and holds the
+// helpers of the workflows: step, job-log, merge, publish-log, keystore and android-key.
 package ci
 
 import (
@@ -16,6 +17,8 @@ const Repo = "marcelicmateo/buggetwallet"
 type CI struct {
 	C     *run.Ctx
 	Sleep func(time.Duration) // a variable for the tests
+	// Remote replaces the ci-logs repository URL of publish-log (tests push to a local bare repository).
+	Remote string
 }
 
 // New returns a CI with the real sleep.
@@ -206,7 +209,7 @@ func (x *CI) Status(args []string) int {
 	return 0
 }
 
-// Main dispatches `ci status|log`; rc 2 with ok=false is a usage error.
+// Main dispatches `ci status|log|step|job-log|merge|publish-log|keystore|android-key`; rc 2 with ok=false is a usage error.
 func (x *CI) Main(args []string) (rc int, ok bool) {
 	if len(args) == 0 {
 		return 2, false
@@ -216,6 +219,23 @@ func (x *CI) Main(args []string) (rc int, ok bool) {
 		return x.Status(args[1:]), true
 	case "log":
 		return x.Log(args[1:]), true
+	case "step":
+		return x.Step(args[1:])
+	case "job-log":
+		rc = x.JobLog(args[1:])
+		return rc, rc != 2
+	case "merge":
+		rc = x.Merge(args[1:])
+		return rc, rc != 2
+	case "publish-log":
+		rc = x.PublishLog(args[1:])
+		return rc, rc != 2
+	case "keystore":
+		rc = x.Keystore(args[1:])
+		return rc, rc != 2
+	case "android-key":
+		rc = x.AndroidKey(args[1:])
+		return rc, rc != 2
 	}
 	return 2, false
 }
