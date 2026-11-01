@@ -4,7 +4,7 @@ import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
-const _pbz = Account(id: 'a1', name: 'Synthetic bank', source: 'pbz', currency: 'EUR', opening: 10000, openingDate: '2026-01-01');
+final _pbz = Account(id: 'a1', name: 'Synthetic bank', source: 'pbz', currency: 'EUR', opening: 10000, openingDate: '2026-01-01');
 
 Tx _t(String id, String date, int cents, {String source = 'pbz', String currency = 'EUR', bool deleted = false, bool manual = false}) =>
     Tx(id: id, source: source, date: date, amount: cents, currency: currency, deleted: deleted, manual: manual);
@@ -38,7 +38,7 @@ void main() {
       final c = checkBankBalance(_pbz, rows, date: '2026-01-10', bankCents: 8500);
       expect((c.appCents, c.diff, c.rowsSince, c.since, c.matches), (8500, 0, 2, '2026-01-01', true));
       final all = checkBankBalance(_pbz, rows, date: '2026-01-31', bankCents: 8000);
-      expect(all.appCents, accountBalances(const [_pbz], rows).single.balance);
+      expect(all.appCents, accountBalances([_pbz], rows).single.balance);
       expect((all.diff, all.rowsSince), (-700, 3));
     });
 
@@ -48,24 +48,24 @@ void main() {
     });
 
     test('a negative balance on both sides', () {
-      const od = Account(id: 'a2', name: 'Synthetic', source: 'pbz', currency: 'EUR', opening: -5000, openingDate: '2026-01-01');
+      final od = Account(id: 'a2', name: 'Synthetic', source: 'pbz', currency: 'EUR', opening: -5000, openingDate: '2026-01-01');
       final c = checkBankBalance(od, [_t('r', '2026-01-02', -1000)], date: '2026-01-02', bankCents: -6000);
       expect((c.appCents, c.diff), (-6000, 0));
     });
   });
 
   group('balanceTrusted', () {
-    const old = Account(id: 'a1', name: 'Synthetic', source: 'pbz', currency: 'EUR', opening: 0, openingDate: '2025-06-01');
+    final old = Account(id: 'a1', name: 'Synthetic', source: 'pbz', currency: 'EUR', opening: 0, openingDate: '2025-06-01');
     const today = '2026-02-05';
     final rows = [_t('r1', '2025-12-20', 5)]; // the app counts 5 from 20 December on
 
     test('the opening date (a new account or a correction) exactly 35 days old is trusted, 36 is not', () {
       expect(
-          balanceTrusted(const Account(id: 'a', name: 'S', source: 'pbz', currency: 'EUR', opening: 0, openingDate: '2026-01-01'),
+          balanceTrusted(Account(id: 'a', name: 'S', source: 'pbz', currency: 'EUR', opening: 0, openingDate: '2026-01-01'),
               today: today, rows: const []),
           isTrue); // 35 days
       expect(
-          balanceTrusted(const Account(id: 'a', name: 'S', source: 'pbz', currency: 'EUR', opening: 0, openingDate: '2025-12-31'),
+          balanceTrusted(Account(id: 'a', name: 'S', source: 'pbz', currency: 'EUR', opening: 0, openingDate: '2025-12-31'),
               today: today, rows: const []),
           isFalse); // 36 days
     });
@@ -89,7 +89,7 @@ void main() {
     });
 
     test('a check that was off, then corrected by the owner (the opening moves to it), is trusted', () {
-      const corrected = Account(id: 'a1', name: 'Synthetic', source: 'pbz', currency: 'EUR', opening: 5, openingDate: '2026-02-01');
+      final corrected = Account(id: 'a1', name: 'Synthetic', source: 'pbz', currency: 'EUR', opening: 5, openingDate: '2026-02-01');
       expect(balanceTrusted(corrected, today: today, rows: const [], last: const BankCheck(date: '2026-02-01', bankCents: 5, appCents: 9)),
           isTrue);
     });
@@ -97,7 +97,7 @@ void main() {
     test('a date after today counts as recent; a bad date never', () {
       expect(balanceTrusted(old, today: today, rows: rows, last: const BankCheck(date: '2026-02-07', bankCents: 5, appCents: 5)), isTrue);
       expect(
-          balanceTrusted(const Account(id: 'a', name: 'S', source: 'pbz', currency: 'EUR', opening: 0, openingDate: ''),
+          balanceTrusted(Account(id: 'a', name: 'S', source: 'pbz', currency: 'EUR', opening: 0, openingDate: ''),
               today: today, rows: const []),
           isFalse);
     });

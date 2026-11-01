@@ -231,7 +231,7 @@ void main() {
   });
 
   group('upcoming', () {
-    final lumen = billPayeeKey(const Bill(id: 'x', payee: 'Lumen Power'))!;
+    final lumen = billPayeeKey(Bill(id: 'x', payee: 'Lumen Power'))!;
     final rec = RecurringBill(
         id: 'rec:$lumen',
         payee: lumen,

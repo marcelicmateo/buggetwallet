@@ -20,7 +20,7 @@ NormalizedTransaction _row(String source, String date, int cents, String desc, {
     description: desc,
     balanceAfter: balanceAfter);
 
-const _acc = Account(id: 'a1', name: 'Main', source: 'pbz', currency: 'EUR', opening: 100000, openingDate: '2026-01-01');
+final _acc = Account(id: 'a1', name: 'Main', source: 'pbz', currency: 'EUR', opening: 100000, openingDate: '2026-01-01');
 
 void main() {
   group('checkBankBalance', () {
@@ -92,7 +92,7 @@ void main() {
     });
     test('the 35-day edge holds across a year boundary and a 28-day February', () {
       const dec = BankCheck(date: '2025-12-28', bankCents: 100000, appCents: 100000);
-      const acc = Account(id: 'a1', name: 'Main', source: 'pbz', currency: 'EUR', opening: 100000, openingDate: '2025-06-01');
+      final acc = Account(id: 'a1', name: 'Main', source: 'pbz', currency: 'EUR', opening: 100000, openingDate: '2025-06-01');
       expect(balanceTrusted(acc, today: '2026-02-01', last: dec, rows: const []), isTrue); // 35 days
       expect(balanceTrusted(acc, today: '2026-02-02', last: dec, rows: const []), isFalse); // 36 days
       const feb = BankCheck(date: '2026-02-01', bankCents: 100000, appCents: 100000);

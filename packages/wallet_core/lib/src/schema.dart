@@ -5,6 +5,11 @@
 /// the generated DDL to the text the first builds ran.
 library;
 
+import 'dart:collection' show UnmodifiableMapView;
+
+import 'bills.dart' show BillCols;
+import 'models.dart' show AccountCols;
+
 /// How a synced column's values are stored and checked: text, an integer, or a 0/1 flag (a bool is stored as 0/1).
 enum ColumnType { text, integer, flag }
 
@@ -63,10 +68,23 @@ class EntityDef {
       ].join('\n');
 }
 
-/// Entity name (as in ops) → its definition. Add a new synced entity or field here (and only here); existing devices
-/// gain a missing column on open (columns are added, never renamed), and `WalletRepo.schemaVersion` is bumped so the
-/// ops older builds skipped are replayed.
-const Map<String, EntityDef> entitySchema = {
+/// Entity name (as in ops) → its definition. Add a new synced entity or field here (and only here; for an entity with a
+/// `…Cols` holder, one `Col` line there); existing devices gain a missing column on open (columns are added, never
+/// renamed), and `WalletRepo.schemaVersion` is bumped so the ops older builds skipped are replayed. Read-only; tests
+/// add a throwaway entity with [addTestEntity].
+final Map<String, EntityDef> entitySchema = UnmodifiableMapView(_entities);
+
+/// Tests only: adds (or replaces) a synced entity, so a test file can declare one with a `…Cols` holder and see it
+/// get its table, sync type check, snapshot, search and `WalletRepo.patch` without any other core change (FIELDS_PLAN
+/// F1 done check). Call it before opening a repo; a real entity cannot be replaced.
+void addTestEntity(String entity, EntityDef def) {
+  if (_schema.containsKey(entity)) throw ArgumentError('Built-in entity.');
+  _entities[entity] = def;
+}
+
+final Map<String, EntityDef> _entities = {..._schema};
+
+const Map<String, EntityDef> _schema = {
   'tx': EntityDef('tx', [
     ColumnDef('source'),
     ColumnDef('date'),
@@ -153,53 +171,10 @@ const Map<String, EntityDef> entitySchema = {
   ], indexes: {
     'planned_date': 'date'
   }),
-  // Bills (v7, stage B): receipts, slips, e-invoices, PDFs and photos (see `Bill`).
-  'bill': EntityDef('bills', [
-    ColumnDef('source', defaultSql: "'manual'"),
-    ColumnDef('status', defaultSql: "'review'"),
-    ColumnDef('external_id', nullable: true),
-    ColumnDef('date', nullable: true),
-    ColumnDef('due_date', nullable: true),
-    ColumnDef('payee', nullable: true, searchable: true),
-    ColumnDef('iban', nullable: true),
-    ColumnDef('reference', nullable: true),
-    ColumnDef('description', nullable: true, searchable: true),
-    ColumnDef('category', nullable: true),
-    ColumnDef('note', nullable: true),
-    ColumnDef.integer('total', nullable: true, searchable: true),
-    ColumnDef('currency', defaultSql: "'EUR'"),
-    ColumnDef('items', defaultSql: "'[]'"),
-    ColumnDef.integer('unsure'),
-    ColumnDef('linked_tx', nullable: true),
-    ColumnDef('warranty_until', nullable: true),
-    ColumnDef('return_by', nullable: true),
-    ColumnDef('blob', nullable: true),
-    ColumnDef('blob_type', nullable: true),
-    ColumnDef.integer('blob_bytes', nullable: true),
-    ColumnDef.flag('deleted'),
-    // v16 (P16b): the payment an attachment belongs to; `linked_tx` stays null for attachments, so builds before
-    // P16b never take one for the bill that paid a row. No index: the DDL (with its indexes) runs before the column
-    // migration adds this column to an existing table.
-    ColumnDef('attached_tx', nullable: true),
-    // v20 (UX-A): this bill's own reminder days before its return-by / warranty date; null = the wallet setting.
-    ColumnDef.integer('return_reminder_days', nullable: true),
-    ColumnDef.integer('warranty_reminder_days', nullable: true),
-  ], indexes: {
-    'bills_date': 'date',
-    'bills_linked': 'linked_tx'
-  }),
-  // Accounts (v9, N2): the owner's bank and cash accounts with an opening balance (see `Account`).
-  'account': EntityDef('accounts', [
-    ColumnDef('name', searchable: true),
-    ColumnDef('source', nullable: true),
-    ColumnDef('currency', defaultSql: "'EUR'"),
-    ColumnDef.integer('opening'),
-    ColumnDef('opening_date'),
-    ColumnDef.flag('deleted'),
-    // v20 (UX-A): `AccountKind` wire name (null = from `source`: none → cash, any → bank) and free-text institution.
-    ColumnDef('kind', nullable: true),
-    ColumnDef('institution', nullable: true, searchable: true),
-  ]),
+  // Bills (v7, stage B): receipts, slips, e-invoices, PDFs and photos (see `Bill`; columns typed in `BillCols`).
+  'bill': EntityDef('bills', BillCols.all, indexes: {'bills_date': 'date', 'bills_linked': 'linked_tx'}),
+  // Accounts (v9, N2): the owner's bank and cash accounts with an opening balance (see `Account`, `AccountCols`).
+  'account': EntityDef('accounts', AccountCols.all),
   // Categories (v10, P1): custom categories and subcategories, and overrides of the built-ins (see `CategoryRow`).
   'category': EntityDef('categories', [
     ColumnDef('name', searchable: true),
@@ -281,8 +256,8 @@ CREATE TABLE IF NOT EXISTS sync_files(device TEXT NOT NULL, seq INTEGER NOT NULL
 
 /// The whole schema: `meta`, every synced entity's table and indexes ([entitySchema], in order), the local tables.
 /// `CREATE TABLE IF NOT EXISTS` throughout, so an older database keeps its tables and only gains the missing ones.
-final String schemaSql = [
-  'CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT);',
-  for (final e in entitySchema.values) e.createSql,
-  localTablesSql,
-].join('\n');
+String get schemaSql => [
+      'CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT);',
+      for (final e in entitySchema.values) e.createSql,
+      localTablesSql,
+    ].join('\n');

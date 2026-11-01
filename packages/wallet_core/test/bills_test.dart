@@ -345,19 +345,19 @@ void main() {
     });
 
     test('pure helpers: tokens and boundaries', () {
-      const b = Bill(id: 'x', reference: 'HR01 1234-5678', externalId: 'inv:123:AB-12');
+      final b = Bill(id: 'x', reference: 'HR01 1234-5678', externalId: 'inv:123:AB-12');
       expect(billLinkTokens(b), ['HR0112345678', '12345678', 'AB12']);
       expect(descriptionHasToken('ref hr01 1234-5678.', 'HR0112345678'), isTrue);
       expect(descriptionHasToken('ref 912345678', '12345678'), isFalse);
       expect(descriptionHasToken('ref 12345678x', '12345678'), isTrue);
-      expect(billLinkTokens(const Bill(id: 'y', externalId: 'inv:1:ABC')), isEmpty);
-      expect(planBillLinks(const [Bill(id: 'z', status: BillStatus.confirmed, total: 5, date: today)], const []), isEmpty);
+      expect(billLinkTokens(Bill(id: 'y', externalId: 'inv:1:ABC')), isEmpty);
+      expect(planBillLinks([Bill(id: 'z', status: BillStatus.confirmed, total: 5, date: today)], const []), isEmpty);
     });
   });
 
   group('billCandidates', () {
     test('payee words first, then date distance, then amount closeness; never filtered by amount; taken rows out', () {
-      const b = Bill(id: 'b1', date: '2026-03-01', dueDate: '2026-03-10', total: 1000, payee: 'Synthetic Utility');
+      final b = Bill(id: 'b1', date: '2026-03-01', dueDate: '2026-03-10', total: 1000, payee: 'Synthetic Utility');
       CategorizedTx row(String id, String date, int cents, String desc) =>
           CategorizedTx(Tx(id: id, source: 'pbz', date: date, amount: cents, description: desc), 'Groceries', BudgetKind.flex);
       final txs = [
@@ -369,20 +369,20 @@ void main() {
         row('taken', '2026-03-01', -1000, 'OTHER'),
         row('late', '2026-04-10', -1000, 'SYNTHETIC UTILITY'),
       ];
-      const other = Bill(id: 'b2', linkedTx: 'taken');
+      final other = Bill(id: 'b2', linkedTx: 'taken');
       expect([
-        for (final t in billCandidates(b, txs, const [b, other])) t.tx.id
+        for (final t in billCandidates(b, txs, [b, other])) t.tx.id
       ], [
         'named',
         'near',
         'far'
       ]);
-      expect(billCandidates(const Bill(id: 'n'), txs, const []), isEmpty);
+      expect(billCandidates(Bill(id: 'n'), txs, const []), isEmpty);
     });
   });
 
   group('Upcoming, reminders, settings', () {
-    const b = Bill(
+    final b = Bill(
         id: 'b1', status: BillStatus.confirmed, payee: 'Synthetic Shop', warrantyUntil: '2026-03-20', returnBy: '2026-03-04', total: 100);
     test('warranty and return-by in range of confirmed live bills; never counted', () {
       final items = upcoming(
@@ -391,7 +391,7 @@ void main() {
           events: const [],
           from: today,
           to: '2026-03-31',
-          billsDb: const [
+          billsDb: [
             b,
             Bill(id: 'r', warrantyUntil: '2026-03-05'),
             Bill(id: 'd', status: BillStatus.confirmed, returnBy: '2026-03-05', deleted: true)
@@ -423,10 +423,9 @@ void main() {
 
   group('searchAll billsDb', () {
     test('payee, description, item names folded; exact total; deleted never', () {
-      const a = Bill(id: 'a', payee: 'Pekara Đurđa', total: 1234, items: [BillItem(name: 'Kruh', amount: 1234)]);
-      const del = Bill(id: 'd', payee: 'Pekara', deleted: true);
-      SearchResult s(String q) =>
-          searchAll(q, txs: const [], goals: const [], wishlist: const [], bills: const [], billsDb: const [a, del]);
+      final a = Bill(id: 'a', payee: 'Pekara Đurđa', total: 1234, items: [const BillItem(name: 'Kruh', amount: 1234)]);
+      final del = Bill(id: 'd', payee: 'Pekara', deleted: true);
+      SearchResult s(String q) => searchAll(q, txs: const [], goals: const [], wishlist: const [], bills: const [], billsDb: [a, del]);
       expect(s('durda').billsDb, [a]);
       expect(s('kruh').billsDb, [a]);
       expect(s('12,34').billsDb, [a]);

@@ -155,9 +155,9 @@ void main() {
 
   group('balanceWarnings (per account)', () {
     // Opened 9 days ago: trusted by its opening date alone (rows before the opening date are only used to attribute bills).
-    const acc = Account(id: 'a1', name: 'Main', source: 'pbz', currency: 'EUR', opening: 10000, openingDate: '2026-03-01');
-    const old = Account(id: 'a1', name: 'Main', source: 'pbz', currency: 'EUR', opening: 10000, openingDate: '2026-01-01');
-    const other = Account(id: 'a2', name: 'Card', source: 'revolut', currency: 'EUR', opening: 500000, openingDate: '2026-03-01');
+    final acc = Account(id: 'a1', name: 'Main', source: 'pbz', currency: 'EUR', opening: 10000, openingDate: '2026-03-01');
+    final old = Account(id: 'a1', name: 'Main', source: 'pbz', currency: 'EUR', opening: 10000, openingDate: '2026-01-01');
+    final other = Account(id: 'a2', name: 'Card', source: 'revolut', currency: 'EUR', opening: 500000, openingDate: '2026-03-01');
 
     RecurringBill billPaidFrom(String? lastPaidTx, int amount, String due) => RecurringBill(
         id: 'rb-$due',
@@ -242,8 +242,8 @@ void main() {
       expect(warn(accounts: [old], rows: const [], cycles: const [], checks: old35), isEmpty);
     });
     test('cash accounts and other-currency accounts get no warning', () {
-      const cash = Account(id: 'c1', name: 'Cash', currency: 'EUR', opening: -500, openingDate: '2026-01-01');
-      const usd = Account(id: 'u1', name: 'USD', source: 'pbz', currency: 'USD', opening: -500, openingDate: '2026-01-01');
+      final cash = Account(id: 'c1', name: 'Cash', currency: 'EUR', opening: -500, openingDate: '2026-01-01');
+      final usd = Account(id: 'u1', name: 'USD', source: 'pbz', currency: 'USD', opening: -500, openingDate: '2026-01-01');
       expect(warn(accounts: [cash, usd], rows: const [], cycles: const [], checks: const {}), isEmpty);
     });
     test('income attributed by its landing row can keep the account above zero', () {
