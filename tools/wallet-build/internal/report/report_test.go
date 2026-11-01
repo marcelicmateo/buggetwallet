@@ -123,6 +123,20 @@ func TestDriveGolden(t *testing.T) {
 	f.golden(t, "drive.tests", mask(f.optional("history/tests.jsonl")))
 }
 
+// A drive whose tests all skip ("All tests skipped."): result skipped, 0 failed (it used to read "1 failed", result ?).
+func TestDriveSkippedGolden(t *testing.T) {
+	f := newFixture(t, false)
+	f.cfg.Tests("drive", "chart_dpr", []string{td("drive-skipped.log")})
+	f.golden(t, "drive-skipped.stdout", f.out.String())
+	f.golden(t, "drive-skipped.summary", f.optional("run/tests-chart_dpr-summary.txt"))
+	f.golden(t, "drive-skipped.steps", mask(f.optional("history/steps.jsonl")))
+	f.golden(t, "drive-skipped.tests", mask(f.optional("history/tests.jsonl")))
+	tests, _, err := ParseDrive(td("drive-skipped.log"))
+	if err != nil || len(tests) != 1 || tests[0].Result != "skipped" {
+		t.Errorf("ParseDrive: %v %v", tests, err)
+	}
+}
+
 func TestPerfGolden(t *testing.T) {
 	f := newFixture(t, false)
 	f.cfg.Perf(td("perf-records.jsonl"))
