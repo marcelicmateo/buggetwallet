@@ -43,12 +43,12 @@ Theme waits for the owner's mockup pick; crypto rate by hand. Merge order A-core
 | UX-C-mock | 3 theme mockups (Today + Plan, light/dark) published for the owner | general-purpose (sonnet) | – | done: owner picked 1 Clean neutral |
 | UX-A-tests | (above) | | | done 7c0d879 (core-builder cherry-picks it) |
 | UX-C1 | Clean neutral tokens, Inter, card/rail surfaces, light + dark | ui-builder (worktree) | – | done 97dccd7 + review fixes 80934aa, merged b60355e |
-| UX-A-ui2 | currency picker + offer, account form by kind, editable built-ins | ui-builder | A-core merged | queued |
-| UX-ACC | payments know their account (`SCHEMA21_SPEC.md`, folded into schema 20, ask once) | core (Cols), then ui | F1-core merged | queued (owner yes 2026-11-01); same core builder as UX-FX, ACC first |
+| UX-A-ui2 | currency picker + offer, account form by kind, editable built-ins | ui-builder | A-core merged | done 628323d + review fixes f58e959, merged 14dd257 |
+| UX-ACC | payments know their account (`SCHEMA21_SPEC.md`, folded into schema 20, ask once) | core (Cols), then ui | F1-core merged | core running (with UX-FX); **v2 not pushed until schema 20 is final** |
 | UX-FX | ECB daily rates per payment date (`UX_SPEC.md` UX-FX), in schema 20 | scout → core (Cols) + ui | F1-core merged, UX-A-ui2 merged | queued (owner yes 2026-11-01) |
 | UX-B | Plan window, Tags window, Settings = setup, Today tiles | ui-builder (+ core if needed) | UX-A | queued |
 | UX-C2 | tightening pass over every screen | ui-builder | UX-B | queued |
-| F1 | field refactor pilot (Bill + Account), plan `FIELDS_PLAN.md` | scout → core + test-writer + ui | owner OK | F0 done; F1-core + F1-tests running (core-only, no overlap with UX-A-ui2); F1-ui after UX-A-ui2 |
+| F1 | field refactor pilot (Bill + Account), plan `FIELDS_PLAN.md` | scout → core + test-writer + ui | owner OK | F1-core 0416494 + review 56b7909 merged 06f728d; F1-ui running |
 | F2 | field refactor roll-out to the other entities | core + ui | F1, UX-B | planned |
 
 ## Stage GO: build tools in Go (owner 2026-11-01, queued after Stage UX)
