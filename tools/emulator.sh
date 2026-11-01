@@ -100,6 +100,10 @@ setup() {  # inside the container, volumes mounted read-write
 
 boot() {  # inside the container
   local window=${1:-}
+  # The host found no other emulator container running: a lock left in the AVD by a finished container is stale (the next emulator
+  # would take it for a live instance and die after boot).
+  # The emulator's lock files are bw.avd/*.lock (multiinstance.lock, snapshot.lock.lock, hardware-qemu.ini.lock).
+  [[ "${BW_CLEAR_AVD_LOCK:-}" == 1 ]] && rm -rf "$ANDROID_AVD_HOME"/bw.avd/*.lock
   local args=("${EMU_ARGS[@]}" -read-only -no-snapshot-save)
   [[ -z "$window" ]] && args+=(-no-window)
   emulator "${args[@]}" >/tmp/emulator.log 2>&1 &
@@ -112,14 +116,34 @@ boot() {  # inside the container
 # build/install/test history lines and the per-test summary (tools/build_log.py). An empty test name keeps the
 # screenshot test's old output paths (dist/screens/*.png, dist/logs/app-emulator.log).
 drive() {
-  local suite=$1 name=$2 t rc=0 total build install result log
+  local suite=$1 name=$2 t rc=0 total build install result log limit skipped pidfile line
   log="$LOGS/${name:+drive-}$suite.log"
   # Skia, not Impeller: Impeller's GLES calls trip an abort in the emulator's software GLES decoder (37.x).
   # Override with BW_DRIVE_ARGS="" once a newer emulator fixes it.
   read -ra drive_args <<<"${BW_DRIVE_ARGS---no-enable-impeller}"
+  # A drive ends early in two cases the test file has no say in: every test of the file skipped (a desktop-only file: the driver
+  # extension never comes up and `flutter drive` waits forever) and the time limit (BW_TIMEOUT_EMULATOR_DRIVE or BW_STEP_TIMEOUT, seconds,
+  # 0 = none; default 10 min = 3 x the slowest file in the timing history: layout 87 s + build 61 s + install 1 s).
+  limit=${BW_TIMEOUT_EMULATOR_DRIVE:-${BW_STEP_TIMEOUT:-600}}
+  skipped=$(mktemp -u) pidfile=$(mktemp -u)
   t=$(now_us)
-  BW_TEST_NAME=$name flutter drive --driver=test_driver/integration_test.dart --target="integration_test/${suite}_test.dart" \
-    -d "$SERIAL" "${drive_args[@]}" 2>&1 | tee "$log" || rc=$?
+  # shellcheck disable=SC2016  # the inner shell expands its own variables
+  BW_TEST_NAME=$name bash -c 'echo $$ >"$0"; exec "$@"' "$pidfile" timeout -k 10 "$limit" flutter drive \
+    --driver=test_driver/integration_test.dart --target="integration_test/${suite}_test.dart" -d "$SERIAL" "${drive_args[@]}" 2>&1 \
+    | tee "$log" | while IFS= read -r line; do
+      printf '%s\n' "$line"
+      if [[ $line == *"All tests skipped."* && ! -e $skipped ]]; then
+        : >"$skipped"
+        kill -TERM "$(cat "$pidfile")" 2>/dev/null || true
+      fi
+    done || rc=$?
+  rm -f "$pidfile"
+  if [[ -e $skipped ]]; then
+    rm -f "$skipped"; rc=0
+    echo "drive $suite: all tests skipped on this device; ended the drive"
+  elif ((rc == 124)); then
+    echo "drive $suite: timed out after $limit s (BW_TIMEOUT_EMULATOR_DRIVE); ended the drive"
+  fi
   # `flutter drive` builds, installs and runs in one go: split its time using the durations it prints
   total=$(secs_since "$t")
   build=$(grep -oP "Running Gradle task 'assembleDebug'\.\.\. *\K[0-9.]+(?=s$)" "$log" | tail -1 || true)
@@ -197,13 +221,14 @@ VOLUMES=(bw-emulator:/opt/android-sdk/emulator bw-emulator-image:/opt/android-sd
 prepare() {
   local v mounts=() t before log=$BW_RUN_DIR/image-emulator-setup.log
   t=$(now_us)
-  before=$(wc -l < "$BW_DATA/history/steps.jsonl" 2>/dev/null || echo 0)
+  before=0; [[ -f "$BW_DATA/history/steps.jsonl" ]] && before=$(wc -l < "$BW_DATA/history/steps.jsonl")
   img=$(emu_image); BW_IMAGE=$img
   for v in "${VOLUMES[@]}"; do mounts+=(-v "$v"); done
   podman run --rm --device /dev/kvm --shm-size=2g "${mounts[@]}" "${run[@]}" -v "$ROOT:/work:z" -e BW_NATIVE=1 -w /work "$img" \
     tools/emulator.sh setup 2>&1 | tee "$log" >&2
   # cold: an image was built (emu_image runs in a subshell, so look for its history line) or the volumes were set up
-  if grep -q "Setting up" "$log" || tail -n +"$((before + 1))" "$BW_DATA/history/steps.jsonl" | grep -q "\"run\":\"$BW_RUN_ID\".*\"step\":\"[a-z-]*image\""; then
+  if grep -q "Setting up" "$log" || { [[ -f "$BW_DATA/history/steps.jsonl" ]] &&
+    tail -n +"$((before + 1))" "$BW_DATA/history/steps.jsonl" | grep -q "\"run\":\"$BW_RUN_ID\".*\"step\":\"[a-z-]*image\""; }; then
     BW_COLD=1
   fi
   log_history prepare "$(secs_since "$t")" ok
@@ -213,6 +238,15 @@ common=(--device /dev/kvm --shm-size=2g -e BW_DRIVE_ARGS -v "$ROOT:/work:z" -v b
 # Runs only read the SDK volumes. The AVD stays writable for the emulator's lock files; `-read-only` keeps the
 # device state itself out of it.
 common+=(-v "${VOLUMES[0]}:ro" -v "${VOLUMES[1]}:ro" -v "${VOLUMES[2]}")
+# BW_TIMEOUT_EMULATOR_DRIVE (the limit of one drive) applies inside the container
+while read -r v; do common+=(-e "$v"); done < <(compgen -e | grep '^BW_TIMEOUT_' | LC_ALL=C sort || true)
+# `--rm` emulator containers can leave bw.avd/multiinstance.lock in the writable AVD volume; when no emulator container runs, the
+# boot container removes it before the emulator starts (a lock of a running emulator must stay).
+lock_args() {
+  local out
+  out=$(podman ps --format '{{.Image}}' 2>/dev/null) || return 0
+  [[ "$out" == *budget-wallet-emu:* ]] || lock=(-e BW_CLEAR_AVD_LOCK=1)
+}
 running() { podman container exists "$NAME" && [[ "$(podman inspect -f '{{.State.Running}}' "$NAME")" == true ]]; }
 need_running() { running || { echo "No emulator running. Start one with: tools/emulator.sh start" >&2; exit 1; }; }
 with_run() { mapfile -t run < <(run_mounts); common+=("${run[@]}"); }  # before prepare
@@ -223,10 +257,11 @@ case "$CMD" in
     t0=$(now_us)
     with_run
     prepare
+    lock=(); lock_args
     rc=0
     # output to the terminal and to dist/logs/emulator-<cmd>.log (+ .status), no history line (the phases and total are there)
     BW_TIMED_SPLIT=1 BW_TIMED_HISTORY=0 timed_log "emulator-$CMD" "$BW_RUN_DIR/emulator-$CMD.log" \
-      podman run --rm "${common[@]}" "$img" tools/emulator.sh "$@" || rc=$?
+      podman run --rm "${common[@]}" "${lock[@]}" "$img" tools/emulator.sh "$@" || rc=$?
     if [[ $CMD == screens ]]; then
       cp "$ROOT"/dist/screens/*.png "$BW_RUN_DIR/" 2>/dev/null || true
     else
@@ -248,8 +283,9 @@ case "$CMD" in
       [[ -n "${XAUTHORITY:-}" ]] && win+=(-e XAUTHORITY=/tmp/xauth -v "$XAUTHORITY:/tmp/xauth:ro")
       win+=(--security-opt label=disable)
     fi
+    lock=(); lock_args
     # The label tells `stop` where to save the emulator's log
-    podman run -d --name "$NAME" --label "bw.run=$BW_RUN_DIR" "${common[@]}" "${win[@]}" "$img" tools/emulator.sh boot $flag >/dev/null
+    podman run -d --name "$NAME" --label "bw.run=$BW_RUN_DIR" "${common[@]}" "${lock[@]}" "${win[@]}" "$img" tools/emulator.sh boot $flag >/dev/null
     echo "booting…"
     for _ in $(seq 180); do
       podman logs "$NAME" 2>&1 | grep -q "emulator booted" && { echo "ready ($SERIAL)"; exit 0; }

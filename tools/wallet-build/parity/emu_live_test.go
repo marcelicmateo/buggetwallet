@@ -48,12 +48,6 @@ func maskNames(in []string) []string {
 func maskSeq(m *masker, s string) []string {
 	var out []string
 	for _, ln := range m.table(s) {
-		// bash wart (reported): on a fresh BW_DATA_DIR emulator.sh's prepare() prints "line N: .../history/steps.jsonl: No
-		// such file or directory" (its `wc -l <` redirect error escapes the 2>/dev/null); the Go port is silent.
-		if strings.Contains(ln, "history/steps.jsonl: No such file or directory") ||
-			strings.Contains(ln, "tail: cannot open") && strings.Contains(ln, "history/steps.jsonl") {
-			continue
-		}
 		if strings.TrimSpace(ln) == "" {
 			continue
 		}
@@ -113,19 +107,6 @@ func waitEmulatorIdle(t testing.TB) {
 		time.Sleep(2 * time.Second)
 	}
 	t.Logf("a container from the emulator image still runs after 60 s; the AVD may stay locked")
-}
-
-// clearStaleAVDLock: the emulator of an earlier container leaves bw.avd/multiinstance.lock in the writable
-// bw-emulator-avd volume; with the same pids in the next container the emulator takes it for a live instance and `start`
-// dies after boot. Only the lock file is removed, only when no container of the emulator image runs.
-func clearStaleAVDLock(t *testing.T) {
-	t.Helper()
-	waitEmulatorIdle(t)
-	out, err := exec.Command("podman", "run", "--rm", "-v", "bw-emulator-avd:/opt/avd", "docker.io/library/busybox:latest",
-		"rm", "-f", "/opt/avd/bw.avd/multiinstance.lock").CombinedOutput()
-	if err != nil {
-		t.Logf("could not clear the AVD lock (%v): %s", err, tail(string(out)))
-	}
 }
 
 // logcat and flutter progress lines whose count and content follow timing.
@@ -378,7 +359,6 @@ func go2Heavy(t *testing.T, repo string) []Case {
 	screens.Artifacts = []string{"dist/screens"}
 	screens.SkipIf = emulatorVolumes
 	screens.StdoutDrop = emuNoise
-	screens.Before = clearStaleAVDLock
 	screens.Check = chain(checkAllSteps(0), checkRunFiles("emulator-screens.log", "emulator.log", "*.png"), // screens copies dist/screens/*.png to the run dir root
 		checkStepsInHistory("prepare", "boot", "build", "total"))
 	out = append(out, h(screens))
@@ -390,17 +370,25 @@ func go2Heavy(t *testing.T, repo string) []Case {
 		et.Artifacts = []string{"dist/screens/" + small[0]}
 		et.SkipIf = emulatorVolumes
 		et.StdoutDrop = emuNoise
-		et.Before = clearStaleAVDLock
 		et.Check = chain(checkAllSteps(0), checkRunFiles("emulator-test.log", "drive-"+small[0]+".log", "tests-"+small[0]+"-summary.txt", "screens/*"),
 			checkStepsInHistory("prepare", "boot", "build", "install", "test-"+small[0], small[0], "total"))
 		out = append(out, h(et))
+	}
+
+	// GO-BUG2: a desktop-only file (every test skips on Android) ends the drive at "All tests skipped." instead of hanging.
+	if fileExists(filepath.Join(repo, "app/integration_test/chart_dpr_test.dart")) {
+		dpr := mkS(E, "emulator_test_desktop_only_file", 0, "test", "chart_dpr")
+		dpr.SkipIf = emulatorVolumes
+		dpr.StdoutDrop = emuNoise
+		dpr.Check = chain(checkAllSteps(0), checkRunFiles("emulator-test.log", "drive-chart_dpr.log"),
+			checkStepsInHistory("prepare", "boot", "test-chart_dpr", "total"))
+		out = append(out, h(dpr))
 	}
 
 	// start -> install -> shot -> adb -> stop, one container at a time; needs the APK from `tools/build.sh apk`.
 	sis := mkS(E, "emulator_start_install_shot_stop", 0)
 	sis.Steps = [][]string{{"start"}, {"install", debugAPK}, {"shot", "parity_x"}, {"adb", "shell", "echo", "parity"}, {"stop"}}
 	sis.Cleanup = [][]string{{"stop"}}
-	sis.Before = clearStaleAVDLock
 	sis.Artifacts = []string{"dist/screens/parity_x.png"}
 	sis.SkipIf = func(t *testing.T, repo string) string {
 		if why := emulatorVolumes(t, repo); why != "" {

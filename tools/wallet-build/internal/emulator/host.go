@@ -295,7 +295,25 @@ func (e *hostSide) common() []string {
 	a := []string{"--device", "/dev/kvm", "--shm-size=2g", "-e", "BW_DRIVE_ARGS", "-v", c.Root + ":/work:z", "-v", "bw-pub-cache:/cache/pub",
 		"-v", "bw-gradle-cache:/cache/gradle", "-v", "bw-android-user:/cache/android", "-e", "BW_NATIVE=1", "-w", "/work",
 		"-v", Volumes[0] + ":ro", "-v", Volumes[1] + ":ro", "-v", Volumes[2]}
+	for _, v := range image.ForwardEnv(e.c.Env) { // BW_TIMEOUT_EMULATOR_DRIVE
+		a = append(a, "-e", v)
+	}
 	return append(a, e.runArgs()...)
+}
+
+// ClearLockEnv tells the boot container to remove a stale AVD lock before it starts the emulator.
+const ClearLockEnv = "BW_CLEAR_AVD_LOCK"
+
+// lockArgs is the flag that lets a container remove the bw.avd/*.lock files (multiinstance.lock, snapshot.lock.lock), which a finished (--rm) emulator container leaves in the
+// writable AVD volume (the next emulator takes it for a live instance and dies after boot). Only when no emulator container runs: a
+// running emulator's lock stays. When podman cannot tell, the lock stays too.
+func (e *hostSide) lockArgs() []string {
+	c := e.c
+	out, rc := c.CaptureQuiet("", "podman", "ps", "--format", "{{.Image}}")
+	if rc != 0 || strings.Contains(out, "budget-wallet-emu:") {
+		return nil
+	}
+	return []string{"-e", ClearLockEnv + "=1"}
 }
 
 func (e *hostSide) screensOrTest(cmd string, rest []string) int {
@@ -307,6 +325,7 @@ func (e *hostSide) screensOrTest(cmd string, rest []string) int {
 	runDir := c.Getenv("BW_RUN_DIR")
 	name := e.name(cmd)
 	argv := append([]string{"podman", "run", "--rm", "--init", "--name", name}, e.common()...)
+	argv = append(argv, e.lockArgs()...)
 	argv = append(argv, e.img, Inner, "emulator", cmd)
 	argv = append(argv, rest...)
 	// output to the terminal and to emulator-<cmd>.log (+ .status), no history line (the phases and total are there)
@@ -356,6 +375,7 @@ func (e *hostSide) start(rest []string) int {
 	// The label tells `stop` where to save the emulator's log
 	argv := []string{"podman", "run", "-d", "--init", "--name", ContainerName, "--label", "bw.run=" + c.Getenv("BW_RUN_DIR")}
 	argv = append(argv, e.common()...)
+	argv = append(argv, e.lockArgs()...)
 	argv = append(argv, win...)
 	argv = append(argv, e.img, Inner, "emulator", "boot")
 	if flag != "" {
