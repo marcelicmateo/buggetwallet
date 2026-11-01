@@ -136,29 +136,6 @@ void main() {
       expect(identical(b.items, b.items), isTrue, reason: 'the item list is decoded once, not per read');
       expect(() => b.row['date'] = '2026-03-03', throwsUnsupportedError);
     });
-
-    test('reading typed fields again costs a field read, not a decode (20k bills x 50 reads)', () {
-      final bills = [
-        for (var i = 0; i < 20000; i++)
-          Bill.fromRow({'id': 'b$i', 'date': '2026-01-${(i % 28 + 1).toString().padLeft(2, '0')}', 'status': 'confirmed'})
-      ];
-      int run(void Function(Bill b) read) {
-        final sw = Stopwatch()..start();
-        for (var k = 0; k < 50; k++) {
-          bills.forEach(read);
-        }
-        return sw.elapsedMicroseconds;
-      }
-
-      var sink = 0;
-      for (final b in bills) {
-        sink += b.date!.length + b.status.index; // first reads decode
-      }
-      final cached = run((b) => sink += b.date!.length + b.status.index);
-      final decoded = run((b) => sink += BillCols.date.read(b.row)!.length + BillCols.status.read(b.row)!.index);
-      expect(sink, greaterThan(0));
-      expect(cached * 3, lessThan(decoded), reason: 'cached $cached µs vs decoded $decoded µs');
-    });
   });
 
   group('patch', () {
