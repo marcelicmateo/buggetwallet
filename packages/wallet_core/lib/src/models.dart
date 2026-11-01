@@ -875,8 +875,8 @@ class ReviewState {
 
 /// An owner-set exchange rate (P15, setting row `fx:<CODE>`): [rate] = wallet-currency units per [scale] (1,000,000)
 /// units of the other currency (whole units: 1 USD = 0.924 EUR is 924000; 1 JPY = 0.0065 EUR is 6500), set on [date]
-/// (`YYYY-MM-DD`) against the wallet currency [home]. Stage UX-A: amounts convert with each currency's minor digits
-/// (`convertMinor`); before it every currency had 2 digits, so a stored rate keeps its meaning.
+/// (`YYYY-MM-DD`) against the wallet currency [home]. Stage UX-A: amounts convert at each currency's storage digits
+/// (`storageDigitsOf`, `convertMinor`): 2 for every fiat currency as before (so a stored rate keeps its meaning), BTC 8.
 class FxRate {
   final int rate;
   final String date;
@@ -886,11 +886,13 @@ class FxRate {
   final String? home;
   const FxRate(this.rate, this.date, {this.home});
 
-  /// The divisor of [rate] and the accepted range of a rate (at most 100 home units per foreign unit).
-  static const scale = 1000000, minRate = 1, maxRate = 100000000;
+  /// The divisor of [rate] and the accepted range of a fiat rate: up to 1,000,000 home units per foreign unit (UX-A:
+  /// real pairs in any wallet currency, e.g. a JPY wallet's USD ≈ 150 or a VND wallet's EUR ≈ 27,000).
+  static const scale = 1000000, minRate = 1, maxRate = 1000000000000;
 
-  /// The highest rate of a crypto currency (`CurrencyInfo.crypto`, BTC): 1,000,000 home units per coin.
-  static const maxCryptoRate = 1000000000000;
+  /// The highest rate of a crypto currency (`CurrencyInfo.crypto`, BTC): 1,000,000,000 home units per coin (a JPY
+  /// wallet's BTC ≈ 15,000,000). Conversion is exact BigInt maths; results stay ≤ 2^53 (`convertMinor`).
+  static const maxCryptoRate = 1000000000000000;
 
   /// The highest rate [code] accepts: [maxCryptoRate] for a crypto currency, else [maxRate].
   static int maxRateOf(String code) => currencyInfo(code)?.crypto ?? false ? maxCryptoRate : maxRate;
@@ -1170,7 +1172,8 @@ class WalletSettings {
       _ => bad('merchantPatterns', const <MerchantPattern>[]),
     };
     final allPatterns = [...legacyPatterns, ...patternRows];
-    final currency = str('currency', currencyCode.hasMatch) ?? 'EUR';
+    // UX-A: a known fiat code only (a synced or restored row with a crypto or unknown code falls back to EUR, logged by key).
+    final currency = str('currency', (c) => currencyCode.hasMatch(c) && !(currencyInfo(c)?.crypto ?? true)) ?? 'EUR';
     final fx = _fxRates(fxRows, currency);
     return WalletSettings(
       salary: i('salary', 0),

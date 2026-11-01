@@ -417,12 +417,14 @@ void main() {
       expect(b.transactions.map((t) => (t.description, t.currency)), [('Isplata REZERVACIJA', 'EUR'), ('Shop', 'USD'), ('Shop', 'EUR')]);
     });
 
-    test('a decimal like -0.005 and a cent rounding tie follow Math.round', () {
+    test('a cent rounding tie is refused with its reason, never rounded (UX-A review; v1 gave -12 and 13)', () {
       final file = _pbz(texts, [
         _line(2, 46037, _card, _shop, number(2, 3, -0.125)), // -12.5 cents -> -12 (half towards +inf)
         _line(3, 46038, _card, _shop, number(3, 3, 0.125)), // 12.5 -> 13
       ]);
-      expect(importBankFile(file).transactions.map((t) => t.amountMinor), [-12, 13]);
+      final b = importBankFile(file);
+      expect(b.transactions, isEmpty);
+      expect((b.invalid, b.problems.length), (2, 2));
     });
   });
 }

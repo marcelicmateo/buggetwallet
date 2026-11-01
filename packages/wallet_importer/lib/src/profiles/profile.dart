@@ -27,10 +27,14 @@ enum RowOutcome {
 class RowResult {
   final RowOutcome outcome;
   final NormalizedTransaction? transaction;
-  const RowResult._(this.outcome, this.transaction);
+
+  /// Why an [RowOutcome.invalid] row was left out, without the row number (`the amount "-12,345" has more than 2
+  /// decimals …`), when the profile can say; [BankProfile.parse] puts it in [ImportBatch.problems] as `Row N: …`.
+  final String? problem;
+  const RowResult._(this.outcome, this.transaction, [this.problem]);
   const RowResult.ignored() : this._(RowOutcome.ignored, null);
   const RowResult.skipped() : this._(RowOutcome.skipped, null);
-  const RowResult.invalid() : this._(RowOutcome.invalid, null);
+  const RowResult.invalid([String? problem]) : this._(RowOutcome.invalid, null, problem);
   RowResult.transaction(NormalizedTransaction tx) : this._(RowOutcome.transaction, tx);
 }
 
@@ -73,11 +77,13 @@ class ImportContext {
   }
 
   /// The v1 id for a row ([transactionId]). Only the banks v1 knew (PBZ, Revolut) use it: their ids must stay the same.
-  String v1Id(String date, int amountMinor, String description) =>
-      transactionId(date, amountMinor, description, occurrence(date, amountMinor, description));
+  /// [digits]: 2 for every fiat row ([amountMinor] = v1's cents: the ids v1 gave); a crypto row passes its stored
+  /// satoshis and 8 (UX-A), so 0.001 and 0.002 BTC on one day get different ids.
+  String v1Id(String date, int amountMinor, String description, {int digits = 2}) =>
+      transactionId(date, amountMinor, description, occurrence(date, amountMinor, description, digits: digits), digits: digits);
 
-  /// The id for a row of a bank added after v1 ([sourceTransactionId]); [digits] = the minor digits of [amountMinor]'s
-  /// currency.
+  /// The id for a row of a bank added after v1 ([sourceTransactionId]); [digits] = the storage digits of [amountMinor]'s
+  /// currency (`storageDigitsOf`: 2 for fiat, BTC 8).
   String sourceId(String source, String date, int amountMinor, String description, {int digits = 2}) =>
       sourceTransactionId(source, date, amountMinor, description, occurrence(date, amountMinor, description, digits: digits),
           digits: digits);
@@ -109,9 +115,11 @@ abstract class BankProfile {
   ImportBatch parse(List<List<Object>> rows, ImportContext ctx) {
     prepare(ctx);
     final out = <NormalizedTransaction>[];
+    final invalidRows = <int>[], problems = <String>[];
     var skipped = 0, invalid = 0, tooLarge = 0;
     for (var i = ctx.firstRow; i < rows.length; i++) {
       final r = mapRow(rows[i], ctx);
+      if (r.problem case final p?) problems.add('Row ${i + 1}: $p');
       switch (r.outcome) {
         case RowOutcome.transaction:
           if (r.transaction!.amountMinor.abs() > maxRowAmountMinor) {
@@ -124,10 +132,18 @@ abstract class BankProfile {
           skipped++;
         case RowOutcome.invalid:
           invalid++;
+          invalidRows.add(i);
         case RowOutcome.ignored:
           break;
       }
     }
-    return ImportBatch(source: id, transactions: out, skipped: skipped, invalid: invalid, tooLarge: tooLarge);
+    return ImportBatch(
+        source: id,
+        transactions: out,
+        skipped: skipped,
+        invalid: invalid,
+        invalidRows: invalidRows,
+        tooLarge: tooLarge,
+        problems: problems);
   }
 }

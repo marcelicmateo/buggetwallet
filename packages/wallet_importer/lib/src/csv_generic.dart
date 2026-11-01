@@ -14,6 +14,7 @@ import 'importer.dart' show ImportException, unknownLayoutMessage;
 import 'limits.dart';
 import 'log.dart';
 import 'model.dart';
+import 'profiles/cells.dart' show decimalsProblem;
 import 'profiles/profile.dart';
 import 'text_codec.dart';
 
@@ -393,16 +394,14 @@ final _amountRes = {
   return (neg ? -cents : cents, null);
 }
 
-/// Exact cents of an amount text in [decimal] style, or null when it is not one (see the Map columns rules). [digits]:
-/// the minor digits of the amount's currency (2 = cents).
+/// Exact stored units of an amount text in [decimal] style, or null when it is not one (see the Map columns rules).
+/// [digits]: the storage digits of the amount's currency (`storageDigitsOf`: 2 = cents for every fiat currency, BTC 8).
 int? parseCsvCents(String s, CsvDecimal decimal, {int digits = 2}) => _cents(s, decimal, digits).$1;
 
 String _amountProblem(int row, String what, String cell, _AmountError e, String currency) => switch (e) {
       _AmountError.empty => 'Row ${row + 1}: no $what',
       _AmountError.notAmount => 'Row ${row + 1}: the $what ${_q(cell)} is not an amount',
-      _AmountError.decimals => minorDigitsOf(currency) > storageDigitsOf(currency)
-          ? 'Row ${row + 1}: the $what ${_q(cell)} has more than ${storageDigitsOf(currency)} decimals (the third decimal of $currency is not supported)'
-          : 'Row ${row + 1}: the $what ${_q(cell)} has more than ${storageDigitsOf(currency)} decimals',
+      _AmountError.decimals => 'Row ${row + 1}: ${decimalsProblem(what, _q(cell), currency)}',
       _AmountError.tooBig => 'Row ${row + 1}: the $what ${_q(cell)} is too large',
     };
 
@@ -417,8 +416,8 @@ CsvPreviewRow _mapRow(List<String> cells, int row, CsvMapping m, String walletCu
   final dateCell = cell(m.dateCol);
   final date = parseCsvDate(dateCell, m.dateFormat);
   if (date == null) return bad(dateCell.isEmpty ? 'Row ${row + 1}: no date' : 'Row ${row + 1}: the date ${_q(dateCell)} is not a date');
-  // The currency first: the amount is read with its minor digits (JPY 0, KWD 3, BTC 8). Its problem is reported after
-  // the amount's, as before.
+  // The currency first: the amount is read at its storage digits (fiat 2, BTC 8; a 3-decimal currency's zeros past the
+  // second decimal are fine). Its problem is reported after the amount's, as before.
   var currency = m.currencyCode ?? walletCurrency;
   String? currencyProblem;
   if (m.currencyCol != null) {
@@ -510,7 +509,7 @@ ImportBatch parseMappedCsv(Uint8List bytes, CsvMapping layout, {String? fileName
   final source = '$csvSourcePrefix${shape.shapeId}';
   final ctx = ImportContext(head: const [], format: 'csv', fileName: fileName);
   final out = <NormalizedTransaction>[];
-  final invalidRows = <int>[];
+  final invalidRows = <int>[], problems = <String>[];
   var skipped = 0, tooLarge = 0;
   for (var i = m.headerRow + 1; i < rows.length; i++) {
     if (rows[i].every((c) => c.isEmpty)) continue;
@@ -519,6 +518,7 @@ ImportBatch parseMappedCsv(Uint8List bytes, CsvMapping layout, {String? fileName
       skipped++;
     } else if (r.problem != null) {
       invalidRows.add(i);
+      problems.add(r.problem!);
       if (r.tooLarge) tooLarge++;
     } else {
       out.add(NormalizedTransaction(
@@ -545,7 +545,13 @@ ImportBatch parseMappedCsv(Uint8List bytes, CsvMapping layout, {String? fileName
     'ms': sw.elapsedMilliseconds,
   });
   return ImportBatch(
-      source: source, transactions: out, skipped: skipped, invalid: invalidRows.length, invalidRows: invalidRows, tooLarge: tooLarge);
+      source: source,
+      transactions: out,
+      skipped: skipped,
+      invalid: invalidRows.length,
+      invalidRows: invalidRows,
+      tooLarge: tooLarge,
+      problems: problems);
 }
 
 /// Header text folded for guessing: lower case, Croatian letters without marks, trimmed.
