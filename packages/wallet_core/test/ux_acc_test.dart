@@ -114,12 +114,14 @@ void main() {
       expect(balanceTotals(old)['EUR'], 100 - 1000, reason: 'the duplicate shows its opening only there');
     });
 
-    test('checkBankBalance with every account counts only the account\'s own rows; without, the old rule', () {
+    test('checkBankBalance (every account required) counts only the account\'s own rows', () {
       final accounts = [_acc('a1'), _acc('a2', matchKey: _k1)];
       final rows = [_tx('t1', -300), _tx('t2', -700, account: 'a2')];
       expect(checkBankBalance(accounts[1], rows, date: '2026-10-05', bankCents: -700, accounts: accounts).matches, isTrue);
       expect(checkBankBalance(accounts[0], rows, date: '2026-10-05', bankCents: -300, accounts: accounts).matches, isTrue);
-      expect(checkBankBalance(accounts[1], rows, date: '2026-10-05', bankCents: 0).appCents, -1000);
+      expect(checkBankBalance(accounts[1], rows, date: '2026-10-05', bankCents: 0, accounts: accounts).appCents, -700,
+          reason: 'the keyed Savings never counts the main account\'s row');
+      expect(checkBankBalance(accounts[0], rows, date: '2026-10-05', bankCents: 0, accounts: accounts).appCents, -300);
       expect(balanceTrusted(accounts[1], today: '2026-10-05', rows: rows, accounts: accounts), isTrue);
     });
   });
@@ -231,6 +233,20 @@ void main() {
       expect(got, {'A': main, 'B': sav});
       final again = repo.importBatch(file);
       expect(again.accountsAssigned, 0, reason: 'nothing left to fill');
+    });
+
+    test('re-import keeps the owner\'s move back to the main account (a written null is never refilled)', () async {
+      await add('Main');
+      final sav = await add('Savings', matchKey: k1);
+      final file = await withAccountKeys(_key, ImportBatch(source: 'pbz', transactions: [_row('2026-10-01', -100, 'A', account: _ibanA)]));
+      repo.importBatch(file);
+      final a = repo.transactions().single;
+      expect(a.account, sav);
+      repo.setTxAccount(a.id, null); // the owner: "this one is the main account's"
+      expect(repo.transactions().single.account, isNull);
+      final s = repo.importBatch(file);
+      expect(s.accountsAssigned, 0);
+      expect(repo.transactions().single.account, isNull, reason: 'the owner\'s choice stays');
     });
 
     test('setTxAccount: same source and currency, bank rows only; null goes back to the rule; no change, no write', () async {

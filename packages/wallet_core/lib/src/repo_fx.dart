@@ -40,20 +40,25 @@ extension WalletRepoFx on WalletRepo {
     return fxNeeds(pairs, s);
   }
 
-  /// The needs ([walletFxNeeds]) the wallet's `fx_day` rows cannot convert yet: shown as "not counted" until the rates
-  /// arrive (a sync, or [importEcbHistory] then [fillFxDays]).
+  /// The needs ([walletFxNeeds]) dated up to today that the wallet's `fx_day` rows cannot convert yet: shown as "not
+  /// counted" until the rates arrive (a sync, or a download: [ecbFetchPlan], [importEcbHistory]). A date after today
+  /// (a future bill or IOU) is never missing: its day is not published yet.
   List<FxNeed> fxMissing() {
     final st = settings();
+    final today = _today();
     return [
       for (final n in walletFxNeeds(st))
-        if (st.ecb.pairOn(n.currency, st.currency, n.date) == null) n
+        if (n.date.compareTo(today) <= 0 && st.ecb.pairOn(n.currency, st.currency, n.date) == null) n
     ];
   }
 
-  /// Writes the `fx_day` rows the wallet needs ([walletFxNeeds]) and does not hold yet from the device-local ECB cache:
-  /// per need, the latest cached ECB day on or before its date within [ecbMaxGapDays] that has both its currency and
-  /// the wallet currency (EUR is 1). One internal write (never refused for the clock); returns how many rows it wrote.
-  /// A row the wallet holds with the same value is not written again. Logs counts only.
+  /// Writes the `fx_day` rows the wallet needs ([walletFxNeeds]) from the device-local ECB cache: per need, the latest
+  /// cached ECB day on or before its date within [ecbMaxGapDays] that has both its currency and the wallet currency
+  /// (EUR is 1), when the wallet holds no rate for that need yet or only an older day's (answered early, before its own
+  /// day was published, here or on another device): every device ends on the same, best day. One internal write (never
+  /// refused for the clock); returns how many rows it wrote. A row the wallet holds with the same value is not written
+  /// again. Runs by itself after every change that can add a need (`_fillFxAfterChange`: rows, bills, IOUs, accounts,
+  /// the wallet currency or a hand rate, here or from a sync) and after [importEcbHistory]. Logs counts only.
   int fillFxDays() {
     if (db.select('SELECT 1 FROM ecb_rates LIMIT 1').isEmpty) return 0;
     final t = PerfTimer('fx.fill');
@@ -61,10 +66,11 @@ extension WalletRepoFx on WalletRepo {
     final w = st.currency;
     final planned = <String, int>{};
     final changes = <(String, String, Map<String, Object?>)>[];
-    var needs = 0, unanswered = 0;
+    var needs = 0, unanswered = 0, newer = 0;
     for (final n in walletFxNeeds(st)) {
       needs++;
-      if (st.ecb.pairOn(n.currency, w, n.date) != null) continue;
+      final have = st.ecb.pairOn(n.currency, w, n.date)?.day;
+      if (have == n.date) continue; // its own day: nothing can be better
       final curs = {n.currency, w}..remove('EUR');
       final byDay = <String, Map<String, int>>{};
       for (final r in db.select(
@@ -74,9 +80,11 @@ extension WalletRepoFx on WalletRepo {
       }
       final day = (byDay.keys.where((d) => byDay[d]!.length == curs.length).toList()..sort()).lastOrNull;
       if (day == null) {
-        unanswered++;
+        if (have == null) unanswered++;
         continue;
       }
+      if (have != null && have.compareTo(day) >= 0) continue;
+      if (have != null) newer++;
       for (final c in curs) {
         final per = byDay[day]![c]!, id = fxDayId(c, day);
         if (st.ecb.perEurOn(c, day) == per || planned[id] == per) continue;
@@ -85,8 +93,22 @@ extension WalletRepoFx on WalletRepo {
       }
     }
     if (changes.isNotEmpty) _writeInternal(changes);
-    t.done({'needs': needs, 'written': changes.length, 'unanswered': unanswered});
+    t.done({'needs': needs, 'written': changes.length, 'unanswered': unanswered, 'newer': newer});
     return changes.length;
+  }
+
+  /// [fillFxDays] after a committed change that can add or answer a need (`_tx`, `_fxPending`): never fails the change
+  /// itself (an error is logged), never runs inside itself, and costs one query when the cache is empty.
+  void _fillFxAfterChange() {
+    if (_fxFilling) return;
+    _fxFilling = true;
+    try {
+      fillFxDays();
+    } catch (e, st) {
+      logError(_log, 'fx.fill.failed', e, st);
+    } finally {
+      _fxFilling = false;
+    }
   }
 
   /// Stores an ECB file the app downloaded ([ecbFetchPlan]; zip, CSV or XML, [parseEcbRates]) in the device-local
@@ -135,12 +157,14 @@ extension WalletRepoFx on WalletRepo {
   void noteEcbAttempt() => setLocalValue(_attemptKey, _today());
 
   /// Which ECB file the app should download now, or null (nothing to do). Automatic (default): at most once a day
-  /// ([noteEcbAttempt]), and only when a needed rate is missing ([fxMissing]) that a download could bring: its window
-  /// (the date, or today for a future date, back [ecbMaxGapDays]) reaches past the cache (newer than its newest day,
-  /// or older than its oldest), and it is not before [ecbFirstDay]. A currency the ECB does not publish, inside the
-  /// cached range, never triggers a fetch. [EcbFile.history] when the cache is empty, the recent file cannot reach
-  /// back far enough (needs older than about 80 days, or a cache whose newest day is older than that), else
-  /// [EcbFile.recent]. [force] (the owner's "Get rates now"): always a file, ignoring the daily limit.
+  /// ([noteEcbAttempt]), and only when a download could bring a rate the wallet needs ([walletFxNeeds], dates up to
+  /// today, not before [ecbFirstDay]): a missing one ([fxMissing]) whose window (the date back [ecbMaxGapDays]) reaches
+  /// past the cache (newer than its newest day, or older than its oldest), or one answered by an older day whose date
+  /// is newer than the cache's newest day (its own day may be published by now). A currency the ECB does not publish,
+  /// inside the cached range, never triggers a fetch; neither does a future date. [EcbFile.history] when the cache is
+  /// empty, the recent file cannot reach back far enough (needs older than about 80 days, or a cache whose newest day
+  /// is older than that), else [EcbFile.recent]. [force] (the owner's "Get rates now"): always a file, ignoring the
+  /// daily limit. The app's order: [ecbFetchPlan] → [noteEcbAttempt] → download → [importEcbHistory].
   EcbFile? ecbFetchPlan({bool force = false}) {
     final today = _today();
     final info = ecbCacheInfo();
@@ -148,13 +172,21 @@ extension WalletRepoFx on WalletRepo {
     final recentFrom = addDays(today, -80);
     if (force) return hi == null || hi.compareTo(recentFrom) < 0 ? EcbFile.history : EcbFile.recent;
     if (info.attemptOn == today) return null;
+    final st = settings();
     final want = <String>[];
-    for (final n in fxMissing()) {
-      final d = n.date.compareTo(today) > 0 ? today : n.date;
-      if (d.compareTo(ecbFirstDay) < 0) continue;
+    for (final n in walletFxNeeds(st)) {
+      final d = n.date;
+      if (d.compareTo(today) > 0 || d.compareTo(ecbFirstDay) < 0) continue;
+      final have = st.ecb.pairOn(n.currency, st.currency, d)?.day;
+      if (have == d) continue;
       final from = addDays(d, -ecbMaxGapDays);
+      final newerThanCache = hi != null && d.compareTo(hi) > 0;
+      if (have != null) {
+        if (newerThanCache) want.add(from);
+        continue;
+      }
       // Older than the cache helps only while the cache does not start at the ECB's first day already.
-      if (lo == null || hi == null || d.compareTo(hi) > 0 || (from.compareTo(lo) < 0 && lo.compareTo(ecbFirstDay) > 0)) want.add(from);
+      if (lo == null || hi == null || newerThanCache || (from.compareTo(lo) < 0 && lo.compareTo(ecbFirstDay) > 0)) want.add(from);
     }
     if (want.isEmpty) return null;
     final full = hi == null || hi.compareTo(recentFrom) < 0 || want.any((from) => from.compareTo(recentFrom) < 0);

@@ -1120,6 +1120,9 @@ class WalletSettings {
   /// Plan line rows (P1, [planLines]): `plan:<custom category id>`, value = whole cents (JSON int, 0..[maxAmount]).
   /// Exchange rate rows (P15, [fxRates]): `fx:<CODE>`, value = JSON `{"rate": int, "date": "YYYY-MM-DD", "home": "EUR"}`
   /// ([FxRate]).
+  /// The [toMap] key of [ecb] (in memory only: the repo never reads a stored settings row of that name).
+  static const ecbKey = 'ecb';
+
   static const budgetPrefix = 'budget:', patternPrefix = 'pattern:', planPrefix = 'plan:', fxPrefix = 'fx:';
 
   /// An ISO 4217 code as the wallet currency and the rate rows use it.
@@ -1270,7 +1273,7 @@ class WalletSettings {
       warrantyReminderDays: i('warrantyReminderDays', defaultWarrantyReminderDays, max: maxWarrantyReminderDays),
       csvMappings: csvRows.isEmpty ? const {} : Map.unmodifiable(csvRows),
       builtInRuleOverrides: builtInRows.isEmpty ? const {} : Map.unmodifiable(builtInRows),
-      ecb: ecb,
+      ecb: ecb.isEmpty ? EcbRates.fromJson(m[ecbKey]) : ecb,
     );
   }
 
@@ -1419,5 +1422,7 @@ class WalletSettings {
         'headsUpDays': headsUpDays,
         'returnReminderDays': returnReminderDays,
         'warrantyReminderDays': warrantyReminderDays,
+        // UX-FX: the wallet's ECB rates (`fx_day` rows, read by the repo), so fromMap(toMap()) keeps them.
+        if (!ecb.isEmpty) ecbKey: ecb.toJson(),
       };
 }

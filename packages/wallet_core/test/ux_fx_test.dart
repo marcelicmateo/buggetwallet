@@ -1,14 +1,15 @@
 // UX-FX (docs/context/UX_SPEC.md "UX-FX"): ECB daily rates per payment date. Parser (CSV, XML, zip; damaged files),
 // lookup (latest ECB day within 7 days), exact conversion, hand rate precedence, needs, cache + fx_day rows, fetch
-// plan, two devices. Rates are the ECB's published reference values of 4 and 8 January 1999 (USD, JPY, GBP, in the
-// file's own format); every wallet amount is SYNTHETIC.
+// plan, two devices. The rates are example values in the ECB file format (USD, JPY, GBP on 4 and 8 January 1999);
+// every wallet amount is SYNTHETIC.
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
-import 'package:archive/archive.dart' show Archive, ArchiveFile, ZipEncoder;
+import 'package:archive/archive.dart' show Archive, ArchiveFile, CompressionType, ZipEncoder;
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_importer/wallet_importer.dart' show ImportBatch, NormalizedTransaction, transactionId;
 
 import 'support/sim.dart';
 
@@ -43,6 +44,27 @@ const _xml = '''<?xml version="1.0" encoding="UTF-8"?>
 ''';
 
 List<int> _zip(String name, String text) => ZipEncoder().encodeBytes(Archive()..add(ArchiveFile.string(name, text)));
+
+/// [text] as an uncompressed (STORED) zip entry: its bytes appear as they are, so one can be changed in place.
+List<int> _storedZip(String name, String text) =>
+    ZipEncoder().encodeBytes(Archive()..add(ArchiveFile.string(name, text)..compression = CompressionType.none));
+
+/// Only the older of the two days (a file fetched before 8 January was published).
+const _earlyCsv = 'Date,USD,JPY,GBP,ISK,\n1999-01-04,1.1789,133.73,0.71110,N/A,\n';
+
+int _count(WalletRepo r, String table) => r.db.select('SELECT COUNT(*) AS n FROM $table').first['n'] as int;
+
+List<String> _fxIds(WalletRepo r) =>
+    [for (final x in r.db.select('SELECT id FROM fx_days WHERE deleted = 0 ORDER BY id')) x['id'] as String];
+
+NormalizedTransaction _bank(String date, int cents, String desc, String currency) => NormalizedTransaction(
+    id: transactionId(date, cents, desc, 0),
+    source: 'pbz',
+    date: date,
+    amountMinor: cents,
+    currency: currency,
+    bankType: 'Card',
+    description: desc);
 
 final _expected = {
   'USD': {'1999-01-08': 1165900, '1999-01-04': 1178900},
@@ -105,6 +127,44 @@ void main() {
     });
   });
 
+  group('zip CRC', () {
+    test('a STORED entry with one digit changed is refused (CRC), the intact one is read', () {
+      final ok = _storedZip('eurofxref-hist.csv', _csv);
+      expect(parseEcbRates(ok).rates, _expected);
+      final at = String.fromCharCodes(ok).indexOf('1.1659');
+      expect(at, greaterThan(0), reason: 'stored as it is');
+      final bad = [...ok]..[at + 5] = '8'.codeUnitAt(0); // 1.1659 -> 1.1658
+      expect(() => parseEcbRates(bad), throwsA(isA<FormatException>().having((e) => e.message, 'message', ecbDamagedMessage)));
+      final repo = WalletRepo.inMemory(now: () => _now);
+      addTearDown(repo.close);
+      repo.addTransaction(date: '1999-01-10', amount: 10000, category: 'Groceries', currency: 'USD');
+      final ops = repo.pendingOps().length;
+      expect(() => repo.importEcbHistory(bad), throwsFormatException);
+      expect((_count(repo, 'ecb_rates'), _count(repo, 'fx_days'), repo.pendingOps().length), (0, 0, ops));
+      expect(repo.ecbCacheInfo().importedOn, isNull);
+    });
+  });
+
+  group('settings round trip', () {
+    test('fromMap(toMap()) keeps the ECB rates, also through JSON; a stored settings row never brings rates', () {
+      final st = WalletSettings(ecb: _rates());
+      final back = WalletSettings.fromMap(st.toMap());
+      expect(back.ecb.toJson(), st.ecb.toJson());
+      expect(homeAmount(_row('1999-01-04', 10000, 'USD'), back), 8482);
+      final viaJson = WalletSettings.fromMap(jsonDecode(jsonEncode(st.toMap())) as Map<String, Object?>);
+      expect(homeAmount(_row('1999-01-08', 10000, 'USD'), viaJson), 8577);
+      expect(WalletSettings.fromMap(const WalletSettings().toMap()).ecb.isEmpty, isTrue);
+      final repo = WalletRepo.inMemory(now: () => _now);
+      addTearDown(repo.close);
+      repo.updateSettings({
+        'ecb': [
+          ['USD', '1999-01-04', 1]
+        ]
+      });
+      expect(repo.settings().ecb.isEmpty, isTrue);
+    });
+  });
+
   group('conversion per payment date', () {
     final eur = WalletSettings(ecb: _rates());
     final usd = WalletSettings(currency: 'USD', ecb: _rates());
@@ -143,6 +203,44 @@ void main() {
       expect(homeAmount(_row('1999-01-04', 10000, 'USD'), st), 9000);
       expect(fxUsed(_row('1999-01-04', 1, 'USD'), st), const FxUsed(ecb: false, date: '2026-10-01'));
       expect(homeAmount(_row('1999-01-04', 100000000, 'BTC'), eur), isNull);
+    });
+
+    group('balanceInHome: opening at its date + each row at its own date (owner 2026-11-01)', () {
+      Account acc({String openingDate = '1999-01-04'}) =>
+          Account(id: 'u', name: 'U', source: 'pbz', currency: 'USD', opening: 10000, openingDate: openingDate);
+      AccountBalance bal(Account a, List<Tx> rows) => accountBalances([a], rows).single;
+      final rows = [_row('1999-01-08', 5000, 'USD', id: 'r1')];
+
+      test('two dates with different rates: each part at its own day', () {
+        final b = bal(acc(), rows);
+        expect(b.balance, 15000);
+        // 100 USD / 1.1789 = 84.82 on 4 Jan, 50 USD / 1.1659 = 42.89 on 8 Jan (the whole at 8 Jan would be 128.66).
+        expect(balanceInHome(b, eur), 8482 + 4289);
+        expect(balanceInHome(bal(acc(), [...rows, _row('1999-01-30', 0, 'USD', id: 'z')]), eur), 8482 + 4289,
+            reason: 'a zero part needs no rate');
+      });
+
+      test('a part without a rate: null, never a partial sum', () {
+        expect(balanceInHome(bal(acc(openingDate: '1998-12-20'), rows), eur), isNull, reason: 'the opening day has no rate');
+        expect(balanceInHome(bal(acc(), [...rows, _row('1999-01-30', -100, 'USD', id: 'r2')]), eur), isNull, reason: '22 days after');
+        expect(balanceInHome(AccountBalance(account: acc(), balance: 15000, rowsCounted: 1), eur), isNull,
+            reason: 'rows that do not add up to the balance');
+        expect(balanceInHome(AccountBalance(account: acc(), balance: 10000, rowsCounted: 0), eur), 8482);
+      });
+
+      test('a hand rate wins, for the whole balance', () {
+        final st = WalletSettings(fxRates: {'USD': const FxRate(900000, '2026-10-01', home: 'EUR')}, ecb: _rates());
+        expect(balanceInHome(bal(acc(openingDate: '1998-12-20'), rows), st), 13500);
+      });
+
+      test('every counted row date is a wallet need', () async {
+        final repo = WalletRepo.inMemory(now: () => _now);
+        addTearDown(repo.close);
+        await repo.addAccount(name: 'U', source: 'pbz', currency: 'USD', opening: 10000, openingDate: '1999-01-04');
+        repo.importBatch(
+            ImportBatch(source: 'pbz', transactions: [_bank('1999-01-08', 5000, 'A', 'USD'), _bank('1999-01-06', -10, 'B', 'USD')]));
+        expect(repo.walletFxNeeds(), const [FxNeed('USD', '1999-01-04'), FxNeed('USD', '1999-01-06'), FxNeed('USD', '1999-01-08')]);
+      });
     });
 
     test('inHomeCurrency converts each row at its own date', () {
@@ -236,6 +334,84 @@ void main() {
       expect(repo.ecbFetchPlan(force: true), EcbFile.recent);
     });
 
+    group('missing rates are filled from the cache by themselves', () {
+      setUp(() => expect(repo.importEcbHistory(utf8.encode(_csv)).written, 0, reason: 'nothing needed yet'));
+
+      test('a hand-added foreign row', () {
+        repo.addTransaction(date: '1999-01-10', amount: 10000, category: 'Groceries', currency: 'USD');
+        expect(_fxIds(repo), ['USD:1999-01-08']);
+        expect(repo.fxMissing(), isEmpty);
+        expect(homeAmount(repo.transactions().single, repo.settings()), -8577);
+      });
+
+      test('the wallet currency switched from EUR to USD', () {
+        repo.addTransaction(date: '1999-01-05', amount: 700, category: 'Groceries');
+        expect(_fxIds(repo), isEmpty);
+        repo.updateSettings({'currency': 'USD'});
+        expect(_fxIds(repo), ['USD:1999-01-04']);
+        expect(repo.fxMissing(), isEmpty);
+        expect(homeAmount(repo.transactions().single, repo.settings()), -825); // 7.00 EUR × 1.1789
+      });
+
+      test('an old foreign file imported again after the cache', () {
+        final s = repo.importBatch(ImportBatch(source: 'pbz', transactions: [_bank('1999-01-08', -2000, 'A', 'USD')]));
+        expect(s.added, 1);
+        expect(_fxIds(repo), ['USD:1999-01-08']);
+        expect(repo.fxMissing(), isEmpty);
+      });
+
+      test('a hand rate removed', () {
+        repo.setFxRate('USD', 900000);
+        repo.addTransaction(date: '1999-01-08', amount: 10000, category: 'Groceries', currency: 'USD');
+        expect(_fxIds(repo), isEmpty, reason: 'the hand rate converts it');
+        repo.removeFxRate('USD');
+        expect(_fxIds(repo), ['USD:1999-01-08']);
+        expect(homeAmount(repo.transactions().single, repo.settings()), -8577);
+      });
+
+      test('logs of the fill carry counts only', () {
+        final lines = <String>[];
+        final was = Logger.root.level;
+        Logger.root.level = Level.ALL;
+        final sub = Logger.root.onRecord.listen((r) => lines.add(formatLogRecord(r)));
+        try {
+          repo.addTransaction(date: '1999-01-10', amount: 10000, category: 'Groceries', currency: 'USD');
+        } finally {
+          sub.cancel();
+          Logger.root.level = was;
+        }
+        final all = lines.where((l) => l.contains('fx.')).join('\n');
+        expect(all, contains('fx.fill'));
+        for (final x in ['USD', '1165900', '1999-01-']) {
+          expect(all, isNot(contains(x)));
+        }
+      });
+    });
+
+    test('an early rate is replaced by the day\'s own once the cache has it; then nothing more', () {
+      repo.addTransaction(date: '1999-01-08', amount: 10000, category: 'Groceries', currency: 'USD');
+      expect(repo.importEcbHistory(utf8.encode(_earlyCsv)).written, 1);
+      expect(fxUsed(repo.transactions().single, repo.settings())?.date, '1999-01-04');
+      expect(repo.importEcbHistory(utf8.encode(_csv)).written, 1);
+      final t = repo.transactions().single;
+      expect(fxUsed(t, repo.settings())?.date, '1999-01-08');
+      expect(homeAmount(t, repo.settings()), -8577);
+      expect(repo.fillFxDays(), 0);
+    });
+
+    test('fetch plan: an older day answering a date newer than the cache asks for the recent file; future dates never', () {
+      repo.addTransaction(date: '2026-12-01', amount: 100, category: 'Groceries', currency: 'USD');
+      expect(repo.fxMissing(), isEmpty, reason: 'a future date is not published yet');
+      expect(repo.ecbFetchPlan(), isNull, reason: 'no download for a future bill');
+      repo.importEcbHistory(utf8.encode('Date,USD,\n2026-10-05,1.1,\n'));
+      repo.addTransaction(date: '2026-10-08', amount: 100, category: 'Groceries', currency: 'USD');
+      expect(repo.fxMissing(), isEmpty, reason: '5 Oct answers 8 Oct for now');
+      expect(repo.ecbFetchPlan(), EcbFile.recent, reason: '8 Oct itself may be published');
+      repo.importEcbHistory(utf8.encode('Date,USD,\n2026-10-08,1.2,\n2026-10-05,1.1,\n'));
+      expect(fxUsed(repo.transactions().firstWhere((t) => t.date == '2026-10-08'), repo.settings())?.date, '2026-10-08');
+      expect(repo.ecbFetchPlan(), isNull, reason: 'every date up to today has its own day');
+    });
+
     test('the cache is device-local: not in a backup; fx_day rows are', () async {
       seed(repo);
       repo.importEcbHistory(utf8.encode(_csv));
@@ -319,6 +495,36 @@ void main() {
       for (final d in [a, b]) {
         expect(homeAmount(d.repo.transactions().single, d.repo.settings()), -8577);
       }
+    }, timeout: _t);
+
+    test('foreign rows from a sync are filled on the device that has the cache', () async {
+      final a = device('a'), b = device('b');
+      a.repo.importEcbHistory(utf8.encode(_csv));
+      b.repo.addTransaction(date: '1999-01-10', amount: 10000, category: 'Groceries', currency: 'USD');
+      await syncAll([a, b]);
+      expect(_fxIds(a.repo), ['USD:1999-01-08']);
+      expect(_fxIds(b.repo), ['USD:1999-01-08']);
+      expect(homeAmount(b.repo.transactions().single, b.repo.settings()), -8577);
+      expect(b.repo.fxMissing(), isEmpty);
+    }, timeout: _t);
+
+    test('fetched at different times: both end on the day\'s own rate', () async {
+      final a = device('a'), b = device('b');
+      a.repo.addTransaction(date: '1999-01-08', amount: 10000, category: 'Groceries', currency: 'USD');
+      await syncAll([a, b]);
+      a.repo.importEcbHistory(utf8.encode(_earlyCsv)); // before 8 Jan was published
+      await syncAll([a, b]);
+      now += 1000;
+      b.repo.importEcbHistory(utf8.encode(_csv));
+      await syncAll([a, b]);
+      for (final d in [a, b]) {
+        final st = d.repo.settings();
+        expect(fxUsed(d.repo.transactions().single, st)?.date, '1999-01-08');
+        expect(homeAmount(d.repo.transactions().single, st), -8577);
+        expect(d.repo.syncConflicts(), isEmpty);
+      }
+      expect(dump(a.repo, clocks: false), dump(b.repo, clocks: false));
+      expect(a.repo.importEcbHistory(utf8.encode(_csv)).written, 0, reason: 'already the best day');
     }, timeout: _t);
 
     test('an offline device shows the payment as not counted until the rates arrive by sync', () async {

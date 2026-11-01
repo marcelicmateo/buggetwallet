@@ -98,6 +98,7 @@ extension WalletRepoSyncApply on WalletRepo {
     }
     assert(!db.autocommit, 'data is written inside a transaction');
     _dataPending = true;
+    if (!_fxPending && WalletRepo._fxRelevant(op.entity, op.id, accepted.keys)) _fxPending = true;
     db.execute('INSERT OR IGNORE INTO $table(id) VALUES(?)', [op.id]);
     for (final k in accepted.keys) {
       db.execute('INSERT OR REPLACE INTO clocks(entity, id, field, hlc) VALUES(?, ?, ?, ?)', [op.entity, op.id, k, op.hlc]);

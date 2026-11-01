@@ -68,6 +68,7 @@ WalletSettings _readSettings(CommonDatabase db, {CategoryTable? table, EcbRates 
       m[id] = {'category': p[0].toString(), 'pattern': p[1].toString(), 'order': next++};
     }
   }
+  m.remove(WalletSettings.ecbKey); // ECB rates come from the `fx_day` rows only, never from a settings row
   return WalletSettings.fromMap(m, table: table, ecb: ecb);
 }
 

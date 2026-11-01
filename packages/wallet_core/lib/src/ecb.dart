@@ -7,7 +7,7 @@ library;
 
 import 'dart:convert' show utf8;
 
-import 'package:archive/archive.dart' show ArchiveException, ZipDecoder;
+import 'package:archive/archive.dart' show ArchiveException, ZipDecoder, getCrc32;
 
 import 'cols.dart';
 import 'currencies.dart' show currencyInfo;
@@ -133,6 +133,23 @@ class EcbRates {
   }
 
   bool get isEmpty => _r.isEmpty;
+
+  /// Every rate as `[cur, date, perEur]`, sorted by currency, then date (`WalletSettings.toMap` key `ecb`, so
+  /// `fromMap(toMap())` keeps the rates). Computed once per instance.
+  List<List<Object>> toJson() => _json[this] ??= List.unmodifiable([
+        for (final c in _r.keys.toList()..sort())
+          for (final d in _r[c]!.keys.toList()..sort()) List<Object>.unmodifiable([c, d, _r[c]![d]!])
+      ]);
+  static final _json = Expando<List<List<Object>>>('ecbJson');
+
+  /// Reads [toJson]'s shape; entries of another shape or with a bad value are left out ([EcbRates.new]); anything
+  /// else is [none].
+  static EcbRates fromJson(Object? j) => j is! List
+      ? none
+      : EcbRates([
+          for (final e in j)
+            if (e case [final String c, final String d, final int p]) FxDay(c, d, p)
+        ]);
 
   /// How many rates (currency, day) it holds.
   int get length => _r.values.fold(0, (n, m) => n + m.length);
@@ -274,13 +291,16 @@ EcbHistory parseEcbRates(List<int> bytes) {
 List<int> _unzip(List<int> bytes) {
   final files = <List<int>>[];
   try {
-    final a = ZipDecoder().decodeBytes(bytes, verify: true);
+    // archive 4.5's `verify:` does nothing (its CRC check is commented out), so each entry's CRC is checked here.
+    final a = ZipDecoder().decodeBytes(bytes);
     for (final f in a.files) {
       if (!f.isFile) continue;
       final name = f.name.toLowerCase();
       if (!name.endsWith('.csv') && !name.endsWith('.xml')) continue;
       if (f.size > _maxUnpacked) throw const FormatException(ecbNotRatesMessage);
-      files.add(f.content);
+      final data = f.content;
+      if (f.crc32 == null || getCrc32(data) != f.crc32) throw const FormatException(ecbDamagedMessage);
+      files.add(data);
     }
   } on ArchiveException {
     throw const FormatException(ecbDamagedMessage);

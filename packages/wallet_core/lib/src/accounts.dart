@@ -35,7 +35,11 @@ class AccountBalance {
   /// synced): that one counts the rows, so this one shows its opening only and is left out of [balanceTotals].
   final String? duplicateOf;
 
-  const AccountBalance({required this.account, required this.balance, required this.rowsCounted, this.lastRowDate, this.duplicateOf});
+  /// The rows counted in [balance] (UX-FX: [balanceInHome] converts each at its own date). Empty for a duplicate.
+  final List<Tx> rows;
+
+  const AccountBalance(
+      {required this.account, required this.balance, required this.rowsCounted, this.lastRowDate, this.duplicateOf, this.rows = const []});
 }
 
 /// UX-ACC: which live account counts each row (the counting rule of [accountBalances], [checkBankBalance],
@@ -132,33 +136,55 @@ List<AccountBalance> accountBalances(List<Account> accounts, List<Tx> rows) {
       out.add(AccountBalance(account: a, balance: a.opening, rowsCounted: 0, duplicateOf: counted));
       continue;
     }
-    var sum = a.opening, n = 0;
+    var sum = a.opening;
     String? last;
+    final mine = <Tx>[];
     for (final r in rows) {
       if (!_counts(a, r, owners)) continue;
       sum += r.amount;
-      n++;
+      mine.add(r);
       if (last == null || r.date.compareTo(last) > 0) last = r.date;
     }
-    out.add(AccountBalance(account: a, balance: sum, rowsCounted: n, lastRowDate: last));
+    out.add(AccountBalance(account: a, balance: sum, rowsCounted: mine.length, lastRowDate: last, rows: List.unmodifiable(mine)));
   }
   return out;
 }
 
-/// The attribution [checkBankBalance] and [balanceTrusted] use: every account of [accounts] (or [a] alone), with [a]
-/// taken as live (a check on a deleted account still counts its rows).
-RowAccounts _ownersFor(Account a, List<Account>? accounts) => RowAccounts([
-      for (final x in accounts ?? const <Account>[])
+/// The attribution [checkBankBalance] and [balanceTrusted] use: every account of [accounts] (plus [a] when missing),
+/// with [a] taken as live (a check on a deleted account still counts its rows).
+RowAccounts _ownersFor(Account a, List<Account> accounts) => RowAccounts([
+      for (final x in accounts)
         if (x.id != a.id) x,
       if (a.deleted) Account.fromRow({...a.row, 'deleted': 0}) else a,
     ]);
 
-/// [b]'s balance in the wallet currency of [st] (UX-A): itself when the account is in it, else at the owner's rate
-/// (`homeAmount`: each currency's own minor digits; a crypto account's coins at the hand-set rate), else (UX-FX) at the
-/// ECB rate of the balance's date (its last counted row, or the opening date: dates `fxNeeds` asks for); null without
-/// a rate.
-int? balanceInHome(AccountBalance b, WalletSettings st) =>
-    homeAmount(Tx(id: '', source: '', date: b.lastRowDate ?? b.account.openingDate, amount: b.balance, currency: b.account.currency), st);
+/// [b]'s balance in the wallet currency of [st] (UX-A): itself when the account is in it; else at the owner's rate for
+/// the whole balance when one is set (`homeAmount`: each currency's own minor digits; a crypto account's coins at the
+/// hand-set rate); else (UX-FX, owner 2026-11-01 "the day of the said transaction") the opening converted at the
+/// opening date plus each counted row ([AccountBalance.rows]) converted at its own date (`homeAmount`: the bank's own
+/// amount, else the ECB rate of that day). Null when any part has no rate (shown as missing, never a partial sum), the
+/// sum is past [WalletSettings.maxAmount], or [b]'s rows do not add up to its balance (built by hand). A zero part
+/// needs no rate. The dates are among `walletFxNeeds` (every live foreign row and opening).
+int? balanceInHome(AccountBalance b, WalletSettings st) {
+  final a = b.account;
+  Tx at(String date, int amount) => Tx(id: '', source: '', date: date, amount: amount, currency: a.currency);
+  if (a.currency == st.currency || st.fxRates.containsKey(a.currency)) {
+    return homeAmount(at(b.lastRowDate ?? a.openingDate, b.balance), st);
+  }
+  var parts = a.opening;
+  for (final r in b.rows) {
+    parts += r.amount;
+  }
+  if (parts != b.balance) return null;
+  int? part(Tx t) => t.amount == 0 ? 0 : homeAmount(t, st);
+  var sum = part(at(a.openingDate, a.opening));
+  for (final r in b.rows) {
+    if (sum == null) return null;
+    final h = part(r);
+    sum = h == null ? null : sum + h;
+  }
+  return sum == null || sum.abs() > WalletSettings.maxAmount ? null : sum;
+}
 
 /// The balances summed per currency (never mixed), keys sorted. Duplicates ([AccountBalance.duplicateOf]) are left out.
 Map<String, int> balanceTotals(List<AccountBalance> b) {
@@ -197,10 +223,10 @@ class BalanceCheck {
 /// The bank's balance [bankCents] at the end of [date] compared with the app's: `a.opening` + the rows that count for
 /// [a] (the same rule as [accountBalances]: not deleted, the account's currency, after its opening date, its own
 /// source's imported rows, or for cash the unmatched hand-added ones) dated up to and including [date]. Pass the
-/// account that counts its (source, currency) (not one with [AccountBalance.duplicateOf]). UX-ACC: pass every account
-/// as [accounts] (`WalletRepo.accounts()`), so rows another account of the same bank claims ([RowAccounts]) are left
-/// out; without it [a] counts every row of its source and currency (the rule before UX-ACC). Exact cents; never writes.
-BalanceCheck checkBankBalance(Account a, List<Tx> rows, {required String date, required int bankCents, List<Account>? accounts}) {
+/// account that counts its (source, currency) (not one with [AccountBalance.duplicateOf]). UX-ACC: [accounts] is every
+/// account of the wallet (`WalletRepo.accounts()`; required, so no caller counts another account's rows by leaving it
+/// out): rows another account of the same bank claims ([RowAccounts]) are left out. Exact cents; never writes.
+BalanceCheck checkBankBalance(Account a, List<Tx> rows, {required String date, required int bankCents, required List<Account> accounts}) {
   final owners = _ownersFor(a, accounts);
   var sum = a.opening, n = 0;
   for (final r in rows) {
@@ -243,7 +269,7 @@ class BankCheck {
 /// the stored [BankCheck.appCents] (a row deleted later, here or by a sync, makes a stored match stale). A check that is
 /// off now, or dated before the opening, never counts. A date after [today] counts as recent. [accounts]: as in
 /// [checkBankBalance].
-bool balanceTrusted(Account a, {required String today, BankCheck? last, required List<Tx> rows, List<Account>? accounts}) {
+bool balanceTrusted(Account a, {required String today, BankCheck? last, required List<Tx> rows, required List<Account> accounts}) {
   bool recent(String d) => isIsoDate(d) && isIsoDate(today) && daysBetween(d, today) <= bankCheckTrustDays;
   if (recent(a.openingDate)) return true;
   if (last == null || !recent(last.date) || last.date.compareTo(a.openingDate) < 0) return false;
