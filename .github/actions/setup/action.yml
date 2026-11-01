@@ -1,0 +1,51 @@
+# Toolchain of every ci.yml job, on the runner itself (no container): wallet-build (built from tools/wallet-build, on PATH),
+# the pinned Flutter (environment: flutter: in app/pubspec.yaml, the same line the local builds read) and, per input, the
+# Linux build libraries (dev/linux-packages.txt, the list of the local image) and the Android caches. Checkout is a job step.
+name: setup
+description: Build wallet-build and install Flutter (and, on request, the Linux libraries and the Android caches)
+inputs:
+  flutter:
+    description: Install the pinned Flutter (the log job needs only wallet-build)
+    default: 'true'
+  linux-libs:
+    description: Install dev/linux-packages.txt (Linux build toolchain, Xvfb, Mesa, D-Bus, fonts)
+    default: 'false'
+  android:
+    description: Restore the Gradle, NDK and CMake caches
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: tools/wallet-build/go.mod
+        cache-dependency-path: tools/wallet-build/go.sum
+    - shell: bash
+      run: |
+        (cd tools/wallet-build && GOTOOLCHAIN=local CGO_ENABLED=0 go build -trimpath -o "$GITHUB_WORKSPACE/dist/bin/wallet-build" .)
+        echo "$GITHUB_WORKSPACE/dist/bin" >> "$GITHUB_PATH"
+    - if: inputs.flutter == 'true' || inputs.android == 'true'
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version-file: app/pubspec.yaml
+        cache: true
+    - if: inputs.linux-libs == 'true'
+      shell: bash
+      run: |
+        sudo apt-get update -qq
+        sed 's/#.*//' dev/linux-packages.txt | xargs sudo apt-get install -y -qq --no-install-recommends >/dev/null
+    # Without the cache every run downloads the NDK, CMake, the Gradle distribution and all dependencies (~9 min)
+    - id: key
+      if: inputs.android == 'true'
+      shell: bash
+      run: wallet-build ci android-key
+    - if: inputs.android == 'true'
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+          ${{ steps.key.outputs.ndk-dir }}
+          ${{ steps.key.outputs.cmake-dir }}
+        key: android-${{ steps.key.outputs.ndk }}-${{ hashFiles('app/android/**/*.gradle.kts', 'app/android/gradle.properties', 'app/android/gradle/wrapper/gradle-wrapper.properties', 'app/pubspec.lock') }}
+        restore-keys: android-${{ steps.key.outputs.ndk }}-

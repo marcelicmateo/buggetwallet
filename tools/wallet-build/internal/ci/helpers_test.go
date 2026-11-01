@@ -62,7 +62,7 @@ func read(t *testing.T, path string) string {
 
 func b64(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
 
-var reTS = regexp.MustCompile(`"ts":"[^"]*"`)
+var reTS = regexp.MustCompile(`"ts": ?"[^"]*"`)
 
 func maskTS(s string) string { return reTS.ReplaceAllString(s, `"ts":"T"`) }
 

@@ -1,12 +1,11 @@
-# Manual only (owner, 2026-10-21): nothing runs on push; the owner starts this workflow from the Actions tab (or
-# `gh workflow run ci --ref v2`) when a release is ready. Jobs: `apk` (signed release APK), `linux` (release bundle +
-# smoke test), `publish` (dev release when run on v2) and `log`. Lint, package tests, analyze and the desktop integration
-# tests are verified on the laptop (`tools/build.sh test`, `desktop-test`), so they run here only with the `tests` input
-# (jobs lint, importer, core (+ sync), app, desktop; publish then waits for them and is skipped if one failed).
-# Every job runs on its own runner (separate checkout, nothing shared on disk; one job used to fill the runner disk).
-# Each job stores its log as the artifact ci-log-<job> (.github/actions/job-log); the `log` job merges them into
-# the `ci-logs` branch (latest.txt, with seconds per step) and appends one JSON line per step to history.jsonl there
-# (tools/ci-status.sh, tools/build-times.sh --ci). Logs contain only build/test output.
+# Manual only (owner, 2026-10-21): nothing runs on push; the owner starts this workflow (Actions tab, or `gh workflow run ci --ref v2`)
+# when a release is ready, and release.yml calls it with release: true. Always: `apk` (signed release APK), `linux` (release bundle +
+# smoke test), `publish` (dev release on v2) and `log`. Lint, package tests, analyze and the desktop tests run with the `tests` input
+# (jobs lint, importer, core (+ sync), relay, app, desktop; publish then waits for them and is skipped if one failed).
+# Every step is `wallet-build ci step <name> -- wallet-build <command>` (tools/wallet-build; .github/actions/setup builds it): it
+# writes the step log and the seconds. Each job stores them as the artifact ci-log-<job> (.github/actions/job-log); the `log` job
+# merges them into ci-logs:latest.txt (release: release-android-linux.txt) and appends one JSON line per step to history.jsonl there
+# (`wallet-build ci status|log`, `wallet-build times --ci`). Logs contain only build/test output. Each job runs on its own runner.
 name: ci
 on:
   workflow_dispatch:
@@ -15,156 +14,105 @@ on:
         description: Also run lint, importer, core, sync, relay, app and desktop tests
         type: boolean
         default: false
+  workflow_call:
+    inputs:
+      tests:
+        type: boolean
+        default: false
+      release:
+        description: Called by release.yml (no dev release; the log is published as release-android-linux)
+        type: boolean
+        default: false
+    secrets:
+      ANDROID_KEYSTORE_BASE64: { required: false }
+      ANDROID_KEYSTORE_PASSWORD: { required: false }
+      ANDROID_KEY_ALIAS: { required: false }
 permissions:
   contents: write
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 env:
   LOG: ${{ github.workspace }}/../ci.log
-  # tools/build.sh history (steps.jsonl, test stats) goes here; the job-log action turns it into history lines
-  BW_DATA_DIR: ${{ github.workspace }}/../bw-data
+  BW_DATA_DIR: ${{ github.workspace }}/../bw-data # history (steps.jsonl, test stats) that job-log turns into history lines
   BW_SOURCE: ci
+  BW_NATIVE: 1
+  BW_APK_ABIS: arm64
 jobs:
   lint:
+    if: ${{ inputs.tests }}
     runs-on: ubuntu-latest
-    if: ${{ inputs.tests || contains(github.event.head_commit.message, '[ci tests]') || contains(github.event.pull_request.title, '[ci tests]') }}
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version-file: app/pubspec.yaml
-          cache: true
-      - name: lint (dart format, shellcheck, actionlint)
-        id: lint
-        run: |
-          dev/install-lint-tools.sh "$RUNNER_TEMP/bin" 2>&1 | tee -a "$LOG"
-          .github/scripts/timed.sh lint "PATH=$RUNNER_TEMP/bin:\$PATH BW_NATIVE=1 tools/build.sh lint"
+      - uses: ./.github/actions/setup
+      - { shell: bash, run: 'dev/install-lint-tools.sh "$RUNNER_TEMP/bin" 2>&1 | tee -a "$LOG" && echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"' }
+      - { id: lint, run: wallet-build ci step lint -- wallet-build lint }
       - uses: ./.github/actions/job-log
         if: always()
-        with:
-          job: lint
-          outcomes: "lint=${{ steps.lint.outcome }}"
+        with: { job: lint, outcomes: "lint=${{ steps.lint.outcome }}" }
 
   importer:
+    if: ${{ inputs.tests }}
     runs-on: ubuntu-latest
-    if: ${{ inputs.tests || contains(github.event.head_commit.message, '[ci tests]') || contains(github.event.pull_request.title, '[ci tests]') }}
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version-file: app/pubspec.yaml
-          cache: true
-      # The same list as the local image (dev/Containerfile): Linux build toolchain plus Xvfb, Mesa, D-Bus and fonts
-      - name: System libraries
-        run: |
-          sudo apt-get update -qq
-          sed 's/#.*//' dev/linux-packages.txt | xargs sudo apt-get install -y -qq --no-install-recommends >/dev/null
-      - name: importer tests
-        id: importer
-        run: .github/scripts/timed.sh importer 'BW_NATIVE=1 tools/build.sh importer'
+      - uses: ./.github/actions/setup
+        with: { linux-libs: true }
+      - { id: importer, run: wallet-build ci step importer -- wallet-build importer }
       - uses: ./.github/actions/job-log
         if: always()
-        with:
-          job: importer
-          outcomes: "importer=${{ steps.importer.outcome }}"
+        with: { job: importer, outcomes: "importer=${{ steps.importer.outcome }}" }
 
+  # packages/sync (wallet_sync) runs on core's runner: it shares core's pub cache and build hooks
   core:
+    if: ${{ inputs.tests }}
     runs-on: ubuntu-latest
-    if: ${{ inputs.tests || contains(github.event.head_commit.message, '[ci tests]') || contains(github.event.pull_request.title, '[ci tests]') }}
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version-file: app/pubspec.yaml
-          cache: true
-      # The same list as the local image (dev/Containerfile): Linux build toolchain plus Xvfb, Mesa, D-Bus and fonts
-      - name: System libraries
-        run: |
-          sudo apt-get update -qq
-          sed 's/#.*//' dev/linux-packages.txt | xargs sudo apt-get install -y -qq --no-install-recommends >/dev/null
-      - name: core tests
-        id: core
-        run: .github/scripts/timed.sh core 'BW_NATIVE=1 tools/build.sh core'
-      # packages/sync (wallet_sync) runs on the same runner: it shares core's pub cache and build hooks
-      - name: sync tests
-        id: sync
-        if: ${{ !cancelled() }}
-        run: .github/scripts/timed.sh sync 'BW_NATIVE=1 tools/build.sh sync'
+      - uses: ./.github/actions/setup
+        with: { linux-libs: true }
+      - { id: core, run: wallet-build ci step core -- wallet-build core }
+      - { id: sync, if: '!cancelled()', run: wallet-build ci step sync -- wallet-build sync }
       - uses: ./.github/actions/job-log
         if: always()
-        with:
-          job: core
-          outcomes: "core=${{ steps.core.outcome }} sync=${{ steps.sync.outcome }}"
+        with: { job: core, outcomes: "core=${{ steps.core.outcome }} sync=${{ steps.sync.outcome }}" }
 
   relay:
+    if: ${{ inputs.tests }}
     runs-on: ubuntu-latest
-    if: ${{ inputs.tests || contains(github.event.head_commit.message, '[ci tests]') || contains(github.event.pull_request.title, '[ci tests]') }}
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version-file: app/pubspec.yaml
-          cache: true
-      # The same list as the local image (dev/Containerfile): Linux build toolchain plus Xvfb, Mesa, D-Bus and fonts
-      - name: System libraries
-        run: |
-          sudo apt-get update -qq
-          sed 's/#.*//' dev/linux-packages.txt | xargs sudo apt-get install -y -qq --no-install-recommends >/dev/null
-      - name: relay tests
-        id: relay
-        run: .github/scripts/timed.sh relay 'BW_NATIVE=1 tools/build.sh relay'
+      - uses: ./.github/actions/setup
+        with: { linux-libs: true }
+      - { id: relay, run: wallet-build ci step relay -- wallet-build relay }
       - uses: ./.github/actions/job-log
         if: always()
-        with:
-          job: relay
-          outcomes: "relay=${{ steps.relay.outcome }}"
+        with: { job: relay, outcomes: "relay=${{ steps.relay.outcome }}" }
 
   app:
+    if: ${{ inputs.tests }}
     runs-on: ubuntu-latest
-    if: ${{ inputs.tests || contains(github.event.head_commit.message, '[ci tests]') || contains(github.event.pull_request.title, '[ci tests]') }}
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version-file: app/pubspec.yaml
-          cache: true
-      # The same list as the local image (dev/Containerfile): Linux build toolchain plus Xvfb, Mesa, D-Bus and fonts
-      - name: System libraries
-        run: |
-          sudo apt-get update -qq
-          sed 's/#.*//' dev/linux-packages.txt | xargs sudo apt-get install -y -qq --no-install-recommends >/dev/null
-      - name: app analyze + test
-        id: app
-        run: .github/scripts/timed.sh app 'BW_NATIVE=1 tools/build.sh app'
+      - uses: ./.github/actions/setup
+        with: { linux-libs: true }
+      - { id: app, run: wallet-build ci step app -- wallet-build app }
       - uses: ./.github/actions/job-log
         if: always()
-        with:
-          job: app
-          outcomes: "app=${{ steps.app.outcome }}"
+        with: { job: app, outcomes: "app=${{ steps.app.outcome }}" }
 
   # Every app/integration_test/*_test.dart on the Linux desktop app under Xvfb (screenshots in the artifact)
   desktop:
-    runs-on: ubuntu-latest
     needs: app
-    if: ${{ inputs.tests || contains(github.event.head_commit.message, '[ci tests]') || contains(github.event.pull_request.title, '[ci tests]') }}
+    if: ${{ inputs.tests }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version-file: app/pubspec.yaml
-          cache: true
-      # The same list as the local image (dev/Containerfile): Linux build toolchain plus Xvfb, Mesa, D-Bus and fonts
-      - name: System libraries
-        run: |
-          sudo apt-get update -qq
-          sed 's/#.*//' dev/linux-packages.txt | xargs sudo apt-get install -y -qq --no-install-recommends >/dev/null
-      - name: linux desktop tests
-        id: desktop
-        run: .github/scripts/timed.sh desktop 'BW_NATIVE=1 tools/build.sh desktop-test'
-      - name: Upload Linux test screenshots and logs
+      - uses: ./.github/actions/setup
+        with: { linux-libs: true }
+      - { id: desktop, run: wallet-build ci step desktop -- wallet-build desktop-test }
+      - uses: actions/upload-artifact@v4
         if: always()
-        uses: actions/upload-artifact@v4
         with:
           name: budget-wallet-linux-tests-desktop
           path: |
@@ -174,86 +122,41 @@ jobs:
           if-no-files-found: ignore
       - uses: ./.github/actions/job-log
         if: always()
-        with:
-          job: desktop
-          outcomes: "desktop=${{ steps.desktop.outcome }}"
+        with: { job: desktop, outcomes: "desktop=${{ steps.desktop.outcome }}" }
 
   apk:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version-file: app/pubspec.yaml
-          cache: true
-      - name: Android signing key
-        id: signing
-        env:
-          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-        run: |
-          if [ -z "$KEYSTORE_B64" ]; then echo "::error::ANDROID_KEYSTORE_BASE64 secret missing (run tools/make-signing-key.sh --upload)" | tee -a "$LOG"; exit 1; fi
-          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
-          echo "BW_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
-      # Without this every run downloads the NDK, CMake, the Gradle distribution and all dependencies (~9 min)
-      - name: Android cache paths
-        id: android-cache
-        run: |
-          flutter_root=$(dirname "$(dirname "$(command -v flutter)")")
-          ndk=$(grep -oP 'val ndkVersion\s*:\s*String\s*=\s*"\K[^"]+' "$flutter_root/packages/flutter_tools/gradle/src/main/kotlin/FlutterExtension.kt")
-          { echo "ndk=$ndk"; echo "ndk-dir=$ANDROID_HOME/ndk/$ndk"; echo "cmake-dir=$ANDROID_HOME/cmake/3.22.1"; } >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-            ${{ steps.android-cache.outputs.ndk-dir }}
-            ${{ steps.android-cache.outputs.cmake-dir }}
-          key: android-${{ steps.android-cache.outputs.ndk }}-${{ hashFiles('app/android/**/*.gradle.kts', 'app/android/gradle.properties', 'app/android/gradle/wrapper/gradle-wrapper.properties', 'app/pubspec.lock') }}
-          restore-keys: android-${{ steps.android-cache.outputs.ndk }}-
-      # Signed with the release key only: build.gradle.kts has no debug-key fallback when BW_KEYSTORE is set
-      - name: build android apk
-        id: apk
+      - uses: ./.github/actions/setup
+        with: { android: true }
+      - { id: signing, run: wallet-build ci keystore, env: { ANDROID_KEYSTORE_BASE64: "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" } }
+      # Signed with the release key only (build.gradle.kts has no debug-key fallback when BW_KEYSTORE is set); wallet-build also
+      # checks the APK's signer against the key
+      - id: apk
+        run: wallet-build ci step apk -- wallet-build apk
         env:
           BW_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           BW_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           BW_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          BW_APK_ABIS: arm64
-        run: .github/scripts/timed.sh apk 'cd app && flutter pub get --enforce-lockfile >/dev/null && flutter build apk --release --target-platform android-arm64 2>&1 | tail -40'
-      - name: Upload Android app
+      - uses: actions/upload-artifact@v4
         if: steps.apk.outcome == 'success'
-        uses: actions/upload-artifact@v4
-        with:
-          name: budget-wallet-android
-          path: app/build/app/outputs/flutter-apk/app-release.apk
+        with: { name: budget-wallet-android, path: app/build/app/outputs/flutter-apk/app-release.apk }
       - uses: ./.github/actions/job-log
         if: always()
-        with:
-          job: apk
-          outcomes: "signing=${{ steps.signing.outcome }} apk=${{ steps.apk.outcome }}"
+        with: { job: apk, outcomes: "signing=${{ steps.signing.outcome }} apk=${{ steps.apk.outcome }}" }
 
   linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version-file: app/pubspec.yaml
-          cache: true
-      # The same list as the local image (dev/Containerfile): Linux build toolchain plus Xvfb, Mesa, D-Bus and fonts
-      - name: System libraries
-        run: |
-          sudo apt-get update -qq
-          sed 's/#.*//' dev/linux-packages.txt | xargs sudo apt-get install -y -qq --no-install-recommends >/dev/null
-      - name: build linux
-        id: linux
-        run: .github/scripts/timed.sh linux 'BW_NATIVE=1 tools/build.sh linux 2>&1 | tail -40'
+      - uses: ./.github/actions/setup
+        with: { linux-libs: true }
+      - { id: linux, run: wallet-build ci step linux -- wallet-build linux }
       # Starts the release bundle under Xvfb with an empty HOME: it must stay up, log app.start without SEVERE, exit on SIGTERM
-      - name: linux release smoke test
-        id: smoke
-        run: .github/scripts/timed.sh smoke 'BW_NATIVE=1 tools/build.sh desktop-smoke'
-      - name: Upload Linux test screenshots and logs
+      - { id: smoke, run: wallet-build ci step smoke -- wallet-build desktop-smoke }
+      - uses: actions/upload-artifact@v4
         if: always() && steps.smoke.outcome != 'skipped'
-        uses: actions/upload-artifact@v4
         with:
           name: budget-wallet-linux-tests
           path: |
@@ -261,46 +164,30 @@ jobs:
             dist/logs/app-linux-*.log
             dist/logs/desktop-*.log
           if-no-files-found: ignore
-      - name: Upload Linux app
+      - uses: actions/upload-artifact@v4
         if: steps.linux.outcome == 'success'
-        uses: actions/upload-artifact@v4
-        with:
-          name: budget-wallet-linux
-          path: app/build/linux/x64/release/bundle
-      # Artifacts lose file modes, so the dev release gets a tarball made here
-      - name: Pack Linux app for the dev release
-        id: pack
-        if: steps.linux.outcome == 'success' && github.ref_name == 'v2'
-        run: |
-          mkdir -p "$RUNNER_TEMP/rel"
-          tar -C app/build/linux/x64/release -czf "$RUNNER_TEMP/rel/BudgetWallet-linux-x64.tar.gz" bundle
-      - name: Upload Linux tarball
+        with: { name: budget-wallet-linux, path: app/build/linux/x64/release/bundle }
+      # Artifacts lose file modes, so the releases get a tarball made here
+      - id: pack
+        if: steps.linux.outcome == 'success'
+        run: mkdir -p "$RUNNER_TEMP/rel" && tar -C app/build/linux/x64/release -czf "$RUNNER_TEMP/rel/BudgetWallet-linux-x64.tar.gz" bundle
+      - uses: actions/upload-artifact@v4
         if: steps.pack.outcome == 'success'
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-linux-tar
-          path: ${{ runner.temp }}/rel/BudgetWallet-linux-x64.tar.gz
-          retention-days: 1
+        with: { name: release-linux-tar, path: "${{ runner.temp }}/rel/BudgetWallet-linux-x64.tar.gz", retention-days: 1 }
       - uses: ./.github/actions/job-log
         if: always()
-        with:
-          job: linux
-          outcomes: "linux=${{ steps.linux.outcome }} smoke=${{ steps.smoke.outcome }}"
+        with: { job: linux, outcomes: "linux=${{ steps.linux.outcome }} smoke=${{ steps.smoke.outcome }}" }
 
-  # Waits for the on-demand test jobs (skipped ones do not block) and for both builds; any failure skips it
+  # Waits for the test jobs (skipped ones do not block) and for both builds; any failure skips it. release.yml publishes its own.
   publish:
-    runs-on: ubuntu-latest
     needs: [lint, importer, core, relay, app, desktop, apk, linux]
-    if: ${{ !cancelled() && github.ref_name == 'v2' && needs.apk.result == 'success' && needs.linux.result == 'success' && !contains(needs.*.result, 'failure') }}
+    if: ${{ !cancelled() && !inputs.release && github.ref_name == 'v2' && needs.apk.result == 'success' && needs.linux.result == 'success' && !contains(needs.*.result, 'failure') }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
-        with:
-          name: budget-wallet-android
-          path: ${{ runner.temp }}/rel
+        with: { name: budget-wallet-android, path: "${{ runner.temp }}/rel" }
       - uses: actions/download-artifact@v4
-        with:
-          name: release-linux-tar
-          path: ${{ runner.temp }}/rel
+        with: { name: release-linux-tar, path: "${{ runner.temp }}/rel" }
       - name: Publish dev release (Android + Linux)
         env:
           GH_TOKEN: ${{ github.token }}
@@ -311,46 +198,24 @@ jobs:
           gh release create dev BudgetWallet-android.apk BudgetWallet-linux-x64.tar.gz --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title "Budget Wallet (development build)" \
             --notes "Latest development build from ${GITHUB_SHA::7}. Android: install BudgetWallet-android.apk. Linux: unpack and run bundle/budget_wallet. All platforms are built by the release workflow."
 
-  # Merges every job's ci-log-<job> artifact into ci-logs:latest.txt. Line 3 is the step outcomes line
-  # (tools/ci-status.sh prints it), line 4 the job results; then "step seconds exit" and the step logs.
+  # Merges every job's ci-log-<job> artifact into ci-logs:latest.txt. Line 3 is the step outcomes line (`wallet-build ci status`
+  # prints it), line 4 the job results; then "step seconds exit" and the step logs.
   log:
-    runs-on: ubuntu-latest
-    if: always()
     needs: [lint, importer, core, relay, app, desktop, apk, linux, publish]
+    if: always()
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with: { flutter: false }
       - uses: actions/download-artifact@v4
         continue-on-error: true
-        with:
-          pattern: ci-log-*
-          path: ${{ runner.temp }}/logs
+        with: { pattern: "ci-log-*", path: "${{ runner.temp }}/logs" }
       - name: Publish log
         env:
           GH_TOKEN: ${{ github.token }}
-          RESULTS: ${{ join(needs.*.result, ' ') }}
-          R_LINT: ${{ needs.lint.result }}
-          R_IMPORTER: ${{ needs.importer.result }}
-          R_CORE: ${{ needs.core.result }}
-          R_RELAY: ${{ needs.relay.result }}
-          R_APP: ${{ needs.app.result }}
-          R_DESKTOP: ${{ needs.desktop.result }}
-          R_APK: ${{ needs.apk.result }}
-          R_LINUX: ${{ needs.linux.result }}
-          R_PUBLISH: ${{ needs.publish.result }}
+          NEEDS: ${{ toJSON(needs) }}
+          NAME: ${{ inputs.release && 'release-android-linux' || 'latest' }}
         run: |
-          set +e  # skipped jobs have no artifact: a failing cat must not end the step (bash -e did, silently)
-          L="$RUNNER_TEMP/logs"; out="$RUNNER_TEMP/ci.txt"; jobs="lint importer core relay app desktop apk linux"
-          {
-            # one fragment per job (a job that was skipped or died before its last step has none: show its job result)
-            for j in $jobs; do
-              r=R_${j^^}
-              if [ -s "$L/ci-log-$j/outcome.txt" ]; then cat "$L/ci-log-$j/outcome.txt"; else echo "$j=${!r}"; fi
-            done | paste -sd' '
-            for j in $jobs publish; do r=R_${j^^}; printf '%s=%s ' "job:$j" "${!r}"; done; echo
-            echo
-            echo "step seconds exit"
-            for j in $jobs; do cat "$L/ci-log-$j/times.txt" 2>/dev/null || true; done
-            for j in $jobs; do echo; cat "$L/ci-log-$j/ci.log" 2>/dev/null || true; done
-          } > "$out"
-          for j in $jobs; do cat "$L/ci-log-$j/history.jsonl" 2>/dev/null || true; done > "$RUNNER_TEMP/history.jsonl"
-          .github/scripts/publish-log.sh latest "$out" "$RUNNER_TEMP/history.jsonl"
+          wallet-build ci merge --artifacts "$RUNNER_TEMP/logs" --needs-json "$NEEDS" --out "$RUNNER_TEMP/ci.txt" --history "$RUNNER_TEMP/history.jsonl"
+          wallet-build ci publish-log "$NAME" "$RUNNER_TEMP/ci.txt" "$RUNNER_TEMP/history.jsonl"

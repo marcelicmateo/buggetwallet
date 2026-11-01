@@ -1,7 +1,8 @@
 # Builds every platform and publishes the downloads as a GitHub Release.
-# Manual only (owner, 2026-10-21): started from the Actions tab (or `gh workflow run release --ref master`) when a
-# release is ready; nothing runs on push. macOS runners bill 10x minutes (Windows 2x) on private repos, and
-# Windows/macOS are parked. The gate keeps the old conditions for a future tag or [release] trigger.
+# Manual only (owner, 2026-10-21): started from the Actions tab (or `gh workflow run release --ref master`) when a release is
+# ready; nothing runs on push. macOS runners bill 10x minutes (Windows 2x) on private repos, and Windows/macOS are parked.
+# Android + Linux are built by ci.yml (called with release: true: signed APK, release bundle, smoke test, log published as
+# ci-logs:release-android-linux); Windows and Apple are built here.
 name: release
 on:
   workflow_dispatch:
@@ -11,55 +12,16 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  SHOULD_RUN: ${{ github.event_name == 'workflow_dispatch' || github.ref_type == 'tag' || contains(github.event.head_commit.message, '[release]') }}
-
 jobs:
-  gate:
-    runs-on: ubuntu-latest
-    outputs:
-      run: ${{ steps.g.outputs.run }}
-    steps:
-      - id: g
-        run: echo "run=${SHOULD_RUN}" >> "$GITHUB_OUTPUT"
-
-  android-linux:
-    needs: gate
-    if: needs.gate.outputs.run == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with: { flutter-version-file: app/pubspec.yaml, cache: true }
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ninja-build libgtk-3-dev libsecret-1-dev >/dev/null
-      - name: Build
-        env:
-          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          BW_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          BW_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          BW_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          BW_APK_ABIS: arm64
-        run: |
-          set -o pipefail
-          if [ -z "$KEYSTORE_B64" ]; then echo "::error::ANDROID_KEYSTORE_BASE64 secret missing (run tools/make-signing-key.sh --upload)" | tee -a build.log; exit 1; fi
-          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
-          export BW_KEYSTORE="$RUNNER_TEMP/release.jks"
-          cd app
-          flutter pub get --enforce-lockfile 2>&1 | tee -a ../build.log
-          flutter build apk --release --target-platform android-arm64 2>&1 | tail -40 | tee -a ../build.log
-          flutter build linux --release 2>&1 | tail -40 | tee -a ../build.log
-          mkdir -p ../dist
-          cp build/app/outputs/flutter-apk/app-release.apk ../dist/BudgetWallet-android.apk
-          tar -C build/linux/x64/release -czf ../dist/BudgetWallet-linux-x64.tar.gz bundle
-      - uses: actions/upload-artifact@v4
-        with: { name: android-linux, path: dist/* }
-      - if: always()
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: .github/scripts/publish-log.sh release-android-linux build.log
+  build:
+    uses: ./.github/workflows/ci.yml
+    with: { tests: false, release: true }
+    secrets:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
 
   windows:
-    needs: gate
-    if: needs.gate.outputs.run == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -82,8 +44,6 @@ jobs:
         run: .github/scripts/publish-log.sh release-windows build.log
 
   apple:
-    needs: gate
-    if: needs.gate.outputs.run == 'true'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -107,16 +67,20 @@ jobs:
         run: .github/scripts/publish-log.sh release-apple build.log
 
   publish:
-    needs: [gate, android-linux, windows, apple]
-    if: always() && needs.gate.outputs.run == 'true' && (needs.android-linux.result == 'success' || needs.windows.result == 'success' || needs.apple.result == 'success')
+    needs: [build, windows, apple]
+    if: always() && (needs.build.result == 'success' || needs.windows.result == 'success' || needs.apple.result == 'success')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with: { path: dist, merge-multiple: true }
+      # one artifact each, so that the test logs and ci-log-* artifacts of the called ci.yml stay out of the release; a missing one is a failed build
+      - { uses: actions/download-artifact@v4, continue-on-error: true, with: { name: budget-wallet-android, path: dist } }
+      - { uses: actions/download-artifact@v4, continue-on-error: true, with: { name: release-linux-tar, path: dist } }
+      - { uses: actions/download-artifact@v4, continue-on-error: true, with: { name: windows, path: dist } }
+      - { uses: actions/download-artifact@v4, continue-on-error: true, with: { name: apple, path: dist } }
       - name: Publish release
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
+          mv dist/app-release.apk dist/BudgetWallet-android.apk 2>/dev/null || true
           ls -la dist
           if [ "${{ github.ref_type }}" = "tag" ]; then
             tag="${{ github.ref_name }}"; title="Budget Wallet ${{ github.ref_name }}"; pre=""
