@@ -231,10 +231,12 @@ final class JsonCol extends Col<String> {
   }
 }
 
-/// A model backed by its stored row: typed getters read through their `Col`, and `model[col]` reads any column.
+/// A model backed by its stored row: typed fields read through their `Col` (once, `late final`), and `model[col]` reads
+/// any column (each call; for generic code such as forms).
 abstract class RowModel {
+  /// The stored row: a read-only copy of the map given, so a field decoded once never goes stale.
   final Map<String, Object?> row;
-  const RowModel(this.row);
+  RowModel(Map<String, Object?> row) : row = Map.unmodifiable(row);
 
   /// The value of [c] in this row ([Col.read]: lenient).
   Object? operator [](Col c) => c.read(row);

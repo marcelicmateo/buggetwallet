@@ -97,6 +97,7 @@ String? billItemsProblem(String text) {
 /// positive = what the bill asks. Bills are information: linking one never changes the paying row's category.
 /// Backed by its stored row: the getters read through [BillCols] ([Col.read]: an unknown `source`/`status` word reads
 /// as manual/review, a damaged item list as empty, a bad date or reminder count as none); `bill[col]` reads any column.
+/// Each typed field is decoded once, on first use (`late final`): the row never changes under a model.
 class Bill extends RowModel {
   Bill._(super.row);
 
@@ -158,50 +159,50 @@ class Bill extends RowModel {
         'deleted': deleted ? 1 : 0,
       });
 
-  /// A stored row (a map as `SELECT *` gives it); the map is copied.
-  static Bill fromRow(Map<String, Object?> r) => Bill._(Map.of(r));
+  /// A stored row (a map as `SELECT *` gives it); copied into the read-only [row].
+  static Bill fromRow(Map<String, Object?> r) => Bill._(r);
 
   /// `bill:<32 hex of SHA-256(externalId)>` when [externalId] is known (devices converge on one bill), else `b…`.
-  String get id => row['id'] as String;
-  BillSource get source => BillCols.source.read(row)!;
-  BillStatus get status => BillCols.status.read(row)!;
-  String? get externalId => BillCols.externalId.read(row);
-  String? get date => BillCols.date.read(row);
-  String? get dueDate => BillCols.dueDate.read(row);
-  String? get payee => BillCols.payee.read(row);
-  String? get iban => BillCols.iban.read(row);
-  String? get reference => BillCols.reference.read(row);
-  String? get description => BillCols.description.read(row);
-  String? get category => BillCols.category.read(row);
-  String? get note => BillCols.note.read(row);
-  int? get total => BillCols.total.read(row);
-  String get currency => BillCols.currency.read(row)!;
+  late final String id = row['id'] as String;
+  late final BillSource source = BillCols.source.read(row)!;
+  late final BillStatus status = BillCols.status.read(row)!;
+  late final String? externalId = BillCols.externalId.read(row);
+  late final String? date = BillCols.date.read(row);
+  late final String? dueDate = BillCols.dueDate.read(row);
+  late final String? payee = BillCols.payee.read(row);
+  late final String? iban = BillCols.iban.read(row);
+  late final String? reference = BillCols.reference.read(row);
+  late final String? description = BillCols.description.read(row);
+  late final String? category = BillCols.category.read(row);
+  late final String? note = BillCols.note.read(row);
+  late final int? total = BillCols.total.read(row);
+  late final String currency = BillCols.currency.read(row)!;
 
   /// The item list; a damaged one reads as empty. A bill made with [Bill.new] holds its list as given.
-  List<BillItem> get items => switch (row['items']) { final List<BillItem> l => l, final v => decodeBillItems(v) ?? const [] };
+  late final List<BillItem> items = switch (row['items']) { final List<BillItem> l => l, final v => decodeBillItems(v) ?? const [] };
 
   /// Fields the reader guessed from free text (PDF text, OCR): the UI marks the bill as unsure while > 0.
-  int get unsure => BillCols.unsure.read(row)!;
+  late final int unsure = BillCols.unsure.read(row)!;
 
   /// The payment: a bank row or a hand-added expense ([WalletRepo.linkBill], [WalletRepo.addExpenseFromBill]). Null
   /// for an attachment (its payment is [attachedTx]).
-  String? get linkedTx => BillCols.linkedTx.read(row);
+  late final String? linkedTx = BillCols.linkedTx.read(row);
 
   /// The payment an attachment (P16b, [isAttachment]) belongs to; null for every other bill.
-  String? get attachedTx => BillCols.attachedTx.read(row);
-  String? get warrantyUntil => BillCols.warrantyUntil.read(row);
-  String? get returnBy => BillCols.returnBy.read(row);
+  late final String? attachedTx = BillCols.attachedTx.read(row);
+  late final String? warrantyUntil = BillCols.warrantyUntil.read(row);
+  late final String? returnBy = BillCols.returnBy.read(row);
 
   /// This bill's own reminder days before [returnBy] / [warrantyUntil] (UX-A, 0..[WalletSettings.maxReturnReminderDays] /
   /// 0..[WalletSettings.maxWarrantyReminderDays]); null = the wallet setting ([effectiveReturnReminderDays]).
-  int? get returnReminderDays => BillCols.returnReminderDays.read(row);
-  int? get warrantyReminderDays => BillCols.warrantyReminderDays.read(row);
+  late final int? returnReminderDays = BillCols.returnReminderDays.read(row);
+  late final int? warrantyReminderDays = BillCols.warrantyReminderDays.read(row);
 
   /// The bill's file on the relay ([BlobRef.hash]), its type and plain size.
-  String? get blob => BillCols.blob.read(row);
-  String? get blobType => BillCols.blobType.read(row);
-  int? get blobBytes => BillCols.blobBytes.read(row);
-  bool get deleted => BillCols.deleted.read(row)!;
+  late final String? blob = BillCols.blob.read(row);
+  late final String? blobType = BillCols.blobType.read(row);
+  late final int? blobBytes = BillCols.blobBytes.read(row);
+  late final bool deleted = BillCols.deleted.read(row)!;
 
   /// Linked to its payment; an attachment always (it is a record of its payment, [attachedTx]).
   bool get paid => linkedTx != null || isAttachment;

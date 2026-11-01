@@ -623,7 +623,7 @@ abstract final class AccountCols {
 /// minor units of [currency]) is the balance at the end of [openingDate]; `accountBalances` adds the rows after it (a
 /// cash account: the hand-added rows; one with a [source]: that source's rows; any other: none, its balance is set by
 /// hand). At most one live cash account per currency and one live account per (source, currency).
-/// Backed by its stored row ([AccountCols], [RowModel]).
+/// Backed by its stored row ([AccountCols], [RowModel]); each typed field is decoded once, on first use.
 class Account extends RowModel {
   Account._(super.row);
 
@@ -650,23 +650,23 @@ class Account extends RowModel {
         'institution': institution,
       });
 
-  /// A stored row (a map as `SELECT *` gives it); the map is copied.
-  static Account fromRow(Map<String, Object?> r) => Account._(Map.of(r));
+  /// A stored row (a map as `SELECT *` gives it); copied into the read-only [row].
+  static Account fromRow(Map<String, Object?> r) => Account._(r);
 
-  String get id => row['id'] as String;
-  String get name => AccountCols.name.read(row) ?? '';
-  String? get source => AccountCols.source.read(row);
-  String get currency => AccountCols.currency.read(row)!;
-  int get opening => AccountCols.opening.read(row)!;
+  late final String id = row['id'] as String;
+  late final String name = AccountCols.name.read(row) ?? '';
+  late final String? source = AccountCols.source.read(row);
+  late final String currency = AccountCols.currency.read(row)!;
+  late final int opening = AccountCols.opening.read(row)!;
 
   /// `YYYY-MM-DD`; '' for a damaged row.
-  String get openingDate => AccountCols.openingDate.read(row) ?? '';
-  bool get deleted => AccountCols.deleted.read(row)!;
+  late final String openingDate = AccountCols.openingDate.read(row) ?? '';
+  late final bool deleted = AccountCols.deleted.read(row)!;
 
   /// Stored, or for a row written before schema 20 (or by an older build, or a kind this build does not know) from
   /// [source]: none → cash, any → bank.
-  AccountKind get kind => AccountCols.kind.read(row) ?? (source == null ? AccountKind.cash : AccountKind.bank);
-  String? get institution => AccountCols.institution.read(row);
+  late final AccountKind kind = AccountCols.kind.read(row) ?? (source == null ? AccountKind.cash : AccountKind.bank);
+  late final String? institution = AccountCols.institution.read(row);
 
   /// Longest accepted name and institution (characters, after trimming).
   static const maxName = 60;

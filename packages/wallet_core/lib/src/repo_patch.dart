@@ -10,7 +10,8 @@ extension WalletRepoPatch on WalletRepo {
   ///
   /// Entity rules run as well: a bill must be live and not an attachment (`No such bill.`); its planned row follows and
   /// an edit of its due date, total or category is held to the category rule ([updateBill]); status, links, file,
-  /// source, currency, unsure count and `deleted` change through their own actions only. An account is checked like
+  /// source, currency, unsure count and `deleted` change through their own actions only; a confirmed bill keeps its
+  /// total and date (clearing one: `<label>: needed on a confirmed bill.`). An account is checked like
   /// [updateAccount] (name, kind, source, institution, uniqueness; opening and opening date written as a pair; only
   /// changed fields are written; its currency never changes). Another entity's row must exist (`No such row.`).
   /// Logs the entity and the field count only.
@@ -64,6 +65,13 @@ extension WalletRepoPatch on WalletRepo {
     final fields = _patchFields(values);
     final b = _liveBill(id);
     if (fields.isEmpty) return 0;
+    // A confirmed bill keeps its total and date (confirmBill / addExpenseFromBill need them): clearing either would
+    // drop its planned row, so the money it reserves would come back without a word.
+    if (b.confirmed) {
+      for (final c in const <Col>[BillCols.total, BillCols.date]) {
+        if (fields.containsKey(c.name) && fields[c.name] == null) throw ArgumentError('${c.label}: needed on a confirmed bill.');
+      }
+    }
     // Only an edit that changes the reserve (due date, total, category) is held to the category rule; a note,
     // payee or warranty edit on a bill without one (confirmed before categories were asked for, or reopened) still saves: such a bill's
     // planned row is listed, not reserved ([PlannedCost.needsCategory]), so nothing counts twice either way.

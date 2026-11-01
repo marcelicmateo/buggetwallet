@@ -99,12 +99,13 @@ void main() {
         (r, id) => r.updateBill(id, date: '2026-09-20', total: 1250, clearDueDate: true, returnReminderDays: 0, note: 'many'),
         (r, id) => r.patch('bill', id, <Col, Object?>{
               BillCols.date: '2026-09-20',
-              BillCols.total: 1250,
               BillCols.dueDate: clearValue,
-              BillCols.returnReminderDays: 0,
+              BillCols.total: 1250,
               BillCols.note: 'many',
+              BillCols.returnReminderDays: 0,
             }),
-        {'date': '2026-09-20', 'total': 1250, 'due_date': null, 'return_reminder_days': 0, 'note': 'many'}),
+        // 09d5d8e's updateBill order (date, due_date, total, …, note, …, return_reminder_days); patch keeps the map's.
+        {'date': '2026-09-20', 'due_date': null, 'total': 1250, 'note': 'many', 'return_reminder_days': 0}),
   ];
 
   group('bill edits: the op on the wire is the one 09d5d8e sent', () {
@@ -119,6 +120,7 @@ void main() {
           expect(fresh.single.entity, 'bill');
           expect(fresh.single.id, id);
           expect(fresh.single.fields, c.wire, reason: 'field names and values');
+          expect(fresh.single.fields.keys.toList(), c.wire.keys.toList(), reason: 'field order on the wire');
           expect(fresh.single.toJson().keys.toSet(), {'e', 'id', 'f', 'h'});
           expect(fresh.single.hlc, isNotEmpty);
         });
@@ -184,6 +186,7 @@ void main() {
           expect(fresh.single.entity, 'account');
           expect(fresh.single.id, id);
           expect(fresh.single.fields, c.wire);
+          expect(fresh.single.fields.keys.toList(), c.wire.keys.toList(), reason: 'field order on the wire');
         });
       }
     }

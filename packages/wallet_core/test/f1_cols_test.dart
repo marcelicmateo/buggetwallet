@@ -127,6 +127,38 @@ void main() {
       final a = Account(id: 'a', name: 'Main', source: 'pbz', currency: 'EUR', opening: 5, openingDate: '2026-01-01');
       expect((a.kind, a[AccountCols.kind], a.isCash, a.countsRows), (AccountKind.bank, null, false, true));
     });
+
+    test('a typed field is decoded once; the row is a read-only copy', () {
+      final source = <String, Object?>{'id': 'b1', 'date': '2026-01-05', 'items': '[{"name":"Bread","amount":120}]'};
+      final b = Bill.fromRow(source);
+      source['date'] = '2026-02-02';
+      expect(b.date, '2026-01-05', reason: 'copied, not a view of the caller map');
+      expect(identical(b.items, b.items), isTrue, reason: 'the item list is decoded once, not per read');
+      expect(() => b.row['date'] = '2026-03-03', throwsUnsupportedError);
+    });
+
+    test('reading typed fields again costs a field read, not a decode (20k bills x 50 reads)', () {
+      final bills = [
+        for (var i = 0; i < 20000; i++)
+          Bill.fromRow({'id': 'b$i', 'date': '2026-01-${(i % 28 + 1).toString().padLeft(2, '0')}', 'status': 'confirmed'})
+      ];
+      int run(void Function(Bill b) read) {
+        final sw = Stopwatch()..start();
+        for (var k = 0; k < 50; k++) {
+          bills.forEach(read);
+        }
+        return sw.elapsedMicroseconds;
+      }
+
+      var sink = 0;
+      for (final b in bills) {
+        sink += b.date!.length + b.status.index; // first reads decode
+      }
+      final cached = run((b) => sink += b.date!.length + b.status.index);
+      final decoded = run((b) => sink += BillCols.date.read(b.row)!.length + BillCols.status.read(b.row)!.index);
+      expect(sink, greaterThan(0));
+      expect(cached * 3, lessThan(decoded), reason: 'cached $cached µs vs decoded $decoded µs');
+    });
   });
 
   group('patch', () {
@@ -185,6 +217,25 @@ void main() {
       repo.patch('bill', billId, {BillCols.total: 5000, BillCols.category: 'Groceries'});
       expect(repo.plannedCosts().single.amount, 5000);
       repo.patch('bill', billId, {BillCols.note: 'no category rule for a note'});
+    });
+
+    test('a confirmed bill keeps its total and date: clearing one is refused, nothing written', () {
+      repo.patch('bill', billId, {BillCols.date: '2026-10-01', BillCols.dueDate: '2026-10-20', BillCols.category: 'Groceries'});
+      repo.confirmBill(billId);
+      expect(repo.plannedCosts().single.amount, 4599, reason: 'reserved');
+      final before = state();
+      for (final clear in [clearValue, null]) {
+        expect(() => repo.patch('bill', billId, {BillCols.total: clear}), _refused('Total: needed on a confirmed bill.'));
+        expect(() => repo.patch('bill', billId, {BillCols.note: 'n', BillCols.date: clear}), _refused('Date: needed on a confirmed bill.'));
+      }
+      expect(state(), before);
+      repo.updateBill(billId, clearDueDate: true, total: 1); // the due date may go (its planned row with it)
+      expect(repo.plannedCosts(), isEmpty);
+      // A bill in review may still drop them.
+      final (other, _) =
+          repo.importBill(const NormalizedBill(source: BillSource.hub3, externalId: 'hub3:f1cols2', total: 100, date: '2026-10-01'));
+      repo.patch('bill', other, {BillCols.total: clearValue, BillCols.date: clearValue});
+      expect((repo.bill(other)!.total, repo.bill(other)!.date), (null, null));
     });
 
     test('the same op as updateBill / updateAccount for the same edit', () async {
