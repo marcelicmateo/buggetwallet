@@ -112,8 +112,10 @@ void main() {
     test('a coin rate may be large, a currency rate may not', () {
       expect(parseFxRate('62000.5', code: 'BTC'), 62000500000);
       expect(parseFxRate('62000,5', code: 'BTC'), 62000500000);
-      expect(parseFxRate('1000001', code: 'BTC'), isNull, reason: 'above 1,000,000 per coin');
-      expect(parseFxRate('150', code: 'USD'), isNull, reason: 'above 100 per unit');
+      expect(parseFxRate('1000000001', code: 'BTC'), isNull, reason: 'above 1,000,000,000 per coin');
+      expect(parseFxRate('62000', code: 'BTC'), 62000000000);
+      expect(parseFxRate('1000001', code: 'USD'), isNull, reason: 'above 1,000,000 per unit');
+      expect(parseFxRate('160.5', code: 'JPY'), 160500000, reason: 'a yen wallet needs rates well above 100');
       expect(parseFxRate('0.9240', code: 'USD'), 924000);
       expect(parseFxRate('150'), 150000000, reason: 'without a code the range is core\'s to check');
       expect(parseFxRate('1.1234567', code: 'USD'), isNull, reason: 'seven decimals are refused');

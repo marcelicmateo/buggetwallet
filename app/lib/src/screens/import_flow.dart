@@ -56,8 +56,10 @@ Future<void> pickAndImport(BuildContext context, WalletController wc, FileChoose
       },
       confirmRemoval: (n) async => context.mounted && await confirmRemovePayments(context, n),
       // Q4: the owner sees what the file will do first (Settings › Import › Always show; off = files go straight in).
-      confirmPreview:
-          wc.importPreviewAlways ? (preview, bank) async => context.mounted ? openImportPreview(context, preview, bank) : null : null);
+      confirmPreview: wc.importPreviewAlways
+          ? (preview, bank) async =>
+              context.mounted ? openImportPreview(context, preview, bank, problems: wc.previewProblems, invalid: wc.previewInvalid) : null
+          : null);
   // A saved layout that read the file another way replaced its earlier payments: Undo puts them back.
   final undo = lines.map((l) => l.undo).whereType<VoidCallback>().firstOrNull;
   if (undo != null && context.mounted) {

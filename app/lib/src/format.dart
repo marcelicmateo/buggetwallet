@@ -232,7 +232,7 @@ int? parseFxRate(String input, {String? code}) {
   final digits = RegExp(r'^\d+$');
   if (whole.isEmpty) whole = '0';
   if (!digits.hasMatch(whole) || (frac.isNotEmpty && !digits.hasMatch(frac))) return null;
-  if (frac.length > 6 || whole.length > 9) return null;
+  if (frac.length > 6 || whole.length > 10) return null;
   final rate = int.parse(whole) * 1000000 + int.parse(frac.padRight(6, '0'));
   if (code != null && rate > FxRate.maxRateOf(code)) return null;
   return rate;
