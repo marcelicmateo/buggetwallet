@@ -73,7 +73,10 @@ impl=${BW_IMPL:-auto}
 cmd_=${1:-}
 case "$cmd_" in -q|--quiet) cmd_=${2:-} ;; esac
 case "$impl:${cmd_:-test}" in
-  go:*)  # add "|auto:<command>" to this pattern when its parity case passes
+  # auto list (M3, 2026-11-01): the commands whose parity case passed (tools/wallet-build/parity). Still bash: format,
+  # outdated, perf, web, all, mutate, image, mcp, relay-native-test, stage (no parity case yet, or not soaked).
+  go:*|auto:test|auto:lint|auto:analyze|auto:importer|auto:core|auto:sync|auto:relay|auto:app|auto:shell|auto:image-name|\
+  auto:lsp|auto:relay-bin|auto:linux|auto:desktop-smoke|auto:apk|auto:web-test|auto:desktop-test)
     mkdir -p "$ROOT/dist/bin"
     if ! (cd "$ROOT/tools/wallet-build" && GOTOOLCHAIN=local CGO_ENABLED=0 go build -trimpath -o "$ROOT/dist/bin/wallet-build" .) \
       > "$ROOT/dist/wallet-build-build.log" 2>&1; then
