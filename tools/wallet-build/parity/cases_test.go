@@ -197,9 +197,10 @@ func cheapCases(t *testing.T, repo string) []Case {
 		}
 		checkNoRunDir(t, s)
 	}
-	fwd := mk("forwarded_timeout_env_lint", -1, "lint")
-	fwd.Env = []string{"BW_TIMEOUT_FORMAT=1"}
-	fwd.Loose = true
+	// A limit that never fires: both sides must behave the same with the variable set (the Go-only step_timeout
+	// case proves a firing limit; TestHostForwardsTimeoutEnv proves the -e forwarding).
+	fwd := mk("forwarded_timeout_env_lint", 0, "lint")
+	fwd.Env = []string{"BW_TIMEOUT_FORMAT=600", "BW_STEP_TIMEOUT=600"}
 	relay := mk("relay_bin_x64", 0, "relay-bin", "x64")
 	relay.Artifacts = []string{"dist/relay"}
 	unknown := usage("usage_unknown_command", "no-such-command")
