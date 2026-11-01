@@ -35,11 +35,11 @@ Theme waits for the owner's mockup pick; crypto rate by hand. Merge order A-core
 | # | Item | Agent | Depends on | Status |
 |---|---|---|---|---|
 | UX-A-core | currencies + digits, prevalentCurrency, account kinds (schema 20), built-in rule overrides | core-builder (worktree) | – | running |
-| UX-A-ui | bill dates (calendar, chips, length), inline reminder, Today hero wide, Month → Period sheet | ui-builder (worktree) | – | running |
+| UX-A-ui | bill dates (calendar, chips, length), inline reminder, Today hero wide, Month → Period sheet | ui-builder (worktree) | – | built 45ecf90, reviewed; fix round running (hero full-width row, compact dates, 6 review findings) |
 | UX-A-tests | spec tests for A-core money/migration edges | test-writer (worktree) | – | running |
 | UX-C-mock | 3 theme mockups (Today + Plan, light/dark) published for the owner | general-purpose (sonnet) | – | done: owner picked 1 Clean neutral |
 | UX-A-tests | (above) | | | done 7c0d879 (core-builder cherry-picks it) |
-| UX-C1 | Clean neutral tokens, Inter, card/rail surfaces, light + dark | ui-builder (worktree) | – | running |
+| UX-C1 | Clean neutral tokens, Inter, card/rail surfaces, light + dark | ui-builder (worktree) | – | done 97dccd7 + review fixes 80934aa, merged b60355e |
 | UX-A-ui2 | currency picker + offer, account form by kind, editable built-ins | ui-builder | A-core merged | queued |
 | UX-B | Plan window, Tags window, Settings = setup, Today tiles | ui-builder (+ core if needed) | UX-A | queued |
 | UX-C2 | tightening pass over every screen | ui-builder | UX-B | queued |
