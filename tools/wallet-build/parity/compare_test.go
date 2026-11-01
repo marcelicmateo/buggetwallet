@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 )
 
 var (
@@ -60,12 +61,13 @@ func compareRun(t *testing.T, c Case, a, b *side, i int) {
 	if !diffLines(t, cn, label+" file names", fa, fb) {
 		return
 	}
-	// last.status
+	// last.status: each side must be in its own start order (instant from the .status stamps, then name: stamps are whole
+	// seconds and parallel steps share one); across the sides the lines are compared as a set, because two runs need not
+	// share their ties (a quick host step can share a second with the first container step on one side only).
 	la, lb := lastStatus(t, cn, a, da), lastStatus(t, cn, b, db)
-	if c.Unordered {
-		la, lb = sorted(la), sorted(lb)
-	}
-	diffLines(t, cn, label+"last.status (step ok|failed, order)", la, lb)
+	checkStartOrder(t, cn, a, da, la)
+	checkStartOrder(t, cn, b, db, lb)
+	diffLines(t, cn, label+"last.status (step ok|failed)", sorted(la), sorted(lb))
 	// last-failed.txt
 	xa, _ := read(filepath.Join(da, "last-failed.txt"))
 	xb, _ := read(filepath.Join(db, "last-failed.txt"))
@@ -115,6 +117,37 @@ func lastStatus(t *testing.T, cn string, s *side, dir string) []string {
 		out = append(out, strings.Join(f[:min(2, len(f))], " "))
 	}
 	return out
+}
+
+// checkStartOrder: last.status lists the steps by start instant (the <step>.status stamp), ties by name.
+func checkStartOrder(t *testing.T, cn string, s *side, dir string, rows []string) {
+	t.Helper()
+	type key struct {
+		at   int64
+		name string
+	}
+	var keys []key
+	for _, r := range rows {
+		name := strings.Fields(r)[0]
+		raw, ok := read(filepath.Join(dir, name+".status"))
+		f := strings.Fields(raw)
+		if !ok || len(f) != 3 {
+			t.Errorf("parity[%s] %s last.status names %q but %s.status is missing or malformed", cn, s.impl, name, name)
+			return
+		}
+		at, err := time.Parse(time.RFC3339, f[2])
+		if err != nil {
+			t.Errorf("parity[%s] %s %s.status start %q: %v", cn, s.impl, name, f[2], err)
+			return
+		}
+		keys = append(keys, key{at.Unix(), name})
+	}
+	for i := 1; i < len(keys); i++ {
+		p, q := keys[i-1], keys[i]
+		if p.at > q.at || (p.at == q.at && p.name > q.name) {
+			t.Errorf("parity[%s] %s last.status: %q listed before %q but starts later (or same second, later name)", cn, s.impl, p.name, q.name)
+		}
+	}
 }
 
 // statusFields: "<secs one decimal> <exit> <iso start>"; the exit field is compared (desktop merges write `bad`).

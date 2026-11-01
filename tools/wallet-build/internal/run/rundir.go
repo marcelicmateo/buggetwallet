@@ -127,7 +127,6 @@ func (c *Ctx) WriteLast(dir string, code int) {
 	files, _ := filepath.Glob(filepath.Join(dir, "*.status"))
 	type row struct {
 		at                int64
-		written           int64 // .status mtime (ns): steps run one after the other end, and write it, in start order
 		name, state, secs string
 	}
 	var rows []row
@@ -150,18 +149,11 @@ func (c *Ctx) WriteLast(dir string, code int) {
 		if t, err := time.Parse(time.RFC3339, started); err == nil {
 			at = t.Unix()
 		}
-		var written int64 // stamps are whole seconds: a tie goes to the .status written first, then the name
-		if st, err := os.Stat(f); err == nil {
-			written = st.ModTime().UnixNano()
-		}
-		rows = append(rows, row{at, written, n, state, secs})
+		rows = append(rows, row{at, n, state, secs})
 	}
 	sort.Slice(rows, func(i, j int) bool {
 		if rows[i].at != rows[j].at {
 			return rows[i].at < rows[j].at
-		}
-		if rows[i].written != rows[j].written {
-			return rows[i].written < rows[j].written
 		}
 		return rows[i].name < rows[j].name
 	})

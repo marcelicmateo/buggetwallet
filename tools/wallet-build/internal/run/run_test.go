@@ -497,22 +497,6 @@ func TestLastStatusOrdersByInstant(t *testing.T) {
 	}
 }
 
-// stamps are whole seconds: a host step and the first container step can share one; the .status written first wins
-func TestLastStatusTieGoesToFirstWritten(t *testing.T) {
-	c := newCtx(t)
-	d, _ := c.Begin("lint")
-	gc, al := filepath.Join(d.Path, "go-check.status"), filepath.Join(d.Path, "actionlint.status")
-	os.WriteFile(gc, []byte("0.4 0 2026-11-01T15:10:29+01:00\n"), 0o644) // 14:10:29 UTC, host, written first
-	os.WriteFile(al, []byte("0.0 0 2026-11-01T14:10:29+00:00\n"), 0o644)
-	base := time.Date(2026, 11, 1, 14, 10, 29, 0, time.UTC)
-	os.Chtimes(gc, base, base.Add(400*time.Millisecond))
-	os.Chtimes(al, base, base.Add(900*time.Millisecond))
-	d.Finish(0)
-	if last, _ := os.ReadFile(filepath.Join(d.Path, "last.status")); string(last) != "go-check ok 0.4\nactionlint ok 0.0\n" {
-		t.Errorf("last.status %q", last)
-	}
-}
-
 // a step whose log cannot be opened must not be recorded as ok
 func TestUnwritableLogIsAFailedStep(t *testing.T) {
 	c := newCtx(t, "BW_RUN_DIR="+t.TempDir())

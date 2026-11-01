@@ -98,13 +98,11 @@ write_last() {
   for f in "$dir"/*.status; do
     read -r secs rc started < "$f" || continue
     n=$(basename "$f" .status)
-    # ordered by the instant (host steps are stamped in local time, container steps in UTC); stamps are whole seconds, so a
-    # tie goes to the .status file written first (it is written when the step ends: steps run one after the other end in
-    # start order), then the name
-    lines+=("$(date -d "$started" +%s 2> /dev/null || echo 0) $(stat -c %.9Y "$f") $n $([[ $rc == 0 ]] && echo ok || echo failed) $secs")
+    # ordered by the instant (host steps are stamped in local time, container steps in UTC), then by name
+    lines+=("$(date -d "$started" +%s 2> /dev/null || echo 0) $n $([[ $rc == 0 ]] && echo ok || echo failed) $secs")
   done
   shopt -u nullglob
-  { ((${#lines[@]})) && printf '%s\n' "${lines[@]}" | LC_ALL=C sort -k1,1n -k2,2 -k3,3 | cut -d' ' -f3-; true; } > "$dir/last.status"
+  { ((${#lines[@]})) && printf '%s\n' "${lines[@]}" | LC_ALL=C sort -k1,1n -k2,2 | cut -d' ' -f2-; true; } > "$dir/last.status"
   {
     while read -r n rc _; do
       if [[ $rc == failed ]]; then failed=1; echo "$n $ROOT/dist/logs/$n.log"; fi

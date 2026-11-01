@@ -37,7 +37,7 @@ no container left, no `.running`).
 ## What is compared (after masking)
 
 Exit code; stdout (the step table; stderr too for usage cases); `runs/` directory list; per run dir the recursive file
-name list, `last.status` (step + ok/failed, in order), `last-failed.txt`, every `<step>.status` exit field, the first
+name list, `last.status` (step + ok/failed as a set; each side must list its steps by the start instant of its own `.status` stamps, ties by name: stamps are whole seconds, so two runs need not share their ties), `last-failed.txt`, every `<step>.status` exit field, the first
 and last line of each log that has a `.status`, `tests-*-summary.txt` and `stage-summary.txt` structure; artifact name
 lists; history `steps.jsonl`, `tests.jsonl`, `perf.jsonl` (parsed: key order, compact vs `json.dumps` spacing, every
 field except the masked ones; `seconds` must look like `12.0`). Screenshots: file names only, never images.
@@ -45,7 +45,7 @@ field except the masked ones; `seconds` must look like `12.0`). Screenshots: fil
 Masking: ISO timestamps, run ids and run dir names (`<TS>-<cmd>-<COMMIT>`), the temp data dir, the repo path, `/tmp/tmp.*`,
 seconds (`12.3 s`, bare `12.3` columns, `last.status`/`.status` seconds fields), `NN ms`, the short commit (+ `-dirty`),
 whitespace runs in tables. Histogram counts and the slowest-test rows are dropped from summaries (header, bucket labels,
-row count kept). `tests.jsonl` lines are sorted (completion order), as are `last.status` and `steps.jsonl` in unordered cases.
+row count kept). `tests.jsonl` lines are sorted (completion order), as are `steps.jsonl` lines in unordered cases.
 The `pub` step (`pub.log`, `pub.status`, the `pub` rows) is ignored: it runs only when resolution is stale, which the first
 run clears for the second.
 
