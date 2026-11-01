@@ -190,7 +190,8 @@ extension WalletRepoFx on WalletRepo {
     };
     if (need.isEmpty) return true;
     final r = db.select(
-        'SELECT COUNT(DISTINCT cur) AS n FROM ecb_rates WHERE date = ? AND cur IN (${List.filled(need.length, '?').join(', ')})', [date, ...need]);
+        'SELECT COUNT(DISTINCT cur) AS n FROM ecb_rates WHERE date = ? AND cur IN (${List.filled(need.length, '?').join(', ')})',
+        [date, ...need]);
     return r.first['n'] == need.length;
   }
 
