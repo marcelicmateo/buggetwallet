@@ -94,6 +94,33 @@ longer matches). One targeted check at the end (`tools/build.sh core` + `sync` +
 3. **Rules panel**: built-ins listed with the same row menu as own rules (edit, turn off, reset if edited); remove
    "Built in (read-only)".
 
+## UX-FX — daily exchange rates per payment date (owner 2026-11-01: "why don't you get the exchange rate from the internet on that specific date?" → yes, in Stage UX)
+Source: the ECB euro reference rates (about 30 currencies, every business day since 1999, free, no key, published
+values never change). **Privacy:** the app downloads the whole history file (`eurofxref-hist.zip`, then the 90-day
+file for refreshes), never a per-date or per-currency request, so the ECB learns nothing about the wallet. HTTPS only;
+the fetch goes through the sync package's http client stack (no new packages: `archive` and `http` are already used).
+Logs: outcome and counts only.
+- **Core** (after F1-core merges, declared with `Col`s): a synced entity `fx_day` (id `<CUR>:<YYYY-MM-DD>`; `cur`, `date`,
+  `per_eur` = units of CUR per 1 EUR × 1e6 as an int, `source` 'ecb'), written only for the (currency, date) pairs the
+  wallet needs (dates of foreign payments, bills, IOUs, opening balances, and every date when the wallet currency itself
+  is not EUR); the full downloaded history stays in a device-local cache table (never synced, never backed up). Folded
+  into **schema 20** (not pushed yet), so no extra bump. Same values from the ECB on every device, so two devices writing
+  the same row agree.
+- **Conversion** of an amount in A on date d into wallet currency W: the ECB day = the latest ECB date ≤ d within 7
+  days (weekends, holidays); rate = per_eur(W) / per_eur(A) (EUR = 1e6), exact integer/BigInt math, rounded once at the
+  end, half away from zero (as today). No ECB day within 7 days, or a currency the ECB doesn't publish → not counted
+  (shown under "Other currencies, not counted", as today) unless a hand-set rate exists.
+- **Precedence:** a hand-set rate for a currency (existing setting) wins over ECB for that currency (owner: your own rate
+  still wins); the rate's source is shown wherever a rate is shown ("ECB 31 Oct" / "your rate"). BTC: hand-set only.
+- **Fetch:** automatically when the wallet needs a (currency, date) it doesn't have, at most once a day, never on a
+  metered warning; a "Get rates now" action in Settings › Accounts › Currencies; failures are shown plainly and never
+  block anything.
+- **Wallet currency switch** (UX-A-ui2 dialog): with ECB rates, old payments in the former currency convert at their
+  own dates' rates, so nothing drops out; the dialog says which way it will count.
+Tests: conversion at exact known ECB values (pick real published days for EUR/USD/JPY/GBP from the file format, values as
+literals), weekend/holiday fallback, 8-day gap → not counted, hand rate wins, two devices fetching agree, offline device
+shows "not counted" until synced/fetched, a corrupt or truncated download writes nothing.
+
 ## UX-B — reorganisation (after UX-A)
 - **B1 Plan window** = Budget › Plan, edited in place (no Edit mode): expected income, plan lines, budgets per category.
   Settings › Budgets per category and Settings › Expected income move here (Today's income tile opens Plan).
