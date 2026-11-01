@@ -60,3 +60,18 @@ ci-status: $(BIN)
 	$(WB) ci status $(ARGS)
 ci-log: $(BIN)
 	$(WB) ci log $(ARGS)
+
+# ---- GO4-A helpers (ported Python tools; GO4-B adds its own block below, so the two never touch the same lines) ----
+#   make fixtures [DIR=packages/wallet_importer/test/fixtures] [SET=all|banks|bills|generic]   synthetic importer fixtures
+#   make fixtures-embed                 app/integration_test/support/fixtures.dart from the committed bank files
+#   make token-usage [ARGS="--since 2026-10-20 --json out.json"]
+#   make log-summary ARGS="app.log …"
+#   make lsp-query ARGS="refs path:line:col …"   (starts the language server in the container)
+# (mutate is above: make mutate ARGS="core lib/x.dart --max 5")
+.PHONY: fixtures fixtures-embed token-usage log-summary lsp-query
+fixtures: $(BIN)
+	$(WB) fixtures $(or $(DIR),packages/wallet_importer/test/fixtures) $(SET)
+fixtures-embed: $(BIN)
+	$(WB) fixtures embed
+token-usage log-summary lsp-query: $(BIN)
+	$(WB) $@ $(ARGS)
