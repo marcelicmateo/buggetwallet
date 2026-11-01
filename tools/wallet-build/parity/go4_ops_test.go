@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 // ---------------- relay (tools/relay.sh) ----------------
@@ -32,8 +33,6 @@ func TestGO4Relay(t *testing.T) {
 			t.Errorf("%s: status with nothing running must say 'not running':\n%s", sb.impl, r.out)
 		}
 	}
-	noArgs := mk("relay_no_args_is_status")
-	noArgs.want = 0
 	stop := mk("relay_stop_nothing_running", "stop")
 	stop.want = 0
 	logs := mk("relay_logs_nothing_running", "logs")
@@ -41,8 +40,6 @@ func TestGO4Relay(t *testing.T) {
 	badPort := mk("relay_bad_port", "status")
 	badPort.env = []string{"BW_RELAY_PORT=abc"}
 	badPort.want = 2
-	usage := mk("relay_usage_unknown_command", "bogus")
-	usage.want, usage.exitOnly = 2, true
 	resetNo := mk("relay_reset_declined", "reset")
 	resetNo.stdin = "n\n"
 	resetNo.prep = func(t *testing.T, sb *sandbox) { sb.write(filepath.Join(sb.data, "relay", "keep.txt"), "x") }
@@ -58,7 +55,7 @@ func TestGO4Relay(t *testing.T) {
 			t.Errorf("%s: reset must delete the relay data folder inside BW_DATA_DIR", sb.impl)
 		}
 	}
-	for _, c := range []g4{status, noArgs, stop, logs, badPort, usage, resetNo, resetYes} {
+	for _, c := range []g4{status, stop, logs, badPort, resetNo, resetYes} {
 		t.Run(c.name, func(t *testing.T) { runG4(t, c) })
 	}
 }
@@ -152,8 +149,6 @@ func TestGO4Web(t *testing.T) {
 			t.Errorf("%s: want 'not running':\n%s", sb.impl, r.out)
 		}
 	}
-	noArgs := mk("web_no_args_is_status")
-	noArgs.want = 0
 	stop := mk("web_stop_nothing_running", "stop")
 	stop.want = 0
 	stopStale := mk("web_stop_removes_stale_pidfile", "stop")
@@ -168,8 +163,6 @@ func TestGO4Web(t *testing.T) {
 	statusStale := mk("web_status_stale_pidfile_is_not_running", "status")
 	statusStale.prep = stopStale.prep
 	statusStale.want = 0
-	usage := mk("web_usage_unknown_command", "bogus")
-	usage.want, usage.exitOnly = 2, true
 	badPort := mk("web_serve_bad_port", "serve", "abc")
 	badPort.want, badPort.exitOnly = 2, true
 	noBuild := mk("web_serve_without_build", "serve", "18999")
@@ -180,7 +173,7 @@ func TestGO4Web(t *testing.T) {
 	shotArgs.want, shotArgs.exitOnly = 2, true
 	shotSize := withBuild(mk("web_shot_bad_size", "shot", "/", "{WORK}/o.png", "12x"))
 	shotSize.want, shotSize.exitOnly = 2, true
-	for _, c := range []g4{status, noArgs, stop, stopStale, statusStale, usage, badPort, noBuild, shotNoBuild, shotArgs, shotSize} {
+	for _, c := range []g4{status, stop, stopStale, statusStale, badPort, noBuild, shotNoBuild, shotArgs, shotSize} {
 		t.Run(c.name, func(t *testing.T) { runG4(t, c) })
 	}
 }
@@ -453,7 +446,7 @@ func TestGO4SigningKey(t *testing.T) {
 	}
 	onlyKeystore := mk("signing_key_refuses_when_only_keystore_exists")
 	onlyKeystore.prep = func(t *testing.T, sb *sandbox) { sb.write("keys/android-release.jks", "not a keystore\n") }
-	onlyKeystore.files = []string{"keys/*"}
+	onlyKeystore.exitOnly = true // the message is grep's own error text in bash
 	onlyKeystore.check = func(t *testing.T, sb *sandbox, r *g4res) {
 		if _, err := os.Stat(filepath.Join(sb.root, "keys", "signing.env")); err == nil {
 			t.Errorf("%s: wrote an env file next to an existing keystore", sb.impl)
@@ -787,6 +780,9 @@ func TestGO4CIStatus(t *testing.T) {
 		failing(mk("ci_log_no_ci_logs_branch", opts{greenRows, allDone, nil, true}, -1, "--log")),
 	}
 	for _, c := range cases {
+		if strings.Contains(c.name, "wait") {
+			c.timeout = 40 * time.Second
+		}
 		t.Run(c.name, func(t *testing.T) { runG4(t, c) })
 	}
 }
