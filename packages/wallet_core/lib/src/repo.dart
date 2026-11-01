@@ -80,7 +80,16 @@ class ImportSummary {
   final Map<String, BalanceCheck> bankChecks;
 
   const ImportSummary(this.added, this.duplicates, this.matched, this.skipped,
-      {this.transfers = 0, this.collisions = 0, this.tooLarge = 0, this.skippedByOwner = 0, this.bankChecks = const {}});
+      {this.transfers = 0,
+      this.collisions = 0,
+      this.tooLarge = 0,
+      this.skippedByOwner = 0,
+      this.bankChecks = const {},
+      this.accountsAssigned = 0});
+  /// UX-ACC: rows given their app account ([Tx.account]) by this import: new rows whose `accountKey` matched a live
+  /// account, and known rows without one that a re-import filled.
+  final int accountsAssigned;
+
 }
 
 final _log = Logger('bw.repo');
@@ -546,6 +555,10 @@ class WalletRepo {
   /// amount within 3 days are matched to a bank row their device did not hold when they were added, which keeps their
   /// category ([planMatches]).
   ///
+  /// UX-ACC: a row's `accountKey` (`withAccountKeys`) that matches a live account of its source and currency
+  /// ([Account.matchKey]) gives the new row that account ([Tx.account], in its creation op); no match → none (the main
+  /// account counts it; `unknownImportAccounts` lists what to ask). A known row whose stored account is none gets it
+  /// (only then, never overwritten) ([ImportSummary.accountsAssigned]).
   /// [revive] (P12): ids of rows `setCsvMapping(force: true)` deleted. A deleted row whose id is in it and in the batch
   /// (same amount and description) is undeleted through [_write] and counted as added, so a forced layout change that
   /// reads some rows to the same ids never leaves them deleted. Only those ids: a row deleted for any other reason stays.
@@ -564,7 +577,17 @@ class WalletRepo {
     if (tooLarge > 0) logEvent(_log, Level.WARNING, 'repo.tooLarge', {'source': sourceLogKey(batch.source), 'count': tooLarge});
     final changes = <(String, String, Map<String, Object?>)>[];
     final revived = <String>[];
-    var fresh = 0;
+    var fresh = 0, assigned = 0;
+    // UX-ACC: a row whose accountKey matches a live account of its source and currency belongs to it; a known row
+    // without an account gets it (filled once, never overwritten), so re-importing old files assigns old rows.
+    final owners = batch.transactions.any((n) => n.accountKey != null) ? RowAccounts(accounts()) : null;
+    String? accountFor(NormalizedTransaction n) => switch ((owners, n.accountKey)) {
+          (final o?, final k?) => o.keyedOf(n.source, n.currency, k),
+          _ => null,
+        };
+    final unassigned = owners == null
+        ? const <String>{}
+        : {for (final r in db.select('SELECT id FROM tx WHERE manual = 0 AND account IS NULL')) r['id'] as String};
     for (final (i, n) in batch.transactions.indexed) {
       switch (c.fates[i]) {
         case _RowFate.fresh:
@@ -572,14 +595,20 @@ class WalletRepo {
           changes.add((
             'tx',
             n.id,
+      final acc = accountFor(n);
             {
+        case _RowFate.duplicate || _RowFate.revived when acc != null && unassigned.remove(n.id):
+          assigned++;
+          changes.add(('tx', n.id, {TxCols.account.column: acc}));
+          if (c.fates[i] == _RowFate.revived) revived.add(n.id);
               'source': n.source,
               'date': n.date,
+          if (acc != null) assigned++;
               'amount': n.amountMinor,
               'currency': n.currency,
               'bank_type': n.bankType,
               'description': n.description,
-              if (n.kindHint case final k?) 'kind_hint': k.name, // never `account`: it names the owner's account
+              if (n.kindHint case final k?) 'kind_hint': k.name, // never `n.account`: it names the owner's account
               'manual': 0,
               // Never 'deleted': a new row is live through the column default, and writing deleted: 0 here with a
               // fresh HLC would undo a delete made on another device that this one has not synced yet. Only
@@ -587,6 +616,7 @@ class WalletRepo {
             }
           ));
         case _RowFate.revived:
+              if (acc != null) TxCols.account.column: acc, // UX-ACC: the app account, never the export's name
           revived.add(n.id);
         default:
           break;
@@ -601,7 +631,12 @@ class WalletRepo {
     final checks = _recordBankChecks(batch);
     final added = fresh + revived.length;
     final s = ImportSummary(added, batch.transactions.length - added - tooLarge - skipped, matched, batch.skipped,
-        transfers: transfers, collisions: collisions, tooLarge: tooLarge, skippedByOwner: skipped, bankChecks: checks);
+        transfers: transfers,
+        collisions: collisions,
+        tooLarge: tooLarge,
+        skippedByOwner: skipped,
+        bankChecks: checks,
+        accountsAssigned: assigned);
     t.done({
       'source': sourceLogKey(batch.source), // `csv` for a mapped CSV: the shape id is a hash of header names
       'rows': batch.transactions.length,
@@ -621,6 +656,7 @@ class WalletRepo {
 
   /// What [importBatch] (and `previewImport`) does with each row of [batch], in batch order, from one read of the
   /// stored ids: beyond ±[maxAmountCents] → tooLarge; in [skip] → skipped; a stored id, or one an earlier row of this
+      if (assigned > 0) 'accounts': assigned,
   /// batch took (the first row wins and is never overwritten) → duplicate, or collision with another amount or
   /// description, or revived when deleted, in [revive] and the same; else fresh.
   ({List<_RowFate> fates, int Function(_RowFate) count}) _classifyBatch(ImportBatch batch,

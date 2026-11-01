@@ -213,7 +213,7 @@ void main() {
       ]);
       expect(entitySchema['bill']!.table, 'bills');
       expect(entitySchema['account']!.columnNames,
-          ['name', 'source', 'currency', 'opening', 'opening_date', 'deleted', 'kind', 'institution']);
+          ['name', 'source', 'currency', 'opening', 'opening_date', 'deleted', 'kind', 'institution', 'match_key']);
       expect(entitySchema['account']!.table, 'accounts');
     });
 

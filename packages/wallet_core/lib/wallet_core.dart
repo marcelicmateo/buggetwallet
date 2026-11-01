@@ -12,6 +12,15 @@ export 'package:wallet_importer/wallet_importer.dart' show BillItem, BillSource,
 
 export 'src/accounts.dart' show AccountBalance, accountBalances, accountSourceLabel, balanceInHome, balanceTotals;
 export 'src/accounts.dart' show BalanceCheck, BankCheck, balanceTrusted, bankCheckTrustDays, checkBankBalance;
+export 'src/accounts.dart'
+    show
+        accountMatchKey,
+        accountMatchKeyInfo,
+        ImportAccountQuestion,
+        isAccountMatchKey,
+        normalizeExportAccount,
+        RowAccounts,
+        withAccountKeys;
 export 'src/backup.dart'
     show
         backupBlobBytesDefault,
@@ -256,6 +265,7 @@ export 'src/ranges.dart' show DateRange, RangeKind, rangeFor, rangeLabel, shiftR
 export 'src/recurring.dart' show recurringCost;
 export 'src/recurring.dart' show detectRecurring, medianCents, partsDays, partsThreshold, planRecurringPayments, RecurringPayments;
 export 'src/repo.dart'
+        TxCols,
     show
         ImportSummary,
         Op,

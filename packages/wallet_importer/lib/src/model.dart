@@ -65,6 +65,10 @@ class NormalizedTransaction {
   /// the id.
   final int? balanceAfter;
 
+  /// UX-ACC: the keyed fingerprint of [account] (`ak:` + 16 hex, `accountMatchKey` in wallet_core, set by the app
+  /// with the wallet key through `withAccountKeys`), or `null`. Readers never set it; not part of [toJson] or the id.
+  final String? accountKey;
+
   const NormalizedTransaction({
     required this.id,
     required this.source,
@@ -76,7 +80,23 @@ class NormalizedTransaction {
     this.kindHint,
     this.account,
     this.balanceAfter,
+    this.accountKey,
   });
+
+  /// This row with [accountKey] set (every other field kept).
+  NormalizedTransaction withAccountKey(String? accountKey) => NormalizedTransaction(
+        id: id,
+        source: source,
+        date: date,
+        amountMinor: amountMinor,
+        currency: currency,
+        bankType: bankType,
+        description: description,
+        kindHint: kindHint,
+        account: account,
+        balanceAfter: balanceAfter,
+        accountKey: accountKey,
+      );
 
   /// The v1 fields, plus `kindHint` (enum name), `account` and `balanceAfter` only when set.
   Map<String, Object?> toJson() => {
@@ -131,6 +151,17 @@ class ImportBatch {
       this.invalidRows = const [],
       this.tooLarge = 0,
       this.problems = const []});
+
+  /// This batch with [rows] as its transactions (every count and problem kept): for the app's per-row additions
+  /// (`accountKey`) or a part of the file.
+  ImportBatch withRows(List<NormalizedTransaction> rows) => ImportBatch(
+      source: source,
+      transactions: rows,
+      skipped: skipped,
+      invalid: invalid,
+      invalidRows: invalidRows,
+      tooLarge: tooLarge,
+      problems: problems);
 
   /// The balance the bank states at the end of the file, per currency ([BankBalance]), from the rows'
   /// [NormalizedTransaction.balanceAfter] (completed rows only: the others are not in [transactions]).

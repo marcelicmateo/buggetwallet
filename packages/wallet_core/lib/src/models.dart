@@ -36,6 +36,17 @@ int? _int(Object? v) => v is int ? v : null;
 TxKind? _kind(Object? v) => v is String ? TxKind.values.asNameMap()[v] : null;
 
 /// A transaction as stored in the wallet database. Amounts are in minor units (cents).
+/// The typed columns of the synced entity `tx` added since F1 ([Col]; the older columns stay `ColumnDef`s in
+/// `entitySchema` until F2).
+abstract final class TxCols {
+  static const entity = 'tx';
+
+  /// v20 (UX-ACC): the app account (`accounts.id`) this bank row belongs to, written by `importBatch` (the row's
+  /// `accountKey` matched an account's [AccountCols.matchKey]) or by the owner (`setTxAccount`); null = the main account
+  /// of its (source, currency) (`RowAccounts`). Never set on hand-added rows.
+  static const account = RefCol(entity, 'account', label: 'Account', target: 'account', nullable: true);
+}
+
 class Tx {
   final String id;
   final String source; // pbz | revolut | manual
@@ -67,6 +78,9 @@ class Tx {
   final int? homeAmount;
 
   const Tx({
+  /// UX-ACC: the app account this bank row belongs to ([TxCols.account]); null = its (source, currency)'s main account.
+  final String? account;
+
     required this.id,
     required this.source,
     required this.date,
@@ -84,6 +98,7 @@ class Tx {
     this.matchPending = false,
     this.homeAmount,
   });
+    this.account,
 
   /// This row in [currency] with [amount] (P15 `inHomeCurrency`); id and every other field kept, [homeAmount] dropped.
   Tx inCurrency(String currency, int amount) => Tx(
@@ -103,6 +118,7 @@ class Tx {
         transferTo: transferTo,
         matchPending: matchPending,
       );
+        account: account,
 
   /// Counts toward totals: not deleted and not replaced by a bank row that is here (see [matchPending]).
   bool get live => !deleted && (matchedTo == null || matchPending);
@@ -126,6 +142,7 @@ class Tx {
         transferTo: _str(r['transfer_to']),
         matchPending: r['match_pending'] == 1,
       );
+        account: TxCols.account.read(r),
 }
 
 /// A transaction with its resolved category, or one part of a split payment (P6, `Categorizer.expand`): then [tx] is
@@ -614,7 +631,10 @@ abstract final class AccountCols {
   static const institution =
       TextCol(entity, 'institution', label: 'Institution', nullable: true, searchable: true, maxLength: Account.maxName);
 
-  static const all = <Col>[name, source, currency, opening, openingDate, deleted, kind, institution];
+  // v20 (UX-ACC): `ak:` + 16 hex, the keyed fingerprint of the bank account an export names (`accountMatchKey`); null =
+  // the main account of its (source, currency). Never the IBAN itself.
+  static const matchKey = TextCol(entity, 'match_key', label: 'Bank account', nullable: true);
+  static const all = <Col>[name, source, currency, opening, openingDate, deleted, kind, institution, matchKey];
 }
 
 /// One of the owner's accounts (N2, synced entity `account`, table `accounts`): its [kind] (UX-A), an optional
@@ -638,6 +658,7 @@ class Account extends RowModel {
     AccountKind? kind,
     String? institution,
   }) =>
+    String? matchKey,
       Account._({
         'id': id,
         'name': name,
@@ -649,6 +670,7 @@ class Account extends RowModel {
         'kind': kind?.name,
         'institution': institution,
       });
+        'match_key': matchKey,
 
   /// A stored row (a map as `SELECT *` gives it); copied into the read-only [row].
   static Account fromRow(Map<String, Object?> r) => Account._(r);
@@ -669,6 +691,10 @@ class Account extends RowModel {
   late final String? institution = AccountCols.institution.read(row);
 
   /// Longest accepted name and institution (characters, after trimming).
+  /// UX-ACC: the fingerprint of the export account whose rows this account counts ([AccountCols.matchKey]); null = the
+  /// main account of its (source, currency): it counts that bank's rows no other account claims.
+  late final String? matchKey = AccountCols.matchKey.read(row);
+
   static const maxName = 60;
 
   bool get isCash => kind == AccountKind.cash;

@@ -530,7 +530,13 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   replaced rows never count.
 - Accounts and plan suggestions (N2, spec `docs/context/N2_SPEC.md`). `repo_accounts.dart` (`WalletRepoAccounts`):
   `addAccount`/`updateAccount`/`correctBalance`/`deleteAccount`/`undeleteAccount`/`accounts()`; one live account per
-  (source, currency), cash = `source` null; dates not after the repo clock's today. `accounts.dart` (pure):
+  (source, currency, `match_key`), cash = `source` null; dates not after the repo clock's today. UX-ACC (schema 20,
+  `docs/context/SCHEMA21_SPEC.md`): `tx.account` (`TxCols.account`) + `accounts.match_key` (`ak:` + 16 hex,
+  `accountMatchKey(VaultKey, exportAccount)` keyed HMAC, never logged, IBAN never stored; `withAccountKeys(key, batch)`
+  sets `NormalizedTransaction.accountKey`); `RowAccounts` = the counting rule (named live account of the row's
+  source/currency, else the main account: null key, else smallest id); `importBatch` writes the account in the creation
+  op and fills a null one on re-import; `unknownImportAccounts(batch)` → `ImportAccountQuestion`s (ask once);
+  `setTxAccount`; Q5 checks per export account. Tests: `test/ux_acc_test.dart`. `accounts.dart` (pure):
   `accountBalances` = opening + rows after `openingDate` (bank: its source's imported rows, every kind; cash: hand-added
   rows not matched or pending; ATM never adds to cash); a sync duplicate (same key, larger id) gets `duplicateOf`, its
   opening only, and `balanceTotals` (per currency) skips it. `suggest.dart` (pure): `suggestPlan(txs, st, today,

@@ -23,17 +23,33 @@ extension WalletRepoAccounts on WalletRepo {
   }
 
   /// Throws when another live account (not [exceptId]) counts the same rows: a second cash account in [currency], or a
-  /// second account with this ([source], [currency]); their rows would count twice. An account that counts no rows
-  /// (investment, crypto, other, or a bank account without a source) never clashes.
-  void _checkUnique(String? source, String currency, {String? exceptId, AccountKind? kind}) {
+  /// second account with this ([source], [currency], [matchKey]) (UX-ACC: none is one value, so one main account per
+  /// bank and currency as before); their rows would count twice. An account that counts no rows (investment, crypto,
+  /// other, or a bank account without a source) never clashes.
+  void _checkUnique(String? source, String currency, {String? exceptId, AccountKind? kind, String? matchKey}) {
     final k = kind ?? (source == null ? AccountKind.cash : AccountKind.bank);
     if (k != AccountKind.cash && source == null) return;
     final clash = accounts().any((a) =>
-        a.id != exceptId && a.currency == currency && a.countsRows && (k == AccountKind.cash ? a.isCash : !a.isCash && a.source == source));
+        a.id != exceptId &&
+        a.currency == currency &&
+        a.countsRows &&
+        (k == AccountKind.cash ? a.isCash : !a.isCash && a.source == source && a.matchKey == matchKey));
     if (clash) {
       throw ArgumentError(k == AccountKind.cash
           ? 'There is already a cash account in $currency.'
-          : 'There is already an account for this bank in $currency.');
+          : matchKey == null
+              ? 'There is already an account for this bank in $currency.'
+              : 'Another account already counts this bank account.');
+    }
+  }
+
+  /// UX-ACC: a [matchKey] only in the shape [accountMatchKey] gives, and only on an account that imports a bank's
+  /// files (a source); [ArgumentError] otherwise.
+  static void _checkMatchKey(String? matchKey, String? source, AccountKind kind) {
+    if (matchKey == null) return;
+    if (!isAccountMatchKey(matchKey)) throw ArgumentError('Bad bank account key.');
+    if (source == null || kind == AccountKind.cash) {
+      throw ArgumentError('Only an account that imports bank files can match a bank account.');
     }
   }
 
@@ -61,6 +77,7 @@ extension WalletRepoAccounts on WalletRepo {
   /// bank, card or savings account only; [opening] is the balance (signed minor units of [currency]: satoshis for
   /// BTC) at the end of [openingDate]. A bad name, currency, kind and source, date or amount, a crypto account in
   /// another currency, or a second live account counting the same rows ([_checkUnique]), is an [ArgumentError].
+  /// UX-ACC: [matchKey] (an [ImportAccountQuestion.accountKey]) makes it count that export account's rows.
   Future<String> addAccount(
       {required String name,
       String? source,
@@ -68,15 +85,17 @@ extension WalletRepoAccounts on WalletRepo {
       required int opening,
       required String openingDate,
       AccountKind? kind,
-      String? institution}) async {
+      String? institution,
+      String? matchKey}) async {
     final n = _checkName(name);
     if (!_currency.hasMatch(currency)) throw ArgumentError('Bad currency (three capital letters, like EUR).');
     final k = kind ?? (source == null ? AccountKind.cash : AccountKind.bank);
     _checkShape(k, source, currency);
+    _checkMatchKey(matchKey, source, k);
     final inst = _checkInstitution(institution);
     _checkAmount(opening);
     _checkDate(openingDate);
-    _checkUnique(source, currency, kind: k);
+    _checkUnique(source, currency, kind: k, matchKey: matchKey);
     final id = _newId('a');
     _write([
       (
@@ -91,6 +110,7 @@ extension WalletRepoAccounts on WalletRepo {
           'deleted': 0,
           'kind': k.name,
           if (inst != null) 'institution': inst,
+          if (matchKey != null) 'match_key': matchKey,
         }
       )
     ]);
@@ -114,7 +134,8 @@ extension WalletRepoAccounts on WalletRepo {
   /// ([clearSource] drops it), checked like [addAccount] on the result (a cash account with a source, or a crypto one
   /// in a fiat currency, is refused: change the kind and clear the source in one call). The currency never changes:
   /// delete the account and add a new one. Unknown id or a bad value: [ArgumentError], nothing written; no change: no
-  /// write. A thin wrapper over [patch] (F1).
+  /// write. A thin wrapper over [patch] (F1). UX-ACC: [matchKey] (an [ImportAccountQuestion.accountKey], the owner's
+  /// answer to "Which account is this?") makes it count that export account's rows; [clearMatchKey] drops it.
   Future<void> updateAccount(String id,
       {String? name,
       int? opening,
@@ -122,7 +143,9 @@ extension WalletRepoAccounts on WalletRepo {
       AccountKind? kind,
       String? institution,
       String? source,
-      bool clearSource = false}) async {
+      bool clearSource = false,
+      String? matchKey,
+      bool clearMatchKey = false}) async {
     patch(AccountCols.entity, id, {
       if (name != null) AccountCols.name: name,
       if (opening != null) AccountCols.opening: opening,
@@ -130,6 +153,7 @@ extension WalletRepoAccounts on WalletRepo {
       if (kind != null) AccountCols.kind: kind,
       if (institution != null) AccountCols.institution: institution,
       if (clearSource) AccountCols.source: clearValue else if (source != null) AccountCols.source: source,
+      if (clearMatchKey) AccountCols.matchKey: clearValue else if (matchKey != null) AccountCols.matchKey: matchKey,
     });
   }
 
@@ -161,7 +185,7 @@ extension WalletRepoAccounts on WalletRepo {
     final r = _accountRow(id);
     if (r['deleted'] == 0) return;
     final a = Account.fromRow(r);
-    _checkUnique(a.source, a.currency, exceptId: id, kind: a.kind);
+    _checkUnique(a.source, a.currency, exceptId: id, kind: a.kind, matchKey: a.matchKey);
     _write([
       ('account', id, {'deleted': 0})
     ]);
@@ -206,52 +230,120 @@ extension WalletRepoAccounts on WalletRepo {
           if (lastBankCheck(id) case final BankCheck c) id: c
       };
 
-  /// After an import (owner's choice: automatic, from the bank file): for each balance the file states
-  /// ([ImportBatch.bankBalances]), the live bank account counting its (source, currency) (the smallest id, as in
-  /// `accountBalances`) gets a check against its rows ([checkBankBalance]), recorded unless this device already holds a
-  /// check of a later date. Returns them by account id. No check (better none than a wrong "off by"):
+  /// After an import (owner's choice: automatic, from the bank file): for each balance the file states, per export
+  /// account (UX-ACC: the batch's rows grouped by `accountKey`, each group's [ImportBatch.bankBalances]), the app
+  /// account its rows count for gets a check against its rows ([checkBankBalance]): the live account whose
+  /// [Account.matchKey] is that key, else the main account of the (source, currency) ([RowAccounts]). Recorded unless
+  /// this device already holds a check of a later date. Returns them by account id. No check (better none than a wrong
+  /// "off by"):
   /// - for a balance beyond ±[maxAmountCents] or without a real date;
   /// - for a balance dated before the account's opening date (the opening is the anchor);
-  /// - when the account's stored rows dated within the file's dates (for that currency) are not all rows of [batch]:
-  ///   the app account then also holds another bank account or pocket of the same source and currency (two PBZ
-  ///   IBANs, a Revolut Savings pocket in its own file), whose rows the file's balance does not include.
+  /// - for rows that fall to a main account, when the rows it counts dated within the file's dates (for that currency)
+  ///   are not all rows of the group: the main account then also holds another bank account or pocket of the same
+  ///   source and currency (two PBZ IBANs, a Revolut Savings pocket in its own file), whose rows the file's balance does
+  ///   not include. A keyed account counts only its own export account's rows, so it is never skipped for this.
   Map<String, BalanceCheck> _recordBankChecks(ImportBatch batch) {
-    final balances = batch.bankBalances;
-    if (balances.isEmpty) return const {};
+    if (!batch.transactions.any((t) => t.balanceAfter != null)) return const {};
+    final groups = <String?, List<NormalizedTransaction>>{};
+    for (final t in batch.transactions) {
+      (groups[t.accountKey] ??= []).add(t);
+    }
     final live = accounts();
+    final owners = RowAccounts(live);
+    final byId = {for (final a in live) a.id: a};
     final out = <String, BalanceCheck>{};
-    for (final b in balances) {
-      if (!isSafeCents(b.cents) || !isIsoDate(b.date)) continue;
-      Account? a;
-      for (final x in live) {
-        if (x.source == b.source && x.currency == b.currency && (a == null || x.id.compareTo(a.id) < 0)) a = x;
+    for (final MapEntry(key: key, value: group) in groups.entries) {
+      for (final b in batch.withRows(group).bankBalances) {
+        if (!isSafeCents(b.cents) || !isIsoDate(b.date)) continue;
+        final keyed = key == null ? null : owners.keyedOf(b.source, b.currency, key);
+        final a = byId[keyed ?? owners.mainOf(b.source, b.currency)];
+        if (a == null || b.date.compareTo(a.openingDate) < 0) continue;
+        final rows = [
+          for (final r
+              in db.select('SELECT * FROM tx WHERE source = ? AND currency = ? AND manual = 0 AND deleted = 0', [b.source, b.currency]))
+            Tx.fromRow(r)
+        ];
+        if (keyed == null) {
+          final mine = [
+            for (final t in group)
+              if (t.currency == b.currency) t
+          ];
+          final ids = {for (final t in mine) t.id};
+          var from = mine.first.date, to = from;
+          for (final t in mine) {
+            if (t.date.compareTo(from) < 0) from = t.date;
+            if (t.date.compareTo(to) > 0) to = t.date;
+          }
+          if (rows
+              .any((r) => r.date.compareTo(from) >= 0 && r.date.compareTo(to) <= 0 && !ids.contains(r.id) && owners.accountOf(r) == a.id)) {
+            logEvent(_log, Level.INFO, 'account.bankCheck.skipped', {'reason': 'otherRows'});
+            continue;
+          }
+        }
+        final c = checkBankBalance(a, rows, date: b.date, bankCents: b.cents, accounts: live);
+        out[a.id] = c;
+        final have = lastBankCheck(a.id);
+        if (have != null && have.date.compareTo(c.date) > 0) continue;
+        if (isSafeCents(c.appCents)) recordBankCheck(a.id, date: c.date, bankCents: c.bankCents, appCents: c.appCents);
       }
-      if (a == null || b.date.compareTo(a.openingDate) < 0) continue;
-      final rows = [
-        for (final r
-            in db.select('SELECT * FROM tx WHERE source = ? AND currency = ? AND manual = 0 AND deleted = 0', [b.source, b.currency]))
-          Tx.fromRow(r)
-      ];
-      final mine = [
-        for (final t in batch.transactions)
-          if (t.currency == b.currency) t
-      ];
-      final ids = {for (final t in mine) t.id};
-      var from = mine.first.date, to = from;
-      for (final t in mine) {
-        if (t.date.compareTo(from) < 0) from = t.date;
-        if (t.date.compareTo(to) > 0) to = t.date;
-      }
-      if (rows.any((r) => r.date.compareTo(from) >= 0 && r.date.compareTo(to) <= 0 && !ids.contains(r.id))) {
-        logEvent(_log, Level.INFO, 'account.bankCheck.skipped', {'reason': 'otherRows'});
-        continue;
-      }
-      final c = checkBankBalance(a, rows, date: b.date, bankCents: b.cents);
-      out[a.id] = c;
-      final have = lastBankCheck(a.id);
-      if (have != null && have.date.compareTo(c.date) > 0) continue;
-      if (isSafeCents(c.appCents)) recordBankCheck(a.id, date: c.date, bankCents: c.bankCents, appCents: c.appCents);
     }
     return out;
+  }
+
+  // ---------- export accounts (UX-ACC) ----------
+
+  /// The export accounts of [batch] (rows with an `accountKey`, `withAccountKeys`) that no live account of their
+  /// source and currency claims yet ([Account.matchKey]): what the app asks once, "Which account is this?", before (or
+  /// after) [importBatch]. The answer is the owner's write: `updateAccount(id, matchKey: q.accountKey)` (an existing
+  /// account, e.g. the main one) or `addAccount(..., matchKey: q.accountKey)` (a new one); later files of that export
+  /// account then match without a question, and a re-import assigns rows imported before the answer (importBatch fills
+  /// a null [Tx.account]). Until answered, its rows count for the main account. Rows without a key are never asked
+  /// about. In batch order of first appearance; never writes, never logs the accounts.
+  List<ImportAccountQuestion> unknownImportAccounts(ImportBatch batch) {
+    final live = accounts();
+    final owners = RowAccounts(live);
+    final seen = <(String, String, String), (String, int)>{};
+    for (final t in batch.transactions) {
+      final k = t.accountKey;
+      if (k == null || owners.keyedOf(t.source, t.currency, k) != null) continue;
+      final have = seen[(t.source, t.currency, k)];
+      seen[(t.source, t.currency, k)] = (have?.$1 ?? t.account ?? '', (have?.$2 ?? 0) + 1);
+    }
+    return [
+      for (final MapEntry(key: (source, currency, key), value: (name, n)) in seen.entries)
+        ImportAccountQuestion(
+          source: source,
+          currency: currency,
+          accountKey: key,
+          exportAccount: name,
+          rows: n,
+          candidates: [
+            for (final a in live)
+              if (!a.isCash && a.countsRows && a.source == source && a.currency == currency) a
+          ],
+        )
+    ];
+  }
+
+  /// The owner moves bank row [txId] to account [accountId] (UX-ACC, fixing a wrong guess), or back to the rule
+  /// (null: the main account of its source and currency). The account must be live, count rows and have the row's
+  /// source and currency; a hand-added row, an unknown row or account: [ArgumentError], nothing written. No change: no
+  /// write. One synced owner write (`tx.account`).
+  void setTxAccount(String txId, String? accountId) {
+    final rs = db.select('SELECT * FROM tx WHERE id = ?', [txId]);
+    if (rs.isEmpty) throw ArgumentError('No such payment.');
+    final t = Tx.fromRow(rs.first);
+    if (t.manual) throw ArgumentError('Only a bank row belongs to a bank account.');
+    if (accountId != null) {
+      final a = Account.fromRow(_accountRow(accountId));
+      if (a.deleted || a.isCash || !a.countsRows || a.source != t.source || a.currency != t.currency) {
+        throw ArgumentError('That account does not hold rows of this bank in ${t.currency}.');
+      }
+    }
+    if (t.account == accountId) return;
+    _write([
+      ('tx', txId, {TxCols.account.column: accountId})
+    ]);
+    logEvent(_log, Level.INFO, 'tx.account', {'set': accountId != null});
   }
 }

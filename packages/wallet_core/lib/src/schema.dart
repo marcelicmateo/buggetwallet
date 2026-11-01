@@ -8,7 +8,7 @@ library;
 import 'dart:collection' show UnmodifiableMapView;
 
 import 'bills.dart' show BillCols;
-import 'models.dart' show AccountCols;
+import 'models.dart' show AccountCols, TxCols;
 
 /// How a synced column's values are stored and checked: text, an integer, or a 0/1 flag (a bool is stored as 0/1).
 enum ColumnType { text, integer, flag }
@@ -104,6 +104,8 @@ const Map<String, EntityDef> _schema = {
     // v19 (D2 Unlink): a hand-added entry's bank rows the owner unlinked it from, a JSON list (`matchOffIds`).
     ColumnDef('match_off', nullable: true),
   ], indexes: {
+    // v20 (UX-ACC): the app account of a bank row (`TxCols.account`).
+    TxCols.account,
     'tx_date': 'date',
     'tx_amount': 'amount'
   }),
