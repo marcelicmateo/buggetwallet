@@ -36,11 +36,12 @@ switched on a guess; suggestions ask), synthetic data only, logs carry no amount
    `const List<CurrencyInfo> allCurrencies` = every active ISO 4217 code (name in English, ISO minor digits: JPY 0, KWD 3, …)
    plus `BTC` (Bitcoin, 8 digits, crypto: true). `CurrencyInfo? currencyInfo(String code)`;
    `int minorDigitsOf(String code)` (unknown code → 2). Default wallet currency stays `EUR`.
-   **Money with other digits:** every place in core that converts between currencies (FX rates → wallet currency) or turns
-   text into minor units must use `minorDigitsOf` of the right currency (a 1,000 JPY row = 1000 minor units, not 100000;
-   0.01 BTC = 1 000 000 minor units). The importer parses amounts into minor units with the digits of the row's currency
-   when it knows it. Where a path cannot support non-2-digit currencies yet, it refuses with a clear error and the builder
-   lists it in the report (owner rule: money limits are surfaced, never silent).
+   **Stored scale (lead decision 2026-11-01, after review of the first build):** the stored scale never changes for
+   existing data. Every fiat currency stays stored in hundredths exactly as every earlier build did
+   (`storageDigitsOf(fiat) = 2`); crypto (BTC) is stored at its own 8 digits. `minorDigitsOf` (ISO) is for display and
+   input only (JPY shown without decimals). A fiat amount with a non-zero third decimal (KWD, BHD, …) is refused per row,
+   never rounded (known limit). A per-row `tx.digits` marker was tried and dropped: an older peer writing `amount`
+   without it left rows 100× off for good, and bills, IOUs and balances had no marker. Also: `setWalletCurrency(code)`.
    `setFxRate` accepts any code in `allCurrencies` (BTC included) except the wallet currency.
 2. **Prevalent currency** (pure function, exported): `String? prevalentCurrency(Iterable<Tx> txs, String walletCurrency)`
    → the code X ≠ walletCurrency when at least 10 payments are counted and ≥ 80 % of them (by count, never by amount)

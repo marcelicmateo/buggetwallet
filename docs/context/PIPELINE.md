@@ -34,9 +34,8 @@ Each item runs in its own worktree (`.claude/worktrees/<name>`), created by the 
 Theme waits for the owner's mockup pick; crypto rate by hand. Merge order A-core → A-ui → A-ui2 → B → C.
 | # | Item | Agent | Depends on | Status |
 |---|---|---|---|---|
-| UX-A-core | currencies + digits, prevalentCurrency, account kinds (schema 20), built-in rule overrides | core-builder (worktree) | – | running |
-| UX-A-ui | bill dates (calendar, chips, length), inline reminder, Today hero wide, Month → Period sheet | ui-builder (worktree) | – | built 45ecf90, reviewed; fix round running (hero full-width row, compact dates, 6 review findings) |
-| UX-A-tests | spec tests for A-core money/migration edges | test-writer (worktree) | – | running |
+| UX-A-core | currencies + digits, prevalentCurrency, account kinds (schema 20), built-in rule overrides | core-builder (worktree) | – | built e12c85f; review: tx.digits design leaks → reworked to fixed storage scale (fiat 2, crypto 8), + setWalletCurrency; running |
+| UX-A-ui | bill dates (calendar, chips, length), inline reminder, Today hero wide, Month → Period sheet | ui-builder (worktree) | – | done 45ecf90 + review fixes 8182b90, merged cf5f4d5; per-bill reminder wiring waits for A-core |
 | UX-C-mock | 3 theme mockups (Today + Plan, light/dark) published for the owner | general-purpose (sonnet) | – | done: owner picked 1 Clean neutral |
 | UX-A-tests | (above) | | | done 7c0d879 (core-builder cherry-picks it) |
 | UX-C1 | Clean neutral tokens, Inter, card/rail surfaces, light + dark | ui-builder (worktree) | – | done 97dccd7 + review fixes 80934aa, merged b60355e |
