@@ -52,8 +52,17 @@ func repoRoot(t testing.TB) string {
 // Case is one parity case: the same tools/build.sh arguments run once with BW_IMPL=bash and once with the impl.
 type Case struct {
 	Name string
-	Args []string
-	Env  []string // extra KEY=VALUE for both runs
+	// Script is the entry script relative to the repo (default tools/build.sh; GO2: tools/emulator.sh, tools/live.sh).
+	Script string
+	Args   []string
+	// Steps, when set, replaces Args: a sequence of invocations of Script on one data dir (live start, reload, ...),
+	// run one after the other on each side. The sequence stops at the first non-zero exit. Per step the command, exit
+	// code and masked stdout/stderr are compared (seqLines), instead of the single step table.
+	Steps [][]string
+	// Cleanup runs (BW_IMPL=bash, own temp data dir, output ignored) after each side, also after a failure, to stop
+	// what the case started (its container). Only for cases that skip themselves when something already runs.
+	Cleanup [][]string
+	Env     []string // extra KEY=VALUE for both runs
 	// Setup prepares the repo before both runs (e.g. an unformatted file) and returns its cleanup.
 	Setup func(t *testing.T, repo string) func()
 	Heavy bool // skipped unless BW_PARITY_HEAVY=1
@@ -83,8 +92,23 @@ type side struct {
 	data           string
 	repo           string
 	runs           []string // absolute run dirs, chronological
+	steps          []stepOut
 	artifacts      []string
 	m              *masker
+}
+
+// stepOut is one invocation of a Steps sequence.
+type stepOut struct {
+	args           []string
+	exit           int
+	stdout, stderr string
+}
+
+func (c Case) script() string {
+	if c.Script != "" {
+		return c.Script
+	}
+	return "tools/build.sh"
 }
 
 func (s *side) file(run int, name string) string {
@@ -163,23 +187,43 @@ func execSide(t *testing.T, repo, impl string, c Case) *side {
 	}
 	data := t.TempDir()
 	s := &side{impl: impl, args: c.Args, data: data, repo: repo}
+	if len(c.Cleanup) > 0 {
+		defer func() {
+			for _, a := range c.Cleanup {
+				cmd := exec.Command(filepath.Join(repo, c.script()), a...)
+				cmd.Dir = repo
+				cmd.Env = buildEnv(t.TempDir(), "bash", c.Env)
+				_ = cmd.Run()
+			}
+		}()
+	}
 	timeout := 20 * time.Minute
 	if c.Heavy {
 		timeout = 90 * time.Minute
 	}
-	var out, errb bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, filepath.Join(repo, "tools", "build.sh"), c.Args...)
-	cmd.Dir = repo
-	cmd.Env = buildEnv(data, impl, c.Env)
-	cmd.Stdout, cmd.Stderr = &out, &errb
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
-	cmd.WaitDelay = 15 * time.Second
-	err := cmd.Run()
-	s.exit = exitCode(t, err)
-	s.stdout, s.stderr = out.String(), errb.String()
+	invs := c.Steps
+	if len(invs) == 0 {
+		invs = [][]string{c.Args}
+	}
+	for _, args := range invs {
+		var out, errb bytes.Buffer
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		cmd := exec.CommandContext(ctx, filepath.Join(repo, c.script()), args...)
+		cmd.Dir = repo
+		cmd.Env = buildEnv(data, impl, c.Env)
+		cmd.Stdout, cmd.Stderr = &out, &errb
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+		cmd.WaitDelay = 15 * time.Second
+		err := cmd.Run()
+		cancel()
+		code := exitCode(t, err)
+		s.steps = append(s.steps, stepOut{args, code, out.String(), errb.String()})
+		s.exit, s.stdout, s.stderr = code, out.String(), errb.String()
+		if len(c.Steps) > 0 && code != 0 {
+			break
+		}
+	}
 	s.runs = listRuns(data)
 	s.m = newMasker(t, repo, data, s.runs)
 	for _, a := range c.Artifacts {
@@ -201,7 +245,7 @@ func exitCode(t testing.TB, err error) int {
 		}
 		return ee.ExitCode()
 	}
-	t.Fatalf("cannot run tools/build.sh: %v", err)
+	t.Fatalf("cannot run the entry script: %v", err)
 	return -1
 }
 
@@ -348,6 +392,12 @@ func sorted(in []string) []string {
 func compareSides(t *testing.T, c Case, a, b *side) {
 	t.Helper()
 	cn := c.Name
+	if len(c.Steps) > 0 {
+		diffLines(t, cn, "steps (command, exit, stdout, stderr)", seqLines(a), seqLines(b))
+		diffLines(t, cn, "artifact names", maskNames(a.artifacts), maskNames(b.artifacts))
+		compareRunsAndHistory(t, c, a, b)
+		return
+	}
 	if a.exit != b.exit {
 		t.Errorf("parity[%s] exit code: bash=%d %s=%d\n  %s stderr: %s", cn, a.exit, implName(), b.exit, implName(), tail(b.stderr))
 	}
@@ -356,6 +406,12 @@ func compareSides(t *testing.T, c Case, a, b *side) {
 		diffLines(t, cn, "stderr", a.m.table(a.stderr), b.m.table(b.stderr))
 	}
 	diffLines(t, cn, "artifact names", a.artifacts, b.artifacts)
+	compareRunsAndHistory(t, c, a, b)
+}
+
+func compareRunsAndHistory(t *testing.T, c Case, a, b *side) {
+	t.Helper()
+	cn := c.Name
 	var an, bn []string
 	for _, r := range a.runs {
 		an = append(an, maskRunName(filepath.Base(r)))

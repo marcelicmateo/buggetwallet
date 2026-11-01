@@ -58,7 +58,7 @@ func compareRun(t *testing.T, c Case, a, b *side, i int) {
 	label := "runs/" + maskRunName(filepath.Base(da)) + "/"
 	cn := c.Name
 	fa, fb := runFiles(da), runFiles(db)
-	if !diffLines(t, cn, label+" file names", fa, fb) {
+	if !diffLines(t, cn, label+" file names", maskNames(fa), maskNames(fb)) {
 		return
 	}
 	// last.status: each side must be in its own start order (instant from the .status stamps, then name: stamps are whole
@@ -94,6 +94,10 @@ func compareRun(t *testing.T, c Case, a, b *side, i int) {
 			sa, _ := read(filepath.Join(da, f))
 			sb, _ := read(filepath.Join(db, f))
 			diffLines(t, cn, label+f+" (structure)", summaryStructure(a.m, sa), summaryStructure(b.m, sb))
+		case strings.HasPrefix(f, "trace-") && strings.HasSuffix(f, "-summary.txt"):
+			sa, _ := read(filepath.Join(da, f))
+			sb, _ := read(filepath.Join(db, f))
+			diffLines(t, cn, label+f+" (structure)", traceStructure(sa), traceStructure(sb))
 		case f == "stage-summary.txt":
 			sa, _ := read(filepath.Join(da, f))
 			sb, _ := read(filepath.Join(db, f))
