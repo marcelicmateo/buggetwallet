@@ -378,7 +378,7 @@ ledger. The design system lives in `app/lib/src/theme.dart`; the spec is `docs/d
 
 | Element            | Decision                                                                                                                                                                                                   |
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Type               | IBM Plex Sans for text, IBM Plex Mono with tabular figures for every amount, weights 400/500/600 only; six unmodified font files (OFL, ~1 MB)                                                              |
+| Type               | Inter for text, IBM Plex Mono with tabular figures for every amount, weights 400/500/600 only; six unmodified font files (OFL, ~2.3 MB)                                                              |
 | Colour             | Paper `#f7f5ef` / ink `#1d2433`; night ledger (navy) follows the system setting; ink-blue accent; red only for negative or over-budget; all text pairs ≥ 4.5:1, non-text ≥ 3:1, checked by a contrast test |
 | Money              | `14 €`, `-23.40 €`, `+1,450.00 €`: sign in front, euro after a non-breaking space, mono, right-aligned, same right edge in a list                                                                          |
 | Surfaces           | No cards, no shadows, radius 0–3; sections are ruled (1 px strong top rule, hairline bottom); totals carry a double rule; dialogs have a 1 px border                                                       |

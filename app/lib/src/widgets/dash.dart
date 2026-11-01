@@ -17,7 +17,7 @@ import 'dash_charts.dart';
 
 export 'dash_charts.dart';
 
-/// Tile figures: Plex Sans semibold with proportional figures (they read better large than the mono of the lists).
+/// Tile figures: Inter semibold with proportional figures (they read better large than the mono of the lists).
 TextStyle dashNumStyle({double size = BwType.displaySize, Color? color}) => TextStyle(
       fontFamily: sansFamily,
       fontWeight: FontWeight.w600,
@@ -239,19 +239,23 @@ class Tile extends StatelessWidget {
       this.attention = false,
       this.exposeChildren = false});
 
-  static const radius = 12.0;
+  static const radius = cardRadius;
 
   @override
   Widget build(BuildContext context) {
     final c = context.c;
-    final body = Material(
-      color: c.surface,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(radius),
-        side: BorderSide(color: attention ? c.accent : c.line, width: attention ? 2 : 1),
+    // A white card lifted by a soft shadow, no border (an attention tile gets a 2 px accent ring instead).
+    final body = DecoratedBox(
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(radius), boxShadow: cardShadow(Theme.of(context).brightness)),
+      child: Material(
+        color: c.surface,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radius),
+          side: attention ? BorderSide(color: c.accent, width: 2) : BorderSide.none,
+        ),
+        child: InkWell(onTap: onTap, child: Padding(padding: padding, child: child)),
       ),
-      child: InkWell(onTap: onTap, child: Padding(padding: padding, child: child)),
     );
     if (semanticLabel == null) return body;
     return Semantics(

@@ -142,7 +142,7 @@ class ForecastStepChart extends StatelessWidget {
           const SizedBox(height: 4),
           SplitRow(
               start: Text(w.start == points.first.date ? 'Today' : shortDateOrRaw(w.start),
-                  style: numStyle.copyWith(fontSize: BwType.metaSize, color: c.muted)),
+                  style: labelStyle.copyWith(fontSize: BwType.metaSize, color: c.muted)),
               end: Text('${shortDateOrRaw(w.end)} · ${moneyExact(cents.last, currency)}',
                   key: const ValueKey('forecastEndLabel'),
                   textAlign: TextAlign.end,
@@ -187,7 +187,7 @@ class PeriodNetChart extends StatelessWidget {
           return Padding(
             padding: const EdgeInsets.only(top: 3),
             child: Text('${d[0]}\n${d[1]}',
-                textAlign: TextAlign.center, style: numStyle.copyWith(fontSize: BwType.metaSize, height: 1.15, color: c.muted)),
+                textAlign: TextAlign.center, style: labelStyle.copyWith(fontSize: BwType.metaSize, height: 1.15, color: c.muted)),
           );
         },
       ),

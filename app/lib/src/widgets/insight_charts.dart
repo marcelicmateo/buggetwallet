@@ -208,7 +208,7 @@ class SeriesBars extends StatelessWidget {
                           padding: const EdgeInsets.only(top: 3),
                           child: Text(groups[i].axis,
                               textAlign: TextAlign.center,
-                              style: numStyle.copyWith(fontSize: BwType.metaSize, height: 1.15, color: c.muted)),
+                              style: labelStyle.copyWith(fontSize: BwType.metaSize, height: 1.15, color: c.muted)),
                         );
                       },
                     ),

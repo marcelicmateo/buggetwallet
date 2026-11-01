@@ -20,7 +20,7 @@ import 'support/seams.dart';
 import 'support/wallet.dart';
 
 Future<void> _loadFonts() async {
-  for (final (fam, prefix) in [('IBM Plex Sans', 'IBMPlexSans'), ('IBM Plex Mono', 'IBMPlexMono')]) {
+  for (final (fam, prefix) in [('Inter', 'Inter'), ('IBM Plex Mono', 'IBMPlexMono')]) {
     final l = FontLoader(fam);
     for (final w in ['Regular', 'Medium', 'SemiBold']) {
       l.addFont(File('assets/fonts/$prefix-$w.ttf').readAsBytes().then(ByteData.sublistView));

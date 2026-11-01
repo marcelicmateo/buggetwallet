@@ -29,7 +29,7 @@ class TagChip extends StatelessWidget {
         constraints: const BoxConstraints(maxWidth: 140),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-          decoration: BoxDecoration(border: Border.all(color: context.c.line), borderRadius: BorderRadius.circular(2)),
+          decoration: BoxDecoration(border: Border.all(color: context.c.line), borderRadius: BorderRadius.circular(6)),
           child:
               Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
         ),

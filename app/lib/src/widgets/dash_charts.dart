@@ -574,7 +574,7 @@ class NetBars extends StatelessWidget {
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
                     FittedBox(
                       fit: BoxFit.scaleDown,
-                      child: Text(b.label, maxLines: 1, style: numStyle.copyWith(fontSize: BwType.metaSize, color: c.muted)),
+                      child: Text(b.label, maxLines: 1, style: labelStyle.copyWith(fontSize: BwType.metaSize, color: c.muted)),
                     ),
                     FittedBox(
                       fit: BoxFit.scaleDown,
@@ -723,7 +723,7 @@ class CalendarStrip extends StatelessWidget {
           child: line((col) => Center(
                 child: FittedBox(
                     fit: BoxFit.scaleDown,
-                    child: Text(weekdayLabels[col], style: numStyle.copyWith(fontSize: BwType.metaSize, color: c.muted))),
+                    child: Text(weekdayLabels[col], style: labelStyle.copyWith(fontSize: BwType.metaSize, color: c.muted))),
               )),
         ),
         for (var r = 0; r < rows; r++)

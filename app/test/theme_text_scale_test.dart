@@ -14,12 +14,12 @@ Future<ByteData> _bytes(String f) async => ByteData.sublistView(await File('$_di
 
 void main() {
   setUpAll(() async {
-    for (final fam in ['Sans', 'Mono']) {
+    for (final prefix in ['Inter', 'IBMPlexMono']) {
       for (final w in ['Regular', 'Medium', 'SemiBold']) {
-        expect(File('$_dir/IBMPlex$fam-$w.ttf').existsSync(), isTrue, reason: 'font file IBMPlex$fam-$w.ttf missing in app/assets/fonts');
+        expect(File('$_dir/$prefix-$w.ttf').existsSync(), isTrue, reason: 'font file $prefix-$w.ttf missing in app/assets/fonts');
       }
     }
-    for (final (fam, prefix) in [('IBM Plex Sans', 'IBMPlexSans'), ('IBM Plex Mono', 'IBMPlexMono')]) {
+    for (final (fam, prefix) in [('Inter', 'Inter'), ('IBM Plex Mono', 'IBMPlexMono')]) {
       final l = FontLoader(fam);
       for (final w in ['Regular', 'Medium', 'SemiBold']) {
         l.addFont(_bytes('$prefix-$w.ttf'));

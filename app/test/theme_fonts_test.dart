@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const _dir = 'assets/fonts';
-const _families = {'IBM Plex Sans': 'IBMPlexSans', 'IBM Plex Mono': 'IBMPlexMono'};
+const _families = {'Inter': 'Inter', 'IBM Plex Mono': 'IBMPlexMono'};
 const _weights = ['Regular', 'Medium', 'SemiBold'];
 
 void main() {

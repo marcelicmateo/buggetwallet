@@ -98,10 +98,10 @@ void main() {
       expect(WalletColors.dark.chartPos, isNot(WalletColors.dark.accent));
     });
 
-    test('hold the validated values', () {
+    test('hold the Clean neutral values', () {
       const light = WalletColors.light, dark = WalletColors.dark;
-      expect([light.chartPos, light.chartNeg, light.chart2], const [Color(0xFF3A559E), Color(0xFFA93A32), Color(0xFFA8650F)]);
-      expect([dark.chartPos, dark.chartNeg, dark.chart2], const [Color(0xFF6F8FE0), Color(0xFFD56F66), Color(0xFFC27F20)]);
+      expect([light.chartPos, light.chartNeg, light.chart2], const [Color(0xFF2F5FC4), Color(0xFFB3412F), Color(0xFFA8650F)]);
+      expect([dark.chartPos, dark.chartNeg, dark.chart2], const [Color(0xFF6F93E6), Color(0xFFD9705F), Color(0xFFC9892B)]);
     });
   });
 
@@ -121,10 +121,10 @@ void main() {
       }
     });
 
-    test('hold the validated series values', () {
+    test('hold the Clean neutral series values', () {
       const light = WalletColors.light, dark = WalletColors.dark;
-      expect([light.s1, light.s2, light.s3], const [Color(0xFF3A559E), Color(0xFFB0721A), Color(0xFF008F96)]);
-      expect([dark.s1, dark.s2, dark.s3], const [Color(0xFF7088D6), Color(0xFFBD7F22), Color(0xFF1A9AA0)]);
+      expect([light.s1, light.s2, light.s3], const [Color(0xFF2F5FC4), Color(0xFFA8650F), Color(0xFF0B8A8F)]);
+      expect([dark.s1, dark.s2, dark.s3], const [Color(0xFF7C9CEB), Color(0xFFC9892B), Color(0xFF2BA8AE)]);
     });
   });
 }

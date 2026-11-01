@@ -49,7 +49,7 @@ Offset _at(WidgetTester tester, String date) => tester.getTopLeft(find.byKey(Val
 
 /// The real IBM Plex fonts: the hero number's width decides beside or under, and the test font (Ahem) is far wider.
 Future<void> _loadFonts() async {
-  for (final (fam, prefix) in [('IBM Plex Sans', 'IBMPlexSans'), ('IBM Plex Mono', 'IBMPlexMono')]) {
+  for (final (fam, prefix) in [('Inter', 'Inter'), ('IBM Plex Mono', 'IBMPlexMono')]) {
     final l = FontLoader(fam);
     for (final w in ['Regular', 'Medium', 'SemiBold']) {
       l.addFont(File('assets/fonts/$prefix-$w.ttf').readAsBytes().then(ByteData.sublistView));
