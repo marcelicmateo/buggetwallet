@@ -13,6 +13,9 @@ suites stay serialized (one Haiku run per stage); builders run only targeted che
 - Scout first (owner, 2026-10-21): before a builder or test-writer starts, a `scout` (haiku/low, read-only) returns a
   context pack (files, line ranges, APIs, tests, helpers); the lead pastes it into the brief. Builders read code by
   `grep -n` + line ranges, never whole files, build output by result line + failures, screenshots downscaled to 540 px.
+  **Short output keeps the real exit code** (owner question 2026-11-01): a pipe returns `tail`'s status, so
+  `tools/build.sh app | tail -3` reports exit 0 even when tests fail. Use `set -o pipefail; tools/build.sh app 2>&1 |
+  tail -3` (or print `rc=${PIPESTATUS[0]}`), or read `dist/logs/<step>.status`; never judge a run by a piped exit code.
   Measure with `python3 -I tools/token-usage.py` (baseline in memory: ~2.9M tokens/commit before 2026-10-21).
 - One targeted check per agent at the end, one Haiku full run per stage, one reviewer pass per stage on the whole diff.
   Live-mode screenshots only for visual changes.
