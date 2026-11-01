@@ -330,7 +330,6 @@ func TestGO4MutateList(t *testing.T) {
 	} {
 		c := g4mk("mutate_"+sp.name, append([]string{"tools/mutate.py"}, sp.args...), append([]string{"mutate"}, sp.args...))
 		c.inRepo, c.want, c.exitOnly = true, sp.want, true
-		c.newContainer = true // wallet-build mutate builds the image before it checks usage (reported): do not start podman in cheap runs
 		t.Run(c.name, func(t *testing.T) { runG4(t, c) })
 	}
 	for _, sp := range []struct {
@@ -342,7 +341,7 @@ func TestGO4MutateList(t *testing.T) {
 		{"other_package_file", []string{"core", "packages/sync/lib/src/sync_digest.dart", "--list"}},
 	} {
 		c := g4mk("mutate_"+sp.name, append([]string{"tools/mutate.py"}, sp.args...), append([]string{"mutate"}, sp.args...))
-		c.inRepo, c.want, c.newContainer = true, 1, true
+		c.inRepo, c.want = true, 1
 		t.Run(c.name, func(t *testing.T) { runG4(t, c) })
 	}
 }
