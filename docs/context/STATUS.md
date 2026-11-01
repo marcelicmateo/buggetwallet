@@ -16,7 +16,7 @@ chart clamps (`1 << 32` / `1 << 60` in JS), 3 integration tests stale after the 
 landed past today (+ pinch jump), relay_sync test race, emulator drive hung on an all-skipped file (600 s drive
 limit), stale AVD locks, skipped drives counted as failed. **Owner:** run `gh workflow run ci --ref go3 -f tests=true`,
 `gh workflow run ci --ref go3`, `gh workflow run release --ref go3`; the lead then reads ci-logs and merges go3 into v2.
-Next: GO4 (remaining helpers into Go, Makefile replaces the scripts), then back to Stage UX (PIPELINE "Resume here").
+GO4 done the same night (owner chose it before UX): every helper but relay-deploy.sh is a wallet-build command (fixtures, mutate, token-usage, log-summary, lsp-query, relay, web, web-shot, relay-native-check/test, signing-key, times, ci, hook no-poll; the hook in .claude/settings.json runs Go when its self-test passes, else the bash hook); the old scripts stay until the green go3 CI (M6 then deletes them and the Makefile is the entry point). Next: back to Stage UX (PIPELINE "Resume here").
 
 **2026-11-01 (end of day, not pushed):** Stage UX in progress after the owner's UX feedback (13 points + "UX is
 really bad, theme heavy"): Clean neutral theme (owner picked from mockups), bill dates with calendar/chips/lengths and
