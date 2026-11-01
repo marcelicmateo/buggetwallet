@@ -320,6 +320,17 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   converted one by one (rate, or the bank amount's proportional share), remainder to the last only when all earlier
   parts are in the list; no rates → the same list). Whole-payment paths keep raw rows: `computePeriod(matchRows:)`
   matches bills and incomes on the raw list. Tests: `test/p15_fx_test.dart`.
+- `ecb.dart` + `repo_fx.dart` — UX-FX (schema 20, `docs/context/UX_SPEC.md` "UX-FX"): ECB reference rates per payment
+  date. Synced entity `fx_day` (`FxDayCols`, table `fx_days`, id `<CUR>:<YYYY-MM-DD>`, `per_eur` = units per EUR × 1e6,
+  `source` 'ecb'), written only for what the wallet needs (`fxNeeds` pure / repo `walletFxNeeds`: foreign fiat payments,
+  bills, IOUs, openings without a hand rate) by `fillFxDays` from the device-local cache `ecb_rates` (never synced or
+  backed up; `importEcbHistory(bytes)` fills it from `parseEcbRates`: zip (CRC verified) / CSV / XML, exact decimals ≤ 6,
+  any damage = `FormatException`, nothing written). `EcbRates` (`WalletSettings.ecb`, filled by `settings()`, cached per
+  `dataVersion`): `rateOn` / `pairOn` = latest ECB day ≤ date within `ecbMaxGapDays` 7 having both currencies.
+  `homeAmount`/`inHomeCurrency`/`balanceInHome` (balance date = last row or opening): hand rate (`fxRates`) wins, else
+  `ecbConvert` (BigInt, half away from zero once); `fxUsed` says which. Core never fetches: `ecbFetchPlan()` → `EcbFile`
+  (`history` zip / `recent` 90-day XML, once a day via `noteEcbAttempt`, only for a missing need a download could
+  answer; `force:` for "Get rates now"), `ecbCacheInfo`, `fxMissing`. Tests: `test/ux_fx_test.dart`.
 - `splits.dart` + `repo_splits.dart` — split transactions (P6, schema 13, spec `docs/context/P6_SPEC.md`). Entity
   `split` (table `tx_splits`, id = the tx id, `parts` = one JSON field `[{a, c, t, n?}]`, so LWW keeps a whole split).
   `setSplit`/`removeSplit`/`splitOf`/`splits`; rules (2–20 parts, payment's sign, exact sum, live non-transfer main

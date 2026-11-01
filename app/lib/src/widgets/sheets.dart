@@ -616,7 +616,11 @@ class _TxSheetState extends State<TxSheet> {
         Padding(
           padding: const EdgeInsets.only(top: 2),
           child: Text(
-              'Counts as ${money(c.amount, c.tx.currency, decimals: 2, signed: true)} at ${rateText(widget.wc.settings.fxRates[t.currency]!.rate)}',
+              // UX-FX: a row converted by an ECB rate has no hand-set rate (null-safe until the UI shows the ECB day).
+              'Counts as ${money(c.amount, c.tx.currency, decimals: 2, signed: true)} at ${switch (widget.wc.settings.fxRates[t.currency]) {
+                final r? => rateText(r.rate),
+                null => 'the ECB rate',
+              }}',
               key: const ValueKey('txCounted'),
               textAlign: TextAlign.end,
               style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),

@@ -154,9 +154,11 @@ RowAccounts _ownersFor(Account a, List<Account>? accounts) => RowAccounts([
     ]);
 
 /// [b]'s balance in the wallet currency of [st] (UX-A): itself when the account is in it, else at the owner's rate
-/// (`homeAmount`: each currency's own minor digits; a crypto account's coins at the hand-set rate); null without a rate.
+/// (`homeAmount`: each currency's own minor digits; a crypto account's coins at the hand-set rate), else (UX-FX) at the
+/// ECB rate of the balance's date (its last counted row, or the opening date: dates `fxNeeds` asks for); null without
+/// a rate.
 int? balanceInHome(AccountBalance b, WalletSettings st) =>
-    homeAmount(Tx(id: '', source: '', date: '', amount: b.balance, currency: b.account.currency, description: ''), st);
+    homeAmount(Tx(id: '', source: '', date: b.lastRowDate ?? b.account.openingDate, amount: b.balance, currency: b.account.currency), st);
 
 /// The balances summed per currency (never mixed), keys sorted. Duplicates ([AccountBalance.duplicateOf]) are left out.
 Map<String, int> balanceTotals(List<AccountBalance> b) {

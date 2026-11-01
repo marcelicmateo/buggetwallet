@@ -8,6 +8,7 @@ library;
 import 'dart:collection' show UnmodifiableMapView;
 
 import 'bills.dart' show BillCols;
+import 'ecb.dart' show FxDayCols;
 import 'models.dart' show AccountCols, TxCols;
 
 /// How a synced column's values are stored and checked: text, an integer, or a 0/1 flag (a bool is stored as 0/1).
@@ -103,9 +104,9 @@ const Map<String, EntityDef> _schema = {
     ColumnDef('transfer_to', nullable: true),
     // v19 (D2 Unlink): a hand-added entry's bank rows the owner unlinked it from, a JSON list (`matchOffIds`).
     ColumnDef('match_off', nullable: true),
-  ], indexes: {
     // v20 (UX-ACC): the app account of a bank row (`TxCols.account`).
     TxCols.account,
+  ], indexes: {
     'tx_date': 'date',
     'tx_amount': 'amount'
   }),
@@ -245,11 +246,17 @@ const Map<String, EntityDef> _schema = {
     ColumnDef('payee'),
     ColumnDef.flag('deleted'),
   ]),
+  // ECB reference rates the wallet needs (v20, UX-FX): id `<CUR>:<YYYY-MM-DD>` (`fxDayId`), see `FxDayCols`. Written
+  // only for the (currency, date) pairs the wallet needs (`WalletRepo.fillFxDays`); the full history stays in the
+  // device-local `ecb_rates`.
+  'fx_day': EntityDef('fx_days', FxDayCols.all),
 };
 
-/// The device-local tables: never synced or backed up.
+/// The device-local tables: never synced or backed up. `ecb_rates` (v20, UX-FX): the downloaded ECB history
+/// (`WalletRepo.importEcbHistory`), units per EUR × 1,000,000.
 const localTablesSql = '''
 CREATE TABLE IF NOT EXISTS blob_cache(hash TEXT PRIMARY KEY, sealed BLOB NOT NULL, used_at INTEGER NOT NULL, bytes INTEGER NOT NULL, uploaded INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS ecb_rates(cur TEXT NOT NULL, date TEXT NOT NULL, per_eur INTEGER NOT NULL, PRIMARY KEY(cur, date));
 CREATE TABLE IF NOT EXISTS clocks(entity TEXT NOT NULL, id TEXT NOT NULL, field TEXT NOT NULL, hlc TEXT NOT NULL, PRIMARY KEY(entity, id, field));
 CREATE TABLE IF NOT EXISTS outbox(seq INTEGER PRIMARY KEY AUTOINCREMENT, op TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS sync_cursor(device TEXT PRIMARY KEY, seq INTEGER NOT NULL);

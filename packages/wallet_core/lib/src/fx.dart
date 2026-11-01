@@ -1,9 +1,11 @@
-/// P15: other currencies in the budget by an owner-set rate (`WalletSettings.fxRates`). Pure: nothing is written.
+/// P15: other currencies in the budget by an owner-set rate (`WalletSettings.fxRates`); UX-FX: else by the ECB rate of
+/// each payment's own date (`WalletSettings.ecb`). Pure: nothing is written.
 library;
 
 import 'package:wallet_importer/wallet_importer.dart' show pow10;
 
 import 'currencies.dart' show storageDigitsOf;
+import 'ecb.dart' show ecbConvert;
 import 'models.dart';
 
 /// 2^53 − 1: the largest whole number a web number holds exactly.
@@ -40,12 +42,37 @@ int convertMinor(int amount, int rate, {int fromDigits = 2, int toDigits = 2}) {
 
 /// [t]'s amount in the wallet currency ([WalletSettings.currency]): its own amount when it is in that currency, the
 /// bank's amount when the export gave one ([Tx.homeAmount], P15 hook), else converted at the owner's rate
-/// ([convertMinor]); null when its currency has no rate (it stays out of every sum) or the converted amount is beyond
-/// [WalletSettings.maxAmount] (a rate typed wrong: the row stays foreign). Never a guessed rate.
+/// ([convertMinor]; a hand-set rate wins), else (UX-FX) at the ECB rate of the payment's own date ([WalletSettings.ecb]:
+/// the latest ECB day on or before [Tx.date] within `ecbMaxGapDays`, `ecbConvert`); null when there is no rate (it stays
+/// out of every sum) or the converted amount is beyond [WalletSettings.maxAmount] (a rate typed wrong: the row stays
+/// foreign). Never a guessed rate.
 int? homeAmount(Tx t, WalletSettings st) {
   if (t.currency == st.currency) return t.amount;
-  final h = t.homeAmount ?? switch (st.fxRates[t.currency]) { final r? => _rowHome(t.amount, r.rate, t.currency, st), null => null };
+  final h = t.homeAmount ?? _rowHome(t.amount, t, st);
   return h == null || h.abs() > WalletSettings.maxAmount ? null : h;
+}
+
+/// Which rate [homeAmount] uses for [t] (UX-FX: the app shows "ECB 31 Oct" or "your rate"): null for a row in the
+/// wallet currency, one with a bank amount ([Tx.homeAmount]) or without a rate.
+FxUsed? fxUsed(Tx t, WalletSettings st) {
+  if (t.currency == st.currency || t.homeAmount != null) return null;
+  if (st.fxRates[t.currency] case final r?) return FxUsed(ecb: false, date: r.date);
+  if (st.ecb.pairOn(t.currency, st.currency, t.date) case final p?) return FxUsed(ecb: true, date: p.day);
+  return null;
+}
+
+/// The rate behind a converted amount ([fxUsed]): the ECB's reference rate of [date] (the ECB day used), or the
+/// owner's own rate ([ecb] false; [date] = the day it was set).
+class FxUsed {
+  final bool ecb;
+  final String date;
+  const FxUsed({required this.ecb, required this.date});
+
+  @override
+  bool operator ==(Object other) => other is FxUsed && other.ecb == ecb && other.date == date;
+
+  @override
+  int get hashCode => Object.hash(ecb, date);
 }
 
 /// [txs] (an expanded list, `Categorizer.expandAll`) with every row whose currency has a rate as a row in the wallet
@@ -77,13 +104,19 @@ List<CategorizedTx> inHomeCurrency(List<CategorizedTx> txs, WalletSettings st) {
 }
 
 /// Part [t] of a payment worth [home] in the wallet currency, converted on its own.
+/// The payment has a rate here ([homeAmount] gave [home]), so [_rowHome] is never null for its parts (same date).
 int _partHome(CategorizedTx t, WalletSettings st, int home) =>
-    t.tx.homeAmount == null ? _rowHome(t.amount, st.fxRates[t.tx.currency]!.rate, t.tx.currency, st) : _share(t.amount, home, t.tx.amount);
+    t.tx.homeAmount == null ? _rowHome(t.amount, t.tx, st)! : _share(t.amount, home, t.tx.amount);
 
-/// [amount] stored units of [currency] at [rate] in the wallet currency's stored units (`storageDigitsOf`: fiat ↔ fiat
-/// is the same scale, so exactly the math before schema 20; BTC ↔ fiat scales by 10^6).
-int _rowHome(int amount, int rate, String currency, WalletSettings st) =>
-    convertMinor(amount, rate, fromDigits: storageDigitsOf(currency), toDigits: storageDigitsOf(st.currency));
+/// [amount] stored units of [t]'s currency in the wallet currency's stored units (`storageDigitsOf`: fiat ↔ fiat is the
+/// same scale, so exactly the math before schema 20; BTC ↔ fiat scales by 10^6): at the owner's rate when there is one,
+/// else at the ECB rate of [t]'s date; null without either.
+int? _rowHome(int amount, Tx t, WalletSettings st) {
+  final from = storageDigitsOf(t.currency), to = storageDigitsOf(st.currency);
+  if (st.fxRates[t.currency] case final r?) return convertMinor(amount, r.rate, fromDigits: from, toDigits: to);
+  final p = st.ecb.pairOn(t.currency, st.currency, t.date);
+  return p == null ? null : ecbConvert(amount, perFrom: p.perFrom, perTo: p.perTo, fromDigits: from, toDigits: to);
+}
 
 /// [t] (not in the wallet currency, worth [home]) converted. [wholes]: the converted whole of each split payment met so far.
 CategorizedTx _convert(

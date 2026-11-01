@@ -12,6 +12,7 @@ import 'categories.dart';
 import 'changes.dart';
 import 'cols.dart';
 import 'dates.dart';
+import 'ecb.dart';
 import 'hlc.dart';
 import 'import_preview.dart';
 import 'logs.dart';
@@ -30,6 +31,7 @@ import 'transfers.dart';
 
 part 'repo_accounts.dart';
 part 'repo_bills.dart';
+part 'repo_fx.dart';
 part 'repo_categories.dart';
 part 'repo_changes.dart';
 part 'repo_blobs.dart';
@@ -79,6 +81,10 @@ class ImportSummary {
   /// (`ImportBatch.bankBalances`) that has a live bank account of its source and currency.
   final Map<String, BalanceCheck> bankChecks;
 
+  /// UX-ACC: rows given their app account ([Tx.account]) by this import: new rows whose `accountKey` matched a live
+  /// account, and known rows without one that a re-import filled.
+  final int accountsAssigned;
+
   const ImportSummary(this.added, this.duplicates, this.matched, this.skipped,
       {this.transfers = 0,
       this.collisions = 0,
@@ -86,10 +92,6 @@ class ImportSummary {
       this.skippedByOwner = 0,
       this.bankChecks = const {},
       this.accountsAssigned = 0});
-  /// UX-ACC: rows given their app account ([Tx.account]) by this import: new rows whose `accountKey` matched a live
-  /// account, and known rows without one that a re-import filled.
-  final int accountsAssigned;
-
 }
 
 final _log = Logger('bw.repo');
@@ -268,6 +270,9 @@ class WalletRepo {
 
   /// [stateDigest]'s last result and the [dataVersion] it was computed at; how many real computations ran.
   (int, String)? _digestCache;
+
+  /// [WalletRepoFx.ecbRates]'s last result and the [dataVersion] it was read at (UX-FX).
+  (int, EcbRates)? _ecbCache;
   int _digestRuns = 0;
 
   /// The database file and its key when opened by [open] (native): [WalletRepoSyncApply.stateDigestAsync] reads it on
@@ -519,8 +524,9 @@ class WalletRepo {
           r,
       ], (cz, r) => cz.resolveStored(r['category'] as String?, text: '${r['title'] ?? ''}'), PlannedCost.fromRow);
 
-  /// The stored settings ([_readSettings]: per-key budget and pattern rows, legacy maps only as a fallback).
-  WalletSettings settings() => _readSettings(db, table: categoryTable());
+  /// The stored settings ([_readSettings]: per-key budget and pattern rows, legacy maps only as a fallback), with the
+  /// wallet's ECB rates ([WalletSettings.ecb], `ecbRates`) for the money paths.
+  WalletSettings settings() => _readSettings(db, table: categoryTable(), ecb: ecbRates());
 
   /// Built-ins plus the stored category rows ([categoryRows], deleted ones included: a row pointing at one falls back).
   CategoryTable categoryTable() => CategoryTable.from(categoryRows(includeDeleted: true));
@@ -549,16 +555,16 @@ class WalletRepo {
   void updateSettings(Map<String, Object?> changes) => _write(_settingChanges(changes));
 
   /// Imports a normalized batch. Already-known ids are skipped; `kindHint` is stored (`kind_hint`), `account` never is.
+  /// UX-ACC: a row's `accountKey` (`withAccountKeys`) that matches a live account of its source and currency
+  /// ([Account.matchKey]) gives the new row that account ([Tx.account], in its creation op); no match → none (the main
+  /// account counts it; `unknownImportAccounts` lists what to ask). A known row whose stored account is none gets it
+  /// (only then, never overwritten) ([ImportSummary.accountsAssigned]).
   /// A known id whose stored row has another amount or description is an id collision ([ImportSummary.collisions]):
   /// skipped all the same (never overwritten) and logged as `repo.idCollision` with the count only.
   /// Then own-account transfers are paired across sources ([planTransfers]) and hand-added expenses with the same
   /// amount within 3 days are matched to a bank row their device did not hold when they were added, which keeps their
   /// category ([planMatches]).
   ///
-  /// UX-ACC: a row's `accountKey` (`withAccountKeys`) that matches a live account of its source and currency
-  /// ([Account.matchKey]) gives the new row that account ([Tx.account], in its creation op); no match → none (the main
-  /// account counts it; `unknownImportAccounts` lists what to ask). A known row whose stored account is none gets it
-  /// (only then, never overwritten) ([ImportSummary.accountsAssigned]).
   /// [revive] (P12): ids of rows `setCsvMapping(force: true)` deleted. A deleted row whose id is in it and in the batch
   /// (same amount and description) is undeleted through [_write] and counted as added, so a forced layout change that
   /// reads some rows to the same ids never leaves them deleted. Only those ids: a row deleted for any other reason stays.
@@ -589,34 +595,34 @@ class WalletRepo {
         ? const <String>{}
         : {for (final r in db.select('SELECT id FROM tx WHERE manual = 0 AND account IS NULL')) r['id'] as String};
     for (final (i, n) in batch.transactions.indexed) {
-      switch (c.fates[i]) {
-        case _RowFate.fresh:
-          fresh++;
-          changes.add((
-            'tx',
-            n.id,
       final acc = accountFor(n);
-            {
+      switch (c.fates[i]) {
         case _RowFate.duplicate || _RowFate.revived when acc != null && unassigned.remove(n.id):
           assigned++;
           changes.add(('tx', n.id, {TxCols.account.column: acc}));
           if (c.fates[i] == _RowFate.revived) revived.add(n.id);
+        case _RowFate.fresh:
+          fresh++;
+          if (acc != null) assigned++;
+          changes.add((
+            'tx',
+            n.id,
+            {
               'source': n.source,
               'date': n.date,
-          if (acc != null) assigned++;
               'amount': n.amountMinor,
               'currency': n.currency,
               'bank_type': n.bankType,
               'description': n.description,
               if (n.kindHint case final k?) 'kind_hint': k.name, // never `n.account`: it names the owner's account
               'manual': 0,
+              if (acc != null) TxCols.account.column: acc, // UX-ACC: the app account, never the export's name
               // Never 'deleted': a new row is live through the column default, and writing deleted: 0 here with a
               // fresh HLC would undo a delete made on another device that this one has not synced yet. Only
               // deleteTransaction (and a future undelete) write that field.
             }
           ));
         case _RowFate.revived:
-              if (acc != null) TxCols.account.column: acc, // UX-ACC: the app account, never the export's name
           revived.add(n.id);
         default:
           break;
@@ -650,13 +656,13 @@ class WalletRepo {
       if (tooLarge > 0) 'tooLarge': tooLarge,
       if (skipped > 0) 'ownerSkipped': skipped,
       if (checks.isNotEmpty) 'bankChecks': checks.length,
+      if (assigned > 0) 'accounts': assigned,
     });
     return s;
   }
 
   /// What [importBatch] (and `previewImport`) does with each row of [batch], in batch order, from one read of the
   /// stored ids: beyond ±[maxAmountCents] → tooLarge; in [skip] → skipped; a stored id, or one an earlier row of this
-      if (assigned > 0) 'accounts': assigned,
   /// batch took (the first row wins and is never overwritten) → duplicate, or collision with another amount or
   /// description, or revived when deleted, in [revive] and the same; else fresh.
   ({List<_RowFate> fates, int Function(_RowFate) count}) _classifyBatch(ImportBatch batch,

@@ -32,7 +32,7 @@ bool _perKeySetting(String key) =>
 /// older; migrated once by `_migrate`) only fill in entries that have no row at all, live or removed: an old backup
 /// restored here, or an entry an older build added after this device migrated. An entry with a row never reads the
 /// legacy map again, so a removed budget stays removed.
-WalletSettings _readSettings(CommonDatabase db, {CategoryTable? table}) {
+WalletSettings _readSettings(CommonDatabase db, {CategoryTable? table, EcbRates ecb = EcbRates.none}) {
   final m = <String, Object?>{};
   final rowIds = <String>{}; // per-key rows, live or removed
   for (final r in db.select('SELECT id, value, deleted FROM settings')) {
@@ -68,7 +68,7 @@ WalletSettings _readSettings(CommonDatabase db, {CategoryTable? table}) {
       m[id] = {'category': p[0].toString(), 'pattern': p[1].toString(), 'order': next++};
     }
   }
-  return WalletSettings.fromMap(m, table: table);
+  return WalletSettings.fromMap(m, table: table, ecb: ecb);
 }
 
 /// [WalletRepo.updateSettings]: whole-value settings, one row per key. `categoryBudgets`, `merchantPatterns` and the

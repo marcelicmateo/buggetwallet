@@ -154,6 +154,29 @@ export 'src/dates.dart'
         nextPayday,
         parseIso,
         requireIsoDate;
+export 'src/ecb.dart'
+    show
+        EcbCacheInfo,
+        ecbConvert,
+        ecbDamagedMessage,
+        EcbFile,
+        ecbFirstDay,
+        EcbHistory,
+        ecbHistoryUrl,
+        EcbImport,
+        ecbMaxGapDays,
+        ecbNotRatesMessage,
+        EcbPair,
+        ecbPrecisionMessage,
+        EcbRates,
+        ecbRecentUrl,
+        ecbScale,
+        FxDay,
+        FxDayCols,
+        fxDayId,
+        FxNeed,
+        fxNeeds,
+        parseEcbRates;
 export 'src/export.dart'
     show
         centsToDecimal,
@@ -166,7 +189,7 @@ export 'src/export.dart'
         transactionsCsvTagsHeader;
 export 'src/forecast.dart'
     show BalanceWarning, BalanceWarningKind, balanceWarnings, ForecastPoint, forecastAfterAllowance, forecastToPayday;
-export 'src/fx.dart' show convertMinor, homeAmount, inHomeCurrency;
+export 'src/fx.dart' show convertMinor, FxUsed, fxUsed, homeAmount, inHomeCurrency;
 export 'src/hlc.dart' show ClockBehindException, Hlc, HlcClock, maxClockDrift;
 export 'src/ics.dart' show CalendarEvent, calendarEventRef, calendarRef, IcsParseResult, legacyCalendarEventRef, parseIcs, plannedIcs;
 export 'src/import_preview.dart' show ImportPreview, PreviewRow, PreviewStatus;
@@ -242,6 +265,7 @@ export 'src/models.dart'
         ReviewState,
         ReviewStep,
         Tx,
+        TxCols,
         WalletSettings,
         wholePayments,
         WishItem;
@@ -265,7 +289,6 @@ export 'src/ranges.dart' show DateRange, RangeKind, rangeFor, rangeLabel, shiftR
 export 'src/recurring.dart' show recurringCost;
 export 'src/recurring.dart' show detectRecurring, medianCents, partsDays, partsThreshold, planRecurringPayments, RecurringPayments;
 export 'src/repo.dart'
-        TxCols,
     show
         ImportSummary,
         Op,
@@ -275,6 +298,7 @@ export 'src/repo.dart'
         WalletRepoChanges,
         WalletRepoBills,
         WalletRepoBlobs,
+        WalletRepoFx,
         WalletRepoImport,
         WalletRepoIou,
         WalletRepoMatch,
