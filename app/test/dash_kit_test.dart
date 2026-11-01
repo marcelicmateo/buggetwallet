@@ -425,6 +425,77 @@ void main() {
       expect(_rect(tester, 't1').top, greaterThan(_rect(tester, 'hero').bottom));
     });
 
+    testWidgets('DashGrid(fillRows): a row shares the cells it has left when the next tile does not fit; never over a tall tile',
+        (tester) async {
+      Widget tile(String k) => StatTile(key: ValueKey(k), label: k, value: '1 €');
+      Widget grid(List<Widget> children, {required bool fill}) =>
+          Padding(padding: const EdgeInsets.all(16), child: SingleChildScrollView(child: DashGrid(fillRows: fill, children: children)));
+      final odd = [DashItem(span: 2, child: tile('hero')), tile('a'), DashItem(span: 2, child: tile('wide')), tile('last')];
+
+      await _pump(tester, grid(odd, fill: false), size: const Size(1280, 800));
+      final column = _rect(tester, 'a').width;
+      expect(_rect(tester, 'wide').top, greaterThan(_rect(tester, 'a').bottom), reason: 'off: the cell stays empty');
+
+      await _pump(tester, grid(odd, fill: true), size: const Size(1280, 800));
+      final hero = _rect(tester, 'hero'), a = _rect(tester, 'a');
+      expect(a.width, closeTo(column * 2 + 10, 1), reason: 'on: the tile beside the hero takes the free cell');
+      expect(a.right, closeTo(hero.right + 10 + a.width, 1));
+      expect(_rect(tester, 'wide').top, greaterThan(a.bottom));
+      expect(_rect(tester, 'wide').left, hero.left);
+
+      // Two cells left before a full-width tile: the row's two tiles grow by one cell each; the last row stays short.
+      await _pump(tester, grid([tile('p'), tile('q'), DashItem(span: 4, child: tile('full')), tile('z')], fill: true),
+          size: const Size(1280, 800));
+      expect(_rect(tester, 'p').width, closeTo(_rect(tester, 'full').width / 2 - 5, 1));
+      expect(_rect(tester, 'q').right, closeTo(_rect(tester, 'full').right, 1));
+      expect(_rect(tester, 'z').width, lessThan(_rect(tester, 'full').width / 3));
+
+      // A tall tile blocks cells of the row: nothing grows into them and no two tiles overlap.
+      final tall = [
+        DashItem(span: 2, rowSpan: 2, child: tile('big')),
+        tile('t1'),
+        tile('t2'),
+        tile('t3'),
+        DashItem(span: 2, child: tile('w')),
+        tile('t4'),
+      ];
+      await _pump(tester, grid(tall, fill: true), size: const Size(1280, 800));
+      final keys = ['big', 't1', 't2', 't3', 'w', 't4'];
+      for (var i = 0; i < keys.length; i++) {
+        for (var j = i + 1; j < keys.length; j++) {
+          final x = _rect(tester, keys[i]), y = _rect(tester, keys[j]);
+          expect(x.overlaps(y.deflate(0.5)), isFalse, reason: '${keys[i]} overlaps ${keys[j]}');
+        }
+      }
+    });
+
+    testWidgets('HeroTile(wide): figure and pace meter on the left, the dots on the right, one short row', (tester) async {
+      await _pump(
+        tester,
+        const Padding(
+          padding: EdgeInsets.all(16),
+          child: HeroTile(
+            key: ValueKey('h'),
+            wide: true,
+            label: 'Left',
+            value: '33.71 €',
+            sub: '10 € of 20 €',
+            dots: SizedBox(key: ValueKey('dotsSlot'), height: 100, width: 80),
+            dotsWidth: 80,
+            paceUsed: 0.4,
+            paceExpected: 0.5,
+          ),
+        ),
+        size: const Size(1100, 700),
+      );
+      final dots = tester.getRect(find.byKey(const ValueKey('dotsSlot'))), tile = tester.getRect(find.byKey(const ValueKey('h')));
+      final pace = tester.getRect(find.byType(PaceMeter)), figure = tester.getRect(find.text('33.71 €'));
+      expect(dots.right, closeTo(tile.right - 12, 1), reason: 'dots at the right edge');
+      expect(pace.right, lessThan(dots.left), reason: 'the pace meter stays left of the dots');
+      expect(pace.top, greaterThan(figure.bottom));
+      expect(tile.height, lessThan(200));
+    });
+
     testWidgets('HeroTile: exact figure in a FittedBox, chip, dots slot and a pace meter, one spoken sentence', (tester) async {
       final handle = tester.ensureSemantics();
       await _pump(

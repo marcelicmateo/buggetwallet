@@ -432,7 +432,8 @@ void main() {
       }
     }, timeout: _quick);
 
-    testWidgets('Today: four columns at 1280 with a tile right of the hero, two at 800, one at 320 with text 2.0', (tester) async {
+    testWidgets('Today: at 1280 the hero is one short row across all four columns, two columns at 800, one at 320 with text 2.0',
+        (tester) async {
       Future<List<Rect>> boxes(Size size, double scale) async {
         await pumpFull(tester, _demo(), scale, size: size);
         await pumpIdle(tester);
@@ -440,9 +441,10 @@ void main() {
       }
 
       final wide = await boxes(const Size(1280, 800), 1.0);
-      expect(wide.first.width, greaterThan(wide.map((b) => b.width).reduce((a, b) => a < b ? a : b)), reason: 'the hero spans two columns');
-      expect(wide[1].left, greaterThanOrEqualTo(wide.first.right), reason: 'the next tile sits right of the hero');
-      expect(wide[1].top, closeTo(wide.first.top, 1));
+      final gridW = tester.getSize(find.byType(DashGrid)).width;
+      expect(wide.first.width, closeTo(gridW, 1), reason: 'the hero spans the whole row');
+      expect(wide.first.height, lessThan(wide.first.width / 3), reason: 'one short row: no block of empty paper under the figure');
+      expect(wide[1].top, greaterThanOrEqualTo(wide.first.bottom), reason: 'the next tile flows below the hero');
       final phone = await boxes(const Size(360, 800), 1.0);
       expect(phone[1].top, greaterThanOrEqualTo(phone.first.bottom), reason: 'under the hero on two columns');
       final big = await boxes(const Size(320, 800), 2.0);

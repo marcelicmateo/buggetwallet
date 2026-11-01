@@ -672,7 +672,24 @@ extension BillsDb on WalletController {
   int get returnReminderDays => settings.returnReminderDays;
   int get warrantyReminderDays => settings.warrantyReminderDays;
 
-  /// Saves both reminder spans; false (nothing saved) when one is outside 0..30 (return) or 0..90 (warranty).
+  /// The reminder days of one bill's date: the bill's own value, else the wallet default. WIRE AT MERGE (1 of 2): core's per-bill fields
+  /// are not merged yet, so this returns the default; make it `(warranty ? b.warrantyReminderDays : b.returnReminderDays) ?? default`.
+  /// Used by the sheet's reminder line and by [_rescheduleBillRemindersNow] (per bill).
+  int billReminderDays(Bill b, {required bool warranty}) => warranty ? warrantyReminderDays : returnReminderDays;
+
+  /// Saves this bill's reminder days (return-by and/or warranty; null leaves that one alone) and schedules the reminders again.
+  /// False when core refuses (outside 0..30 return, 0..90 warranty). WIRE AT MERGE (2 of 2): [_writeBillReminderDays] only.
+  bool setBillReminderDays(String id, {int? returnDays, int? warrantyDays}) {
+    final ok = _writeBillReminderDays(id, returnDays, warrantyDays);
+    if (ok) unawaited(rescheduleHeadsUps());
+    return ok;
+  }
+
+  /// The one write: `updateBill(id, returnReminderDays: returnDays, warrantyReminderDays: warrantyDays)` once core has it.
+  bool _writeBillReminderDays(String id, int? returnDays, int? warrantyDays) =>
+      throw UnimplementedError('Per-bill reminder days wait for core (schema 20): wire this to updateBill.');
+
+  /// The wallet-wide default for both reminder spans (the value a bill without its own uses). Saves both; false (nothing saved) when one is outside 0..30 (return) or 0..90 (warranty).
   bool saveBillReminderDays({required int returnDays, required int warrantyDays}) {
     if (returnDays < 0 ||
         returnDays > WalletSettings.maxReturnReminderDays ||
@@ -696,9 +713,9 @@ extension BillsDb on WalletController {
       final items = <(String, bool, int)>[];
       for (final b in billsAll()) {
         if (!b.confirmed) continue;
-        if (b.returnBy != null && b.returnBy!.compareTo(t) >= 0) items.add((b.returnBy!, false, settings.returnReminderDays));
+        if (b.returnBy != null && b.returnBy!.compareTo(t) >= 0) items.add((b.returnBy!, false, billReminderDays(b, warranty: false)));
         if (b.warrantyUntil != null && b.warrantyUntil!.compareTo(t) >= 0) {
-          items.add((b.warrantyUntil!, true, settings.warrantyReminderDays));
+          items.add((b.warrantyUntil!, true, billReminderDays(b, warranty: true)));
         }
       }
       final n = await nudges.scheduleBillReminders(billReminderSlots(_clock(), items));

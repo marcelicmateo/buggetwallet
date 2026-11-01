@@ -280,18 +280,17 @@ void main() {
       }
     }
 
-    testWidgets('1280: the hero spans two columns and two rows, Recent shows eight rows', (tester) async {
+    testWidgets('1280: the hero is one short row across all four columns, Recent shows eight rows', (tester) async {
       final wc = demoWallet();
       addTearDown(wc.dispose);
       await _pump(tester, wc, size: const Size(1280, 1000), now: wc.now);
       final hero = tester.getRect(_k('heroTile'));
       final left = tester.getRect(_k('leftTile'));
-      expect(hero.width, greaterThan(left.width * 1.9));
-      expect(hero.height, greaterThan(left.height * 1.9), reason: 'two rows tall');
-      final tiles = find.byType(Tile);
-      final beside = [for (var i = 0; i < tiles.evaluate().length; i++) tester.getRect(tiles.at(i))]
-          .where((r) => r.left >= hero.right - 1 && (r.top - hero.top).abs() < 1);
-      expect(beside, isNotEmpty, reason: 'a tile sits beside the hero at the top');
+      expect(hero.width, greaterThan(left.width * 1.9), reason: 'a whole row, the other tiles are narrower');
+      expect(hero.height, lessThan(hero.width / 3), reason: 'one short row');
+      expect(left.top, greaterThanOrEqualTo(hero.bottom - 1), reason: 'the other tiles flow below it');
+      expect(tester.getRect(_k('dayDots')).left, greaterThan(hero.center.dx), reason: 'the day dots are on the right');
+      expect(tester.getRect(_k('safeToSpend')).left, lessThan(hero.center.dx), reason: 'the figure is on the left');
       expect(tester.takeException(), isNull);
     });
 

@@ -82,12 +82,11 @@ bool? _twoColumns(Finder root) {
 
 Finder _byName(String n) => find.byWidgetPredicate((w) => w.runtimeType.toString() == n, skipOffstage: false);
 
-/// Today is a tile grid: four columns when another tile sits beside the hero (which is two columns wide).
+/// Today is a tile grid: four columns when the hero fills the whole row and a tile under it is a quarter of that width.
 bool _todayWide(WidgetTester tester) {
   final hero = tester.getRect(find.byKey(const ValueKey('heroTile')));
   final tiles = find.byType(Tile);
-  return [for (var i = 0; i < tiles.evaluate().length; i++) tester.getRect(tiles.at(i))]
-      .any((r) => r.left >= hero.right - 1 && r.top < hero.bottom - 1);
+  return [for (var i = 0; i < tiles.evaluate().length; i++) tester.getRect(tiles.at(i))].any((r) => r.width < hero.width / 3);
 }
 
 Finder _twoColOn(Type screen) =>

@@ -147,33 +147,6 @@ class BillsPanel extends StatefulWidget {
 
 class _BillsPanelState extends State<BillsPanel> with AsyncAction {
   bool _allPaid = false;
-  late final _returnDays = TextEditingController(text: '${widget.wc.returnReminderDays}');
-  late final _warrantyDays = TextEditingController(text: '${widget.wc.warrantyReminderDays}');
-  String? _remindError;
-
-  @override
-  void dispose() {
-    _returnDays.dispose();
-    _warrantyDays.dispose();
-    super.dispose();
-  }
-
-  void _saveReminders() {
-    final r = int.tryParse(_returnDays.text.trim());
-    final w = int.tryParse(_warrantyDays.text.trim());
-    if (r == null || r < 0 || r > WalletSettings.maxReturnReminderDays) {
-      setState(() => _remindError = 'Return-by days must be from 0 to ${WalletSettings.maxReturnReminderDays}.');
-      return;
-    }
-    if (w == null || w < 0 || w > WalletSettings.maxWarrantyReminderDays) {
-      setState(() => _remindError = 'Warranty days must be from 0 to ${WalletSettings.maxWarrantyReminderDays}.');
-      return;
-    }
-    widget.wc.saveBillReminderDays(returnDays: r, warrantyDays: w);
-    setState(() => _remindError = null);
-    toast(context, 'Saved');
-  }
-
   static const _paidShown = 6;
 
   Future<void> _import() => run(() => _pickAndImportBills(context, widget.wc, widget.chooser));
@@ -219,36 +192,6 @@ class _BillsPanelState extends State<BillsPanel> with AsyncAction {
       if (widget.showReview && lists.review.isNotEmpty) group('To review', lists.review),
       if (lists.unpaid.isNotEmpty) group('Unpaid', lists.unpaid, unpaid: true),
       if (lists.paid.isNotEmpty) group('Paid', lists.paid, limit: _paidShown),
-      const Divider(height: 24),
-      const Heading('Reminder days', size: BwType.headingSize),
-      const Muted('How many days before a return window or a warranty ends you get a reminder (0 = on the day).'),
-      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Expanded(
-          child: TextField(
-            key: const ValueKey('returnReminderDays'),
-            controller: _returnDays,
-            keyboardType: TextInputType.number,
-            textAlign: TextAlign.end,
-            style: numStyle,
-            decoration: const InputDecoration(labelText: 'Return-by'),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: TextField(
-            key: const ValueKey('warrantyReminderDays'),
-            controller: _warrantyDays,
-            keyboardType: TextInputType.number,
-            textAlign: TextAlign.end,
-            style: numStyle,
-            decoration: const InputDecoration(labelText: 'Warranty'),
-          ),
-        ),
-      ]),
-      if (_remindError != null) StatusLabel(key: const ValueKey('remindError'), good: false, text: _remindError!),
-      Align(
-          alignment: Alignment.centerLeft,
-          child: FilledButton(key: const ValueKey('remindSave'), onPressed: _saveReminders, child: const Text('Save reminder days'))),
     ]);
   }
 }

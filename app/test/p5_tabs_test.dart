@@ -399,7 +399,6 @@ void main() {
         _key('relayAddress'),
         find.text('Back up now'),
         _key('calendarsPanel'),
-        find.text('Salary landed: start new month'),
         _key('themeMode'),
         find.text('Clear logs'),
       ];
