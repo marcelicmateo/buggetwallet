@@ -103,7 +103,7 @@ func TestStepTimeoutNames(t *testing.T) {
 
 func TestDefaultTimeouts(t *testing.T) {
 	env := sys.Env{}
-	want := map[string]time.Duration{"format": 300, "analyze-app": 300, "core:one": 300, "core": 900, "app": 900, "desktop-layout": 1200, "desktop-layout.s1": 1200,
+	want := map[string]time.Duration{"format": 300, "analyze-app": 300, "core:one": 900, "app:one": 900, "core": 900, "app": 900, "desktop-layout": 1200, "desktop-layout.s1": 1200,
 		"perf": 1200, "linux": 1200, "web": 1200, "apk": 2400, "image": 3600, "mutate": 0, "shell": 0, "go-check": 600}
 	for n, w := range want {
 		if got := DefaultTimeout(env, n); got != w*time.Second {
@@ -481,3 +481,50 @@ func TestStepsRunInParallelAndRecordInOrder(t *testing.T) {
 }
 
 var _ = context.Background
+
+// host steps are stamped in local time, container steps in UTC: last.status orders by the instant, not by the string
+func TestLastStatusOrdersByInstant(t *testing.T) {
+	c := newCtx(t)
+	d, _ := c.Begin("lint")
+	os.WriteFile(filepath.Join(d.Path, "go-check.status"), []byte("1.0 0 2026-11-01T11:00:00+01:00\n"), 0o644) // 10:00 UTC, host
+	os.WriteFile(filepath.Join(d.Path, "format.status"), []byte("1.0 0 2026-11-01T10:30:00+00:00\n"), 0o644)
+	os.WriteFile(filepath.Join(d.Path, "pub.status"), []byte("1.0 0 2026-11-01T10:30:00+00:00\n"), 0o644)
+	os.WriteFile(filepath.Join(d.Path, "actionlint.status"), []byte("1.0 0 2026-11-01T09:59:00+00:00\n"), 0o644)
+	d.Finish(0)
+	last, _ := os.ReadFile(filepath.Join(d.Path, "last.status"))
+	if string(last) != "actionlint ok 1.0\ngo-check ok 1.0\nformat ok 1.0\npub ok 1.0\n" {
+		t.Errorf("last.status %q", last)
+	}
+}
+
+// a step whose log cannot be opened must not be recorded as ok
+func TestUnwritableLogIsAFailedStep(t *testing.T) {
+	c := newCtx(t, "BW_RUN_DIR="+t.TempDir())
+	s := NewSession(c.Ctx)
+	os.Mkdir(filepath.Join(s.Logs, "bad.log"), 0o755) // a directory where the log should go
+	if rc := s.RunStep("bad", func(sc *StepCtx) int { return 0 }, false); rc != 1 {
+		t.Errorf("rc %d", rc)
+	}
+	s.Record("bad", false)
+	if !s.Failed {
+		t.Error("recorded as ok")
+	}
+	if st := file(t, filepath.Join(s.Logs, "bad.status")); !strings.HasPrefix(st, "0.0 1 ") {
+		t.Errorf("status %q", st)
+	}
+	c2 := newCtx(t, "BW_RUN_DIR="+t.TempDir())
+	s2 := NewSession(c2.Ctx)
+	s2.Record("never-ran", false)
+	if !s2.Failed {
+		t.Error("a step without a status is not ok")
+	}
+}
+
+func file(t *testing.T, p string) string {
+	t.Helper()
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}

@@ -116,28 +116,41 @@ func alive(pid int) bool {
 }
 
 // A timed-out step must take its grandchildren with it, even ones that ignore SIGTERM (flutter, Gradle, Xvfb leftovers).
+// The test cancels only after the grandchild is confirmed to exist, so a slow machine cannot make it pass or fail by luck.
 func TestTimeoutKillsGrandchildren(t *testing.T) {
 	old := KillGrace
 	KillGrace = 300 * time.Millisecond
 	defer func() { KillGrace = old }()
 	pidFile := filepath.Join(t.TempDir(), "pid")
-	script := `trap '' TERM; sleep 120 & echo $! > ` + pidFile + `; wait`
-	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	script := `trap '' TERM; sleep 120 & echo $! > ` + pidFile + `.tmp; mv ` + pidFile + `.tmp ` + pidFile + `; wait`
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	start := time.Now()
-	rc := Real{}.Run(ctx, Cmd{Argv: []string{"sh", "-c", script}})
-	if time.Since(start) > 5*time.Second {
-		t.Errorf("took %v", time.Since(start))
+	result := make(chan int, 1)
+	go func() { result <- Real{}.Run(ctx, Cmd{Argv: []string{"sh", "-c", script}}) }()
+	var pid int
+	for deadline := time.Now().Add(30 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		if b, err := os.ReadFile(pidFile); err == nil {
+			pid, _ = strconv.Atoi(strings.TrimSpace(string(b)))
+			break
+		}
+	}
+	if pid == 0 || !alive(pid) {
+		cancel()
+		<-result
+		t.Fatalf("the grandchild did not start (pid %d)", pid)
+	}
+	cancel() // the "timeout"
+	var rc int
+	select {
+	case rc = <-result:
+	case <-time.After(30 * time.Second):
+		syscall.Kill(pid, syscall.SIGKILL)
+		t.Fatal("Run did not return after the cancel")
 	}
 	if rc == 0 {
 		t.Errorf("rc %d for a killed command", rc)
 	}
-	b, err := os.ReadFile(pidFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	pid, _ := strconv.Atoi(strings.TrimSpace(string(b)))
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for alive(pid) && time.Now().Before(deadline) {
 		time.Sleep(20 * time.Millisecond)
 	}

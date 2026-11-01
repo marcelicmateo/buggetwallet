@@ -54,7 +54,7 @@ command's code; new 3 = the tool did not build. A timed-out step writes 124 in i
 <secs>`, start order), `last-failed.txt` (`<step> <ROOT>/dist/logs/<step>.log`, or `run <dir> (exit N, no failed step
 recorded)`), `tests-*.json`, `tests-*-summary.txt`, `image-dev.log`, `stage-summary.txt`; history under `BW_DATA_DIR`.
 **Timeouts.** `Setpgid` + `Pdeathsig=SIGKILL`; on timeout SIGTERM to the group, 10 s grace, SIGKILL, log line
-`# <n>: timed out after N s`. Defaults: lint/analyze/`:one` 300 s, full suite 900 s, desktop unit + perf 1200 s
+`# <n>: timed out after N s`. Defaults: lint/analyze 300 s, full suite and `:one` 900 s (app:one took 321.6 s on 2026-10-22), desktop unit + perf 1200 s
 (= BW_HEADLESS_TIMEOUT), linux/web 1200 s, apk 2400 s, image 3600 s, mutate and shell none. Host SIGINT/SIGTERM →
 `podman stop -t 10 <name>`; `--init` reaps orphans.
 **Parallel desktop-test.** One goroutine per worker, `BW_XDISPLAY=100+w`, own copy of `app/` under

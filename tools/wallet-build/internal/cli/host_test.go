@@ -32,7 +32,7 @@ func runDirs(t *testing.T, r result) []string {
 }
 
 const runEnvFlags = "-e BW_DATA_DIR -e BW_RUN_DIR -e BW_RUN_ID -e BW_RUN -e BW_COMMIT -e BW_CMD -e BW_IMAGE -e BW_COLD -e BW_SOURCE -e BW_WORKTREE"
-const passFlags = "-e BW_NATIVE=1 -e BW_JOBS -e BW_GL_THREADS -e BW_APK_ABIS -e BW_FUZZ_ITERATIONS -e BW_FUZZ_SEED -w /work"
+const passFlags = "-e BW_NATIVE=1 -e BW_JOBS -e BW_GL_THREADS -e BW_APK_ABIS -e BW_FUZZ_ITERATIONS -e BW_FUZZ_SEED -e BW_STEP_TIMEOUT -e BW_HEADLESS_TIMEOUT -e BW_SMOKE_SECONDS -w /work"
 
 func TestHostPodmanRunArgv(t *testing.T) {
 	r := runCLI(t, opts{handle: goHandle(true)}, "core", "test/x_test.dart")
@@ -105,9 +105,9 @@ func TestHostLintRunsGoCheckFirst(t *testing.T) {
 			t.Errorf("%s: last.status %q", cmd, file(t, filepath.Join(dir, "last.status")))
 		}
 	}
-	// a failing go-check stops before the container
+	// a failing go-check is a failed step, but the Dart checks still run; the run exits non-zero
 	r := runCLI(t, opts{handle: goHandle(false)}, "lint")
-	if r.code != 1 || len(podmanRuns(r)) != 0 {
+	if r.code != 1 || len(podmanRuns(r)) != 1 {
 		t.Errorf("code %d, podman runs %v", r.code, podmanRuns(r))
 	}
 	if lf := file(t, filepath.Join(runDirs(t, r)[0], "last-failed.txt")); !strings.HasPrefix(lf, "go-check "+r.root+"/dist/logs/go-check.log") {
@@ -531,5 +531,33 @@ func TestHostTimedLogTimesOut(t *testing.T) {
 	}
 	if stops != 1 {
 		t.Errorf("a timed-out container must be stopped with podman stop -t 10: %d", stops)
+	}
+}
+
+func TestHostForwardsTimeoutEnv(t *testing.T) {
+	r := runCLI(t, opts{env: []string{"BW_TIMEOUT_FORMAT=1", "BW_TIMEOUT_CORE_ONE=5", "BW_STEP_TIMEOUT=9", "BW_HEADLESS_TIMEOUT=7", "BW_SMOKE_SECONDS=2", "BW_TIMEOUTX=1"}}, "core")
+	runs := podmanRuns(r)
+	if len(runs) != 1 {
+		t.Fatal(runs)
+	}
+	for _, want := range []string{"-e BW_FUZZ_SEED -e BW_STEP_TIMEOUT -e BW_HEADLESS_TIMEOUT -e BW_SMOKE_SECONDS -e BW_TIMEOUT_CORE_ONE -e BW_TIMEOUT_FORMAT -w /work"} {
+		if !strings.Contains(runs[0], want) {
+			t.Errorf("lacks %q in %s", want, runs[0])
+		}
+	}
+	if strings.Contains(runs[0], "BW_TIMEOUTX") {
+		t.Error("only BW_TIMEOUT_<STEP> is forwarded")
+	}
+}
+
+func TestHostQuietNeverAllocatesTTY(t *testing.T) {
+	setup := func(hh *host.Host) { hh.IsTTY = func() bool { return true } }
+	r := runCLI(t, opts{setup: setup}, "-q", "core")
+	if runs := podmanRuns(r); len(runs) != 1 || strings.Contains(runs[0], " -it ") {
+		t.Errorf("quiet at a terminal: %v", runs)
+	}
+	r = runCLI(t, opts{setup: setup}, "core")
+	if runs := podmanRuns(r); len(runs) != 1 || !strings.Contains(runs[0], " -it ") {
+		t.Errorf("not quiet at a terminal: %v", runs)
 	}
 }

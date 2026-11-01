@@ -230,7 +230,7 @@ func EnvSelftest(sc *run.StepCtx) int {
 	sort.Strings(names)
 	rc := 0
 	for _, v := range names {
-		if !passed[v] {
+		if !passed[v] && !strings.HasPrefix(v, "BW_TIMEOUT_") {
 			sc.Printf("env-selftest: %s is read by a test but not passed by wallet-build (internal/image PassEnv)\n", v)
 			rc = 1
 		}

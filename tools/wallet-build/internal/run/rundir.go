@@ -125,7 +125,11 @@ func (c *Ctx) WriteLast(dir string, code int) {
 		return
 	}
 	files, _ := filepath.Glob(filepath.Join(dir, "*.status"))
-	var rows []string
+	type row struct {
+		at                int64
+		name, state, secs string
+	}
+	var rows []row
 	for _, f := range files {
 		b, err := os.ReadFile(f)
 		if err != nil {
@@ -141,18 +145,25 @@ func (c *Ctx) WriteLast(dir string, code int) {
 		if rc == "0" {
 			state = "ok"
 		}
-		rows = append(rows, started+" "+n+" "+state+" "+secs)
+		var at int64 // host steps are stamped in local time, container steps in UTC: order by the instant
+		if t, err := time.Parse(time.RFC3339, started); err == nil {
+			at = t.Unix()
+		}
+		rows = append(rows, row{at, n, state, secs})
 	}
-	sort.Strings(rows)
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].at != rows[j].at {
+			return rows[i].at < rows[j].at
+		}
+		return rows[i].name < rows[j].name
+	})
 	var last, failed strings.Builder
 	anyFailed := false
 	for _, r := range rows {
-		parts := strings.SplitN(r, " ", 2)
-		last.WriteString(parts[1] + "\n")
-		fs := strings.Fields(parts[1])
-		if fs[1] == "failed" {
+		fmt.Fprintf(&last, "%s %s %s\n", r.name, r.state, r.secs)
+		if r.state == "failed" {
 			anyFailed = true
-			fmt.Fprintf(&failed, "%s %s/dist/logs/%s.log\n", fs[0], c.Root, fs[0])
+			fmt.Fprintf(&failed, "%s %s/dist/logs/%s.log\n", r.name, c.Root, r.name)
 		}
 	}
 	if !anyFailed && code != 0 {

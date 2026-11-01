@@ -8,8 +8,10 @@
 #   make shell [C='command']    make image | image-name | lsp | mcp | version
 #   make times [ARGS="-n 5 --ci"] | trend | ci-status [ARGS="--wait <sha>"] | ci-log [ARGS=<name>]
 #   make go-test    unit tests of the tool;   make bin    just build dist/bin/wallet-build
-# Q=1 (or BW_QUIET=1) = quiet: nothing is printed and only the exit code comes back (make itself reports any failure as 2;
-# call dist/bin/wallet-build -q <command> directly when the tool's own exit code matters).
+# Q=1 passes -q to the tool (nothing from the tool, not even the compiler log of a failed build), but make itself still prints
+# "make: *** ... Error N" for a failed recipe and exits 2 whatever the tool returned. Before M6 the quiet entry with the real
+# exit codes (0 ok, 1 a step failed, 2 usage, 3 the tool did not build) is  BW_IMPL=go tools/build.sh -q <command>  or
+# dist/bin/wallet-build -q <command>.
 # A failed build of the tool writes the compiler output to dist/wallet-build-build.log.
 
 BIN := dist/bin/wallet-build
@@ -25,7 +27,7 @@ WB = @$(BIN) $(Q_FLAG)
 $(BIN): FORCE
 	@mkdir -p dist/bin
 	@cd tools/wallet-build && GOTOOLCHAIN=local CGO_ENABLED=0 go build -trimpath -o ../../$(BIN) . > ../../dist/wallet-build-build.log 2>&1 \
-	  || { cat ../../dist/wallet-build-build.log >&2; echo "wallet-build did not build (see dist/wallet-build-build.log)" >&2; exit 3; }
+	  || { [ "$(Q)" = 1 ] || { cat ../../dist/wallet-build-build.log >&2; echo "wallet-build did not build (see dist/wallet-build-build.log)" >&2; }; exit 3; }
 FORCE:
 
 bin: $(BIN)

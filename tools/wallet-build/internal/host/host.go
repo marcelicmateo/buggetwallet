@@ -281,16 +281,15 @@ func (h *Host) podRun(cmd string, rest []string) int {
 	} else if cmd == "apk" || cmd == "all" {
 		return h.failHost(cmd, fmt.Sprintf("No Android signing key in %s. Run tools/make-signing-key.sh first, otherwise the APK can't update the installed app.", signingDir))
 	}
-	// the host's go-check runs before the container (lint and test, in step lists of both implementations)
+	// the host's go-check runs before the container (lint and test, in step lists of both implementations). A failure is
+	// recorded, the Dart checks still run, and the run exits non-zero at the end.
+	goCheckFailed := false
 	if cmd == "lint" || cmd == "test" {
 		s := run.NewSession(c)
-		rc := s.RunStep("go-check", steps.GoCheck, true)
+		goCheckFailed = s.RunStep("go-check", steps.GoCheck, true) != 0
 		s.Record("go-check", false)
-		if rc != 0 {
-			return 1
-		}
 	}
-	tty := h.IsTTY()
+	tty := !c.Quiet && h.IsTTY()
 	runDir := c.Getenv("BW_RUN_DIR")
 	if runDir != "" && cmd == "shell" {
 		tty = false // shell -c: logged through a pipe, no terminal
@@ -317,14 +316,23 @@ func (h *Host) podRun(cmd string, rest []string) int {
 	for _, e := range image.PassEnv {
 		argv = append(argv, "-e", e)
 	}
+	for _, e := range image.ForwardEnv(c.Env) {
+		argv = append(argv, "-e", e)
+	}
 	argv = append(argv, "-w", "/work", h.Image)
 	argv = append(argv, inner...)
-	if cmd == "shell" && runDir != "" { // shell -c: output to the terminal and to the run's shell.log
-		return h.timedLog("shell", filepath.Join(runDir, "shell.log"), true, "false", true, func(ctx context.Context, stdout, stderr io.Writer) int {
-			return h.runPodman(ctx, argv, name, false, stdout, stderr)
-		})
+	finish := func(rc int) int {
+		if goCheckFailed && rc == 0 {
+			return 1
+		}
+		return rc
 	}
-	return h.runPodman(context.Background(), argv, name, tty, c.ChildOut, c.ChildErr)
+	if cmd == "shell" && runDir != "" { // shell -c: output to the terminal and to the run's shell.log
+		return finish(h.timedLog("shell", filepath.Join(runDir, "shell.log"), true, "false", true, func(ctx context.Context, stdout, stderr io.Writer) int {
+			return h.runPodman(ctx, argv, name, false, stdout, stderr)
+		}))
+	}
+	return finish(h.runPodman(context.Background(), argv, name, tty, c.ChildOut, c.ChildErr))
 }
 
 func (h *Host) signingPaths() (dir, envFile string) {
@@ -356,9 +364,10 @@ func (h *Host) runPodman(outer context.Context, argv []string, name string, tty 
 	defer cancel()
 	done := make(chan int, 1)
 	go func() { done <- c.R.Run(ctx, cmd) }()
-	select {
-	case <-outer.Done(): // the step's own time limit: same as a signal
+	stopIt := func() {
 		c.R.Run(context.Background(), sys.Cmd{Argv: []string{"podman", "stop", "-t", "10", name}, Env: c.Env})
+	}
+	reap := func() {
 		select {
 		case <-done:
 		case <-time.After(20 * time.Second):
@@ -366,26 +375,38 @@ func (h *Host) runPodman(outer context.Context, argv []string, name string, tty 
 			c.R.Run(context.Background(), sys.Cmd{Argv: []string{"podman", "rm", "-f", name}, Env: c.Env})
 			<-done
 		}
-		return 143
-	case rc := <-done:
-		return rc
-	case sig := <-sigs:
-		code := 130
-		if sig == syscall.SIGTERM {
-			code = 143
-		}
-		c.R.Run(context.Background(), sys.Cmd{Argv: []string{"podman", "stop", "-t", "10", name}, Env: c.Env})
+	}
+	outerDone := outer.Done()
+	for {
 		select {
-		case rc := <-done:
-			if rc == 0 || rc == 125 {
-				rc = code
+		case <-outerDone:
+			if outer.Err() != context.DeadlineExceeded { // cancelled by a signal: the signal case handles it
+				outerDone = nil
+				continue
 			}
+			stopIt() // the step's own time limit: same as a signal
+			reap()
+			return 143
+		case rc := <-done:
 			return rc
-		case <-time.After(20 * time.Second):
-			cancel()
-			c.R.Run(context.Background(), sys.Cmd{Argv: []string{"podman", "rm", "-f", name}, Env: c.Env})
-			<-done
-			return code
+		case sig := <-sigs:
+			code := 130
+			if sig == syscall.SIGTERM {
+				code = 143
+			}
+			stopIt()
+			select {
+			case rc := <-done:
+				if rc == 0 || rc == 125 {
+					rc = code
+				}
+				return rc
+			case <-time.After(20 * time.Second):
+				cancel()
+				c.R.Run(context.Background(), sys.Cmd{Argv: []string{"podman", "rm", "-f", name}, Env: c.Env})
+				<-done
+				return code
+			}
 		}
 	}
 }
