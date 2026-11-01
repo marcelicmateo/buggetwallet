@@ -330,6 +330,7 @@ func TestGO4MutateList(t *testing.T) {
 	} {
 		c := g4mk("mutate_"+sp.name, append([]string{"tools/mutate.py"}, sp.args...), append([]string{"mutate"}, sp.args...))
 		c.inRepo, c.want, c.exitOnly = true, sp.want, true
+		c.newContainer = true // wallet-build mutate builds the image before it checks usage (reported): do not start podman in cheap runs
 		t.Run(c.name, func(t *testing.T) { runG4(t, c) })
 	}
 	for _, sp := range []struct {

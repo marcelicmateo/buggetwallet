@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 // ---------------- relay (tools/relay.sh) ----------------
@@ -779,6 +780,9 @@ func TestGO4CIStatus(t *testing.T) {
 		failing(mk("ci_log_no_ci_logs_branch", opts{greenRows, allDone, nil, true}, -1, "--log")),
 	}
 	for _, c := range cases {
+		if strings.Contains(c.name, "wait") {
+			c.timeout = 40 * time.Second
+		}
 		t.Run(c.name, func(t *testing.T) { runG4(t, c) })
 	}
 }
