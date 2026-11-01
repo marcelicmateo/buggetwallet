@@ -1,0 +1,69 @@
+Local builds in a rootless Podman container. Runs the same steps as CI (.github/workflows/ci.yml).
+
+  tools/build.sh [-q|--quiet] <command> [args…]   (-q or BW_QUIET=1: print nothing at all, stdout and stderr, not even podman or
+                          usage errors; only the exit code comes back. Logs are written exactly as without it; the outcome is in
+                          dist/logs/last.status and dist/logs/last-failed.txt. Not for lsp, mcp, image-name, which talk on stdout)
+  Exit codes: 0 all steps ok; 1 a step failed; 2 usage error (unknown command, mutate without lib files);
+              125-127 podman itself failed (no container started); 130/137/143 interrupted or killed. shell -c returns the
+              command's own code.
+  tools/build.sh test     lint, then importer + core + sync + relay + app: analyze and tests (all in parallel)
+  tools/build.sh lint     quick checks: Dart formatting, shellcheck, actionlint
+  tools/build.sh analyze [pkg…]   analyze only (importer core sync relay app; default all): app compiles against a changed API
+                          without running its tests (app ~7 s)
+  tools/build.sh stage    one stage verification, each step its own run and history lines, in this order: test, desktop-test,
+                          web-test, tools/emulator.sh screens (skipped when the emulator volumes don't exist), perf (last).
+                          Writes dist/logs/stage-summary.txt: seconds and ok/FAILED per step, the failing tests and BUG: skips,
+                          the 10 slowest tests. Takes a long time: start it in the background.
+  tools/build.sh outdated   dart pub outdated per package (needs network; no offline advisory check exists in the SDK).
+                          Not part of test
+  tools/build.sh format   rewrite Dart files with `dart format` (page width in analysis_options.yaml)
+  tools/build.sh apk      Android release APK   -> dist/BudgetWallet-android.apk
+  tools/build.sh linux    Linux release bundle  -> dist/BudgetWallet-linux-x64.tar.gz
+  tools/build.sh relay-bin [arm64|x64]   relay server as a native executable (dart compile exe, cross-compiled; default arm64 for the
+                          Raspberry Pi) -> dist/relay/relay-linux-<arch> + .sha256 (relay/deploy/native/README.md)
+  tools/build.sh relay-native-test [fedora|debian]   x64 relay + relay/deploy/native/ on real systemd in Podman containers (needs network;
+                          not in lint/test; tools/relay-native-test.sh)
+  tools/build.sh web      Flutter web build (--wasm, JS if a dependency blocks it) -> dist/web/; fetches sqlite3.wasm first
+                          (pinned by dev/sqlite3-wasm.sha256). Serve it with tools/web.sh
+  tools/build.sh web-test [file…]   flutter test --platform chrome: app/test/web/ or the given files
+  tools/build.sh all      test, then apk, linux, desktop-test and desktop-smoke
+  tools/build.sh desktop-test [name…]   app integration tests on the Linux desktop app under Xvfb: every
+                          app/integration_test/*_test.dart, or just <name>_test.dart. Screenshots -> dist/screens/linux/<name>/,
+                          app log -> dist/logs/app-linux-<name>.log; each file starts with an empty wallet folder.
+                          Files run in parallel on BW_JOBS workers (default: min(nproc/4, free RAM/3 GB, 6), less when the
+                          machine is busy; 1 = one after another in app/). Each worker builds in its own copy of app/ under
+                          dist/desktop-test/w<N> (own Xvfb display, own wallet folders); layout is split in shards
+  tools/build.sh desktop-smoke   build the Linux release bundle, start it under Xvfb with empty HOME/XDG folders for
+                          BW_SMOKE_SECONDS (10) s: it must stay up, log app.start with no SEVERE line, and exit on SIGTERM
+  tools/build.sh perf     profile-mode frame performance on the Linux desktop app (big synthetic wallet, Spending scroll and
+                          tab switches; flutter drive --profile under Xvfb). Writes <action>.timeline.json (open in DevTools or
+                          Perfetto) and .timeline_summary.json to dist/logs, appends history/perf.jsonl, fails on a budget
+                          overrun (app/test_driver/perf_budget.dart). Not part of test or all.
+  tools/build.sh importer|core|sync|relay|app   analyze and test one package (what CI runs, one step each)
+  tools/build.sh importer|core|sync|relay|app <test file or dir>…   only those tests (paths relative to the package or the repo root),
+                          no analyze; step name <pkg>:one, so the full-suite medians stay clean
+  tools/build.sh mutate <importer|core|sync> <lib file>… [--max N] [--seed S] [--tests <test file>…] [--timeout SECS] [--list]
+                          mutation testing (wallet-build, in the container): seeded sample of simple mutants per lib file, each run
+                          against the package tests (one at a time, in a copy under dist/mutation/work), survivors listed;
+                          dist/mutation/<pkg>-<file>.json
+  GO4-A helpers (no container; also make fixtures | fixtures-embed | token-usage | log-summary | lsp-query):
+  wallet-build fixtures <out_dir> [all|banks|bills|generic]   synthetic importer fixtures (seeded, byte-identical; the two Excel
+                          files are frozen); fixtures embed writes app/integration_test/support/fixtures.dart from the bank files
+  wallet-build token-usage [--since D] [--until D] [--json F]   Claude Code tokens per day/session/model/commit (local transcripts)
+  wallet-build log-summary <log>…   summary of an app log     wallet-build lsp-query refs|def <path:line:col>…   symbol lookup
+  tools/build.sh shell    interactive shell in the container;  shell -c '<command>' runs one command non-interactively
+  tools/build.sh image    (re)build the container image (first build ~15 min)
+  tools/build.sh lsp      Dart language server on stdin/stdout, for editors (repo mounted at its host path)
+  tools/build.sh mcp      Dart/Flutter MCP server (`dart mcp-server`) on stdin/stdout for Claude Code (.mcp.json);
+                          runs in the live-mode pod, so it reaches the app of tools/live.sh
+  tools/build.sh image-name   build the image if needed and print its tag (used by tools/emulator.sh)
+
+The image is rebuilt automatically when dev/Containerfile, dev/install-lint-tools.sh, dev/linux-packages.txt or the
+Flutter version changes.
+The Flutter version comes from `environment: flutter:` in app/pubspec.yaml (CI reads the same line).
+Logs: dist/logs/<step>.log (with start/end stamps) and <step>.status ("seconds exit started"), image builds in
+dist/logs/image-dev.log, per-test timings in dist/logs/tests-<suite>-summary.txt; every step is appended to
+history/steps.jsonl (tools/build-times.sh). dist/logs/last.status has one line per step ("<step> ok|failed <seconds>") and
+dist/logs/last-failed.txt "<step> <log path>" per failed step (empty when green): read these instead of parsing output.
+The exit code is non-zero if any step failed. BW_NATIVE=1 runs the steps directly on a machine that already has
+the right Flutter installed.

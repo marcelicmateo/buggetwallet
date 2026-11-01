@@ -1,0 +1,14 @@
+--- screens: 5 tests, 3 failed, total 63.0 s; per test p50 4000 ms, p90 42000 ms, p99 42000 ms, max 42000 ms
+      <10 ms     0  
+    10-50 ms     0  
+   50-100 ms     0  
+  100-500 ms     0  
+     0.5-1 s     0  
+       1-5 s     3  ########################################
+        >5 s     2  ###########################
+  slowest:
+     42000 ms  broken screen  [?]
+     12000 ms  skipped one  [failure]
+      4000 ms  first screen shows
+      2000 ms  loading integration_test/a_test.dart  [?]
+      1000 ms  second screen opens

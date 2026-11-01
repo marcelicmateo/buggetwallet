@@ -1,0 +1,60 @@
+%PDF-1.7
+%âãÏÓ
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /TrueType /BaseFont /SyntheticMono /FirstChar 32 /LastChar 133 /ToUnicode 6 0 R >>
+endobj
+5 0 obj
+<<  /Filter /FlateDecode /Length 225 >>
+stream
+xœMAOÃ0…ïıï8–ÙéÊƒB‘†4UÙN½P¢µAi{Ù¯G(O~Ÿß³ì½Ææ…¡ ¿À}À–PA·ÙªªÏÕiŸÓ´‡¾ÏVå©N=-µ-”JühcÀ1†Ş-l–ÓÅ}pÂ<‡ñM{ãt·eoã·ó­"ˆ4»v®‘”_¼íŠÄå¼ïŞcH°ª+¥ˆˆùÿTŞİLi9E’|X3¯w‹£<”OIÔ¦‘DS«Á0ÆÉO`ÚÌ¹dy6ãÔ¡Ãó¶‘Äæ9	f1Ûş(uöGŠ]
+endstream
+endobj
+6 0 obj
+<<  /Length 266 >>
+stream
+/CIDInit /ProcSet findresource begin
+12 dict begin
+begincmap
+1 begincodespacerange
+<00> <FF>
+endcodespacerange
+1 beginbfrange
+<20> <7E> <0020>
+endbfrange
+6 beginbfchar
+<80> <010D>
+<81> <0107>
+<82> <0111>
+<83> <0161>
+<84> <017E>
+<85> <010C>
+endbfchar
+endcmap
+end
+end
+
+endstream
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000223 00000 n 
+0000000345 00000 n 
+0000000643 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+961
+%%EOF

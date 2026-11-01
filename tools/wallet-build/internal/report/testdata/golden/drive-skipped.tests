@@ -1,0 +1,1 @@
+{"ts": "2026-11-01T17:20:32+00:00", "run": "20261101-100000-app-abc1234", "source": "local", "commit": "abc1234", "suite": "chart_dpr", "test": "chart_dpr: desktop windows only", "ms": 0, "result": "skipped"}

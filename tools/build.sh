@@ -44,8 +44,14 @@
 #   tools/build.sh importer|core|sync|relay|app <test file or dir>…   only those tests (paths relative to the package or the repo root),
 #                           no analyze; step name <pkg>:one, so the full-suite medians stay clean
 #   tools/build.sh mutate <importer|core|sync> <lib file>… [--max N] [--seed S] [--tests <test file>…] [--timeout SECS] [--list]
-#                           mutation testing (tools/mutate.py): seeded sample of simple mutants per lib file, each run against the
-#                           package tests (one at a time, file restored after each), survivors listed; dist/mutation/<pkg>-<file>.json
+#                           mutation testing (wallet-build, in the container): seeded sample of simple mutants per lib file, each run
+#                           against the package tests (one at a time, in a copy under dist/mutation/work), survivors listed;
+#                           dist/mutation/<pkg>-<file>.json
+#   GO4-A helpers (no container; also make fixtures | fixtures-embed | token-usage | log-summary | lsp-query):
+#   wallet-build fixtures <out_dir> [all|banks|bills|generic]   synthetic importer fixtures (seeded, byte-identical; the two Excel
+#                           files are frozen); fixtures embed writes app/integration_test/support/fixtures.dart from the bank files
+#   wallet-build token-usage [--since D] [--until D] [--json F]   Claude Code tokens per day/session/model/commit (local transcripts)
+#   wallet-build log-summary <log>…   summary of an app log     wallet-build lsp-query refs|def <path:line:col>…   symbol lookup
 #   tools/build.sh shell    interactive shell in the container;  shell -c '<command>' runs one command non-interactively
 #   tools/build.sh image    (re)build the container image (first build ~15 min)
 #   tools/build.sh lsp      Dart language server on stdin/stdout, for editors (repo mounted at its host path)
@@ -65,6 +71,26 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
+# The Go port (tools/wallet-build, `make bin`) takes over the commands named in the case below. BW_IMPL=go forces it for every
+# command (to try a port), BW_IMPL=bash keeps this script; natively (BW_NATIVE=1: CI, and the bash steps inside the image)
+# auto means bash. A command is added to the auto list only after its parity case passes. Exit 3 = the tool did not build.
+impl=${BW_IMPL:-auto}
+[[ $impl == auto && ${BW_NATIVE:-} == 1 ]] && impl=bash
+cmd_=${1:-}
+case "$cmd_" in -q|--quiet) cmd_=${2:-} ;; esac
+case "$impl:${cmd_:-test}" in
+  # auto list (M3, 2026-11-01): the commands whose parity case passed (tools/wallet-build/parity). Still bash: format,
+  # outdated, perf, web, all, image, mcp, relay-native-test, stage (no parity case yet, or not soaked).
+  go:*|auto:test|auto:lint|auto:analyze|auto:importer|auto:core|auto:sync|auto:relay|auto:app|auto:shell|auto:image-name|\
+  auto:lsp|auto:relay-bin|auto:linux|auto:desktop-smoke|auto:apk|auto:web-test|auto:desktop-test|auto:mutate)
+    mkdir -p "$ROOT/dist/bin"
+    if ! (cd "$ROOT/tools/wallet-build" && GOTOOLCHAIN=local CGO_ENABLED=0 go build -trimpath -o "$ROOT/dist/bin/wallet-build" .) \
+      > "$ROOT/dist/wallet-build-build.log" 2>&1; then
+      [[ ${BW_QUIET:-} == 1 || ${1:-} == -q || ${1:-} == --quiet ]] || cat "$ROOT/dist/wallet-build-build.log" >&2
+      exit 3
+    fi
+    exec "$ROOT/dist/bin/wallet-build" "$@" ;;
+esac
 case "${1:-}" in -q|--quiet) BW_QUIET=1; shift ;; esac
 # Quiet: everything below (podman, flutter, python helpers, our own echo) inherits /dev/null; the logs are written by the steps.
 # lsp, mcp and image-name use stdout as their result, so they stay as they are.
@@ -159,7 +185,8 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
   case "$CMD" in
     image) build_image; exit ;;
     image-name) podman image exists "$IMAGE" || build_image; echo "$IMAGE"; exit ;;
-    test|lint|apk|linux|all|importer|core|sync|relay|app|mutate|desktop-test|desktop-smoke|perf|web|web-test|analyze|outdated|relay-bin) run_begin "$CMD" ;;
+    mutate) (($# > 2)) || usage; run_begin "$CMD" ;;  # usage errors before the run dir, as wallet-build does
+    test|lint|apk|linux|all|importer|core|sync|relay|app|desktop-test|desktop-smoke|perf|web|web-test|analyze|outdated|relay-bin) run_begin "$CMD" ;;
     stage) host_stage; exit ;;
     relay-native-test)
       run_begin "$CMD"
@@ -180,6 +207,30 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
   fi
   # Build output goes to stderr (stdout belongs to the LSP client in `lsp` mode)
   podman image exists "$IMAGE" || build_image
+  # go-check (tools/wallet-build): the tool's gofmt, go vet, go test and a CGO_ENABLED=0 check, on the host before the container.
+  # The Go port runs the same step, so both implementations list it in lint and test.
+  # shellcheck disable=SC2329  # run by name through timed_log
+  go_check() {
+    local d=$ROOT/tools/wallet-build rc=0 out
+    command -v go > /dev/null || { echo "go not found on PATH: the host needs Go for tools/wallet-build"; return 1; }
+    echo "--- gofmt -l tools/wallet-build"
+    out=$(gofmt -l "$d") || rc=1
+    [[ -z $out ]] || { echo "gofmt: these files need formatting (run gofmt -w):"; echo "$out"; rc=1; }
+    echo "--- go vet ./..."; (cd "$d" && GOTOOLCHAIN=local go vet ./...) || rc=1
+    echo "--- go test ./..."; (cd "$d" && GOTOOLCHAIN=local go test ./...) || rc=1
+    if [[ -d $d/parity ]]; then echo "--- go vet -tags parity ./... (parity)"; (cd "$d/parity" && GOTOOLCHAIN=local go vet -tags parity ./...) || rc=1; fi
+    echo "--- go version -m dist/bin/wallet-build"
+    mkdir -p "$ROOT/dist/bin"
+    (cd "$d" && GOTOOLCHAIN=local CGO_ENABLED=0 go build -trimpath -o "$ROOT/dist/bin/wallet-build" .) || { echo "wallet-build did not build"; return 1; }
+    out=$(cd "$ROOT" && GOTOOLCHAIN=local go version -m dist/bin/wallet-build 2>&1) || { echo "cannot read the build info of dist/bin/wallet-build"; return 1; }
+    grep -q 'CGO_ENABLED=0' <<<"$out" || { echo "dist/bin/wallet-build was not built with CGO_ENABLED=0"; rc=1; }
+    return "$rc"
+  }
+  # A failing go-check is a failed step, not a stop: the Dart checks still run, and the run exits non-zero at the end.
+  gc_failed=0
+  if [[ "$CMD" == lint || "$CMD" == test ]]; then
+    BW_TIMED_COLD=false timed_log go-check "$BW_RUN_DIR/go-check.log" go_check || gc_failed=1
+  fi
   if [[ "$CMD" == lsp ]]; then
     # Same path inside and outside, so file URIs match what the editor sends.
     # The analysis cache volume makes restarts fast.
@@ -211,10 +262,12 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
   elif [[ "$CMD" == apk || "$CMD" == all ]]; then
     fail_host "$CMD" "No Android signing key in $SIGNING_DIR. Run tools/make-signing-key.sh first, otherwise the APK can't update the installed app."
   fi
-  tty=(); [[ -t 0 && -t 1 ]] && tty=(-it)
+  tty=(); [[ -t 0 && -t 1 && ${BW_QUIET:-} != 1 ]] && tty=(-it)
   [[ -n "${BW_RUN_DIR:-}" && "$CMD" == shell ]] && tty=()  # shell -c: logged through a pipe, no terminal
   inner=(tools/build.sh "$CMD" "${@:2}"); [[ "$CMD" == shell ]] && inner=(bash "${@:2}")
   [[ -n "${BW_RUN_DIR:-}" ]] && mapfile -t run < <(run_mounts)
+  # step time limits set on the host (BW_TIMEOUT_<STEP>) apply inside the container too
+  fwd=(); while read -r v; do fwd+=(-e "$v"); done < <(compgen -e | grep '^BW_TIMEOUT_' | LC_ALL=C sort || true)
   # Rootless: container root is the host user, so build outputs stay owned by you.
   # Named volumes keep the pub and Gradle caches between runs.
   # No exec: the shell must stay to remove the run's .running marker on exit (tools/timing.sh)
@@ -226,12 +279,14 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
     -v bw-android-user:/cache/android \
     "${signing[@]}" "${run[@]}" \
     -e BW_NATIVE=1 -e BW_JOBS -e BW_GL_THREADS -e BW_APK_ABIS -e BW_FUZZ_ITERATIONS -e BW_FUZZ_SEED \
+    -e BW_STEP_TIMEOUT -e BW_HEADLESS_TIMEOUT -e BW_SMOKE_SECONDS "${fwd[@]}" \
     -w /work "$IMAGE" "${inner[@]}")
   if [[ "$CMD" == shell && -n "${BW_RUN_DIR:-}" ]]; then  # shell -c: output to the terminal and to the run's shell.log
     BW_TIMED_SPLIT=1 BW_TIMED_COLD=false timed_log shell "$BW_RUN_DIR/shell.log" "${podrun[@]}" || rc=$?
   else
     "${podrun[@]}" || rc=$?
   fi
+  [[ $rc == 0 && $gc_failed == 1 ]] && rc=1
   exit "$rc"
 fi
 
@@ -366,15 +421,17 @@ steps() {
   done
 }
 
+# The Go port (wallet-build hook no-poll, relay-native-check; GO4-B) runs when dist/bin/wallet-build exists (the host builds it in
+# go-check before the container); without it (CI before GO3) native-units falls back to the old script.
 # Packages are resolved first (pub_ready, sequentially: they share the pub cache), so the checks skip their own
 # implicit `pub get` (--no-pub) and all run in parallel.
 LINT=(format format_check
       shellcheck 'shellcheck tools/*.sh dev/*.sh .github/scripts/*.sh'
       actionlint actionlint
-      hook-selftest 'tools/no-poll-hook.sh --self-test'
+      hook-selftest 'tools/no-poll-hook.sh --self-test && { [[ ! -x dist/bin/wallet-build ]] || dist/bin/wallet-build hook no-poll --self-test; }'
       env-selftest env_selftest
       deploy-selftest 'tools/relay-deploy.sh --self-test'
-      native-units 'tools/relay-native-check.sh')
+      native-units 'if [[ -x dist/bin/wallet-build ]]; then dist/bin/wallet-build relay-native-check; else tools/relay-native-check.sh; fi')
 declare -A SUITE=(
   [importer]='suite importer packages/wallet_importer "dart analyze --fatal-infos" dart test --timeout 60s'
   [core]='suite core packages/wallet_core "dart analyze --fatal-infos" dart test --timeout 60s'

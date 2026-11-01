@@ -1,0 +1,6 @@
+state=started
+dtd=ws://127.0.0.1:41001/own=
+app=app-id-1
+mode=debug
+vm=ws://127.0.0.1:38000/AbC=/ws
+devtools=http://127.0.0.1:9100/?uri=ws%3A%2F%2F127.0.0.1%3A38000%2FAbC%3D%2Fws

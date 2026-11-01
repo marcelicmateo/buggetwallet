@@ -26,6 +26,32 @@ Finder get _address => find.byKey(const ValueKey('relayAddress'));
 
 int _count(WalletController wc, int cents) => wc.txs.where((x) => x.amount.abs() == cents).length;
 
+Future<void> _waitIdle(WalletController wc) async {
+  final end = DateTime.now().add(const Duration(seconds: 30));
+  while (wc.syncing) {
+    if (DateTime.now().isAfter(end)) fail('a sync run did not end');
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+  }
+}
+
+/// Waits until [wc] has no sync running, in real time. A controller starts a run of its own 3 s after each write (a real timer: the
+/// integration binding is live), and `syncNow` does nothing while one runs: a step that calls it (or taps Sync now) while that run
+/// is going is dropped, and the step's expectations then see data from before it. Before a tap this narrows the window but does not
+/// close it: a timer may fire between this and the tap. That stays correct because the run it starts begins after everything the
+/// test has pushed so far, so it pulls the same data the tap would (and, with the relay down, fails the way the tap would); the
+/// test then waits on `lastSync` / `syncError`, which either run sets.
+Future<void> _idle(WidgetTester t, WalletController wc) async {
+  await t.runAsync(() => _waitIdle(wc));
+}
+
+/// A sync of [wc] that really runs: waits for a running one first; nothing can start between the check and the call (microtasks only).
+Future<void> _syncNow(WidgetTester t, WalletController wc) async {
+  await t.runAsync(() async {
+    await _waitIdle(wc);
+    await wc.syncNow();
+  });
+}
+
 void main() {
   Harness.init();
   Harness.private(texts: ['127.0.0.1', 'Zebra note', 'Giraffe note', 'Offline note'], cents: [3777, 1250, 1999]);
@@ -65,7 +91,7 @@ void main() {
       addTearDown(b.dispose);
       b.relayUrl = Uri.parse(addr);
       Future<void> syncB() async {
-        await t.runAsync(b.syncNow);
+        await _syncNow(t, b);
         expect(b.syncError, isNull, reason: 'B sync');
         expect(b.deviceStop, isNull, reason: 'B is approved');
       }
@@ -83,14 +109,14 @@ void main() {
       expect(status('Up to date'), findsOneWidget);
 
       // A new wallet requires approval: B's first sync ends waiting, with its code; A approves that code; B syncs.
-      await t.runAsync(b.syncNow);
+      await _syncNow(t, b);
       expect(b.deviceStop, DeviceStop.pending, reason: "B's first sync waits for approval");
       expect(b.syncError, isNull);
       final code = b.deviceCode;
       expect(code, isNotNull);
       expect(RegExp(r'^[A-Z2-7]{4}-[A-Z2-7]{4}$').hasMatch(code!), isTrue);
       expect(await t.runAsync(() => a.approveDevice(code)), isNull, reason: 'A approves the code B shows');
-      await t.runAsync(b.syncNow);
+      await _syncNow(t, b);
       expect(b.deviceStop, isNull, reason: 'B is enrolled after the approval');
       expect(b.syncError, isNull);
 
@@ -102,8 +128,10 @@ void main() {
       // B adds an expense; A syncs with the button and shows it.
       b.addExpense(amount: 3777, category: 'Groceries', note: 'Zebra note', date: todayIso());
       await syncB();
+      await _idle(t, a);
       final before = a.lastSync;
       await scrollTo(t, find.text('Sync now'), SettingsScreen);
+      await _idle(t, a);
       await tapVisible(t, find.text('Sync now'));
       await waitFor(t, () => a.lastSync != before, what: 'Sync now');
       expect(a.syncError, isNull);
@@ -124,6 +152,7 @@ void main() {
       await t.pumpAndSettle();
       await goSettings(t, SettingsSection.sync);
       await scrollTo(t, find.text('Sync now'), SettingsScreen);
+      await _idle(t, a);
       await tapVisible(t, find.text('Sync now'));
       await waitFor(t, () => a.syncError != null, what: 'the outage message');
       expect(find.byKey(const ValueKey('syncError')), findsOneWidget);
@@ -134,6 +163,7 @@ void main() {
       relay = Relay(data: dataDir, log: (_) {});
       await t.runAsync(() => relay.serve(host: '127.0.0.1', port: port));
       relayUp = true;
+      await _idle(t, a); // a run of A's own that started while the relay was down must not be the one this tap is dropped for
       await tapVisible(t, find.text('Sync now'));
       await waitFor(t, () => a.syncError == null && !a.syncing, what: 'recovery');
       expect(status('Up to date'), findsOneWidget);

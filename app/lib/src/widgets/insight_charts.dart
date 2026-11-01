@@ -313,7 +313,7 @@ class ShareBars extends StatelessWidget {
     final slices = share.slices;
     final cats = table ?? CategoryTable.builtIn;
     if (slices.isEmpty) return const EmptyNote('No spending in this range.');
-    final top = slices.first.spent.clamp(1, 1 << 60);
+    final top = slices.first.spent.clamp(1, 0x1FFFFFFFFFFFFF); // 2^53 − 1 (web shifts are 32-bit: 1 << 60 is not 2^60)
     return Column(children: [
       for (final s in slices)
         Semantics(
@@ -369,7 +369,7 @@ class TagBars extends StatelessWidget {
     final c = context.c;
     final slices = share.slices;
     if (slices.isEmpty) return const EmptyNote('No tagged spending in this range.');
-    final top = slices.first.spent.clamp(1, 1 << 60);
+    final top = slices.first.spent.clamp(1, 0x1FFFFFFFFFFFFF); // 2^53 − 1 (web shifts are 32-bit: 1 << 60 is not 2^60)
     return Column(children: [
       for (final s in slices)
         Semantics(

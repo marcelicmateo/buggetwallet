@@ -51,6 +51,18 @@ void main() {
 
       // a list: the share panel, shorter
       await scrollTo(t, find.byKey(const ValueKey('insightPanel_share')), InsightsScreen);
+      // Zoom on the running month (UX-BUG2): the window stays on or before today, so it still shows rows, on any day of the month.
+      bool anyShareRow() => find
+          .byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('shareRow_'))
+          .evaluate()
+          .isNotEmpty;
+      expect(anyShareRow(), isTrue, reason: 'the running month has rows before the zoom');
+      await tapVisible(t, find.byKey(const ValueKey('chartZoomIn_share')));
+      await t.pumpAndSettle();
+      expect(wc.insightRange('share').range.end.compareTo(today) <= 0, isTrue, reason: 'the zoomed month is not past today');
+      expect(anyShareRow(), isTrue, reason: 'a zoom on the running month still shows its payments');
+      // The rest of the share steps use three months: always the past months' rows, whatever the date.
+      await tapVisible(t, find.byKey(const ValueKey('rangeChip_share_months3')));
       await tapVisible(t, find.byKey(const ValueKey('chartZoomIn_share')));
       await t.pumpAndSettle();
       await Harness.shot(t, 'zoom-6-share-shorter-$name');
