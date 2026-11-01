@@ -30,10 +30,15 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 # The Go port (tools/wallet-build, `wallet-build emulator`) takes over when BW_IMPL=go (to try it) or when this script is in the
-# auto list of the case below (empty: still bash). BW_IMPL=bash keeps this script; natively (BW_NATIVE=1) auto means bash.
-# Exit 3 = the tool did not build. A command joins the auto list only after its parity case passes.
+# auto list (since 2026-11-01: every command but reset, after the heavy parity cases screens, test and
+# start/install/shot/adb/stop passed; reset deletes the volumes and has no parity case). BW_IMPL=bash keeps this script;
+# natively (BW_NATIVE=1) auto means bash. Exit 3 = the tool did not build.
 impl=${BW_IMPL:-auto}
 [[ $impl == auto && ${BW_NATIVE:-} == 1 ]] && impl=bash
+if [[ $impl == auto ]]; then
+  c=${1:-}; [[ $c == -q || $c == --quiet ]] && c=${2:-}
+  if [[ $c == reset ]]; then impl=bash; else impl=go; fi
+fi
 case "$impl" in
   go)
     mkdir -p "$ROOT/dist/bin"
