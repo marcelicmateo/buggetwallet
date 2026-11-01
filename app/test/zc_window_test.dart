@@ -43,6 +43,21 @@ void main() {
       expect(back.end, '2026-10-21');
     });
 
+    test('a zoom that makes a window shorter ends it at today: the middle of a running month is in the future', () {
+      final w = r('2026-10-01', '2026-10-31');
+      final e = edgesFor(w, first: '2025-01-01');
+      final z = e.zoom(w, 2);
+      expect(z.end, today);
+      expect(z.days, 16);
+      final pinch = e.transform(w, 2, 0.5, 0.5);
+      expect(pinch.end, today, reason: 'a pinch on it too');
+      expect(e.zoom(w, 0.5).days, greaterThan(31), reason: 'zooming out may keep sticking out');
+      final past = r('2026-06-01', '2026-10-01');
+      final inner = edgesFor(past, first: '2025-01-01').zoom(past, 2);
+      expect(inner.start.compareTo(past.start) > 0 && inner.end.compareTo(past.end) < 0, isTrue,
+          reason: 'a window in the past zooms around its middle as before');
+    });
+
     test('cannot go before the first day with data', () {
       final w = r('2026-08-01', '2026-10-20');
       final e = edgesFor(w, first: '2026-03-10');
