@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # Local builds in a rootless Podman container. Runs the same steps as CI (.github/workflows/ci.yml).
 #
+#   tools/build.sh [-q|--quiet] <command> [args…]   (-q or BW_QUIET=1: print nothing at all, stdout and stderr, not even podman or
+#                           usage errors; only the exit code comes back. Logs are written exactly as without it; the outcome is in
+#                           dist/logs/last.status and dist/logs/last-failed.txt. Not for lsp, mcp, image-name, which talk on stdout)
+#   Exit codes: 0 all steps ok; 1 a step failed; 2 usage error (unknown command, mutate without lib files);
+#               125-127 podman itself failed (no container started); 130/137/143 interrupted or killed. shell -c returns the
+#               command's own code.
 #   tools/build.sh test     lint, then importer + core + sync + relay + app: analyze and tests (all in parallel)
 #   tools/build.sh lint     quick checks: Dart formatting, shellcheck, actionlint
 #   tools/build.sh analyze [pkg…]   analyze only (importer core sync relay app; default all): app compiles against a changed API
@@ -50,13 +56,19 @@
 # The image is rebuilt automatically when dev/Containerfile, dev/install-lint-tools.sh, dev/linux-packages.txt or the
 # Flutter version changes.
 # The Flutter version comes from `environment: flutter:` in app/pubspec.yaml (CI reads the same line).
-# Logs: dist/logs/<step>.log (with start/end stamps), image builds in dist/logs/image-dev.log, per-test timings in
-# dist/logs/tests-<suite>-summary.txt; every step is appended to dist/logs/history.jsonl (tools/build-times.sh).
+# Logs: dist/logs/<step>.log (with start/end stamps) and <step>.status ("seconds exit started"), image builds in
+# dist/logs/image-dev.log, per-test timings in dist/logs/tests-<suite>-summary.txt; every step is appended to
+# history/steps.jsonl (tools/build-times.sh). dist/logs/last.status has one line per step ("<step> ok|failed <seconds>") and
+# dist/logs/last-failed.txt "<step> <log path>" per failed step (empty when green): read these instead of parsing output.
 # The exit code is non-zero if any step failed. BW_NATIVE=1 runs the steps directly on a machine that already has
 # the right Flutter installed.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
+case "${1:-}" in -q|--quiet) BW_QUIET=1; shift ;; esac
+# Quiet: everything below (podman, flutter, python helpers, our own echo) inherits /dev/null; the logs are written by the steps.
+# lsp, mcp and image-name use stdout as their result, so they stay as they are.
+case "${1:-}" in lsp|mcp|image-name) ;; *) [[ ${BW_QUIET:-} == 1 ]] && exec >/dev/null 2>&1 ;; esac
 FLUTTER_VERSION=$(grep -oP '^\s+flutter:\s*"?\K[0-9]+\.[0-9]+\.[0-9]+' "$ROOT/app/pubspec.yaml")
 # Tag = Flutter version + hash of the image inputs, so editing any of them rebuilds the image on the next run
 IMAGE="localhost/budget-wallet-dev:$FLUTTER_VERSION-$(cat "$ROOT/dev/Containerfile" "$ROOT/dev/install-lint-tools.sh" "$ROOT/dev/linux-packages.txt" | sha256sum | cut -c1-8)"
@@ -88,6 +100,9 @@ host_stage() {
     env -u BW_RUN_DIR -u BW_RUN_ID -u BW_RUN -u BW_CMD -u BW_COLD "${sub[i + 1]}" "${sub[i + 2]}" || rc=$?
     names+=("$n"); secs+=("$(secs_since "$start")"); results+=("$([[ $rc == 0 ]] && echo ok || echo FAILED)")
     d=$(readlink "$ROOT/dist/logs" || true); dirs+=("$d")
+    # one status per sub-run; its log is a pointer to the sub-run (that run's own last-failed.txt names the failed steps)
+    printf '# %s: sub-run %s\nfailed steps: %s/last-failed.txt\n' "$n" "$d" "$d" > "$stage_dir/$n.log"
+    echo "${secs[-1]} $rc $(now_iso)" > "$stage_dir/$n.status"
     i=$((i + 3))
   done
   ln -sfn "$stage_dir" "$ROOT/dist/logs"
@@ -146,16 +161,22 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
     image-name) podman image exists "$IMAGE" || build_image; echo "$IMAGE"; exit ;;
     test|lint|apk|linux|all|importer|core|sync|relay|app|mutate|desktop-test|desktop-smoke|perf|web|web-test|analyze|outdated|relay-bin) run_begin "$CMD" ;;
     stage) host_stage; exit ;;
-    relay-native-test) "$ROOT/tools/build.sh" relay-bin x64 && exec "$ROOT/tools/relay-native-test.sh" "${@:2}" ;;
-    format|shell|lsp|mcp) ;;
+    relay-native-test)
+      run_begin "$CMD"
+      "$ROOT/tools/build.sh" relay-bin x64 || exit 1
+      BW_TIMED_SPLIT=1 BW_TIMED_COLD=false timed_log relay-native-test "$BW_RUN_DIR/relay-native-test.log" \
+        "$ROOT/tools/relay-native-test.sh" "${@:2}"
+      exit ;;
+    format) run_begin "$CMD" ;;
+    shell) [[ ${2:-} == -c ]] && run_begin "$CMD" ;;
+    lsp|mcp) ;;
     *) usage ;;
   esac
-  [[ "$CMD" == web || "$CMD" == web-test ]] && { fetch_sqlite_wasm || exit 1; }
+  [[ "$CMD" == web || "$CMD" == web-test ]] && { fetch_sqlite_wasm || fail_host "$CMD" "sqlite3mc.wasm unavailable (see the message above)"; }
   # mutate works on a copy, but a leftover mutant from an older run would be mutated again: refuse (checked here, the
   # worktree's git directory is not visible inside the container)
   if [[ "$CMD" == mutate ]] && ! git -C "$ROOT" diff --quiet HEAD -- packages/wallet_core/lib packages/sync/lib packages/wallet_importer/lib; then
-    echo "mutate: lib files differ from HEAD (a leftover mutant?). Restore with: git checkout -- packages/wallet_core/lib packages/sync/lib packages/wallet_importer/lib" >&2
-    exit 1
+    fail_host mutate "mutate: lib files differ from HEAD (a leftover mutant?). Restore with: git checkout -- packages/wallet_core/lib packages/sync/lib packages/wallet_importer/lib"
   fi
   # Build output goes to stderr (stdout belongs to the LSP client in `lsp` mode)
   podman image exists "$IMAGE" || build_image
@@ -188,25 +209,29 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
   if [[ -f "$SIGNING_DIR/signing.env" ]]; then
     signing=(-v "$SIGNING_DIR:/signing:ro,z" --env-file "$SIGNING_DIR/signing.env" -e BW_KEYSTORE=/signing/android-release.jks)
   elif [[ "$CMD" == apk || "$CMD" == all ]]; then
-    echo "No Android signing key in $SIGNING_DIR. Run tools/make-signing-key.sh first," >&2
-    echo "otherwise the APK can't update the installed app." >&2
-    exit 1
+    fail_host "$CMD" "No Android signing key in $SIGNING_DIR. Run tools/make-signing-key.sh first, otherwise the APK can't update the installed app."
   fi
   tty=(); [[ -t 0 && -t 1 ]] && tty=(-it)
+  [[ -n "${BW_RUN_DIR:-}" && "$CMD" == shell ]] && tty=()  # shell -c: logged through a pipe, no terminal
   inner=(tools/build.sh "$CMD" "${@:2}"); [[ "$CMD" == shell ]] && inner=(bash "${@:2}")
   [[ -n "${BW_RUN_DIR:-}" ]] && mapfile -t run < <(run_mounts)
   # Rootless: container root is the host user, so build outputs stay owned by you.
   # Named volumes keep the pub and Gradle caches between runs.
   # No exec: the shell must stay to remove the run's .running marker on exit (tools/timing.sh)
   rc=0
-  podman run --rm "${tty[@]}" \
+  podrun=(podman run --rm "${tty[@]}" \
     -v "$ROOT:/work:z" \
     -v bw-pub-cache:/cache/pub \
     -v bw-gradle-cache:/cache/gradle \
     -v bw-android-user:/cache/android \
     "${signing[@]}" "${run[@]}" \
     -e BW_NATIVE=1 -e BW_JOBS -e BW_GL_THREADS -e BW_APK_ABIS -e BW_FUZZ_ITERATIONS -e BW_FUZZ_SEED \
-    -w /work "$IMAGE" "${inner[@]}" || rc=$?
+    -w /work "$IMAGE" "${inner[@]}")
+  if [[ "$CMD" == shell && -n "${BW_RUN_DIR:-}" ]]; then  # shell -c: output to the terminal and to the run's shell.log
+    BW_TIMED_SPLIT=1 BW_TIMED_COLD=false timed_log shell "$BW_RUN_DIR/shell.log" "${podrun[@]}" || rc=$?
+  else
+    "${podrun[@]}" || rc=$?
+  fi
   exit "$rc"
 fi
 
@@ -226,6 +251,7 @@ timings=()
 failed=0
 
 # Dart sources, skipping generated and build folders
+# shellcheck disable=SC2329  # also run by name through steps (export -f below)
 dart_files() {
   find app packages relay \( -name .dart_tool -o -name build -o -name ephemeral -o -name .symlinks \) -prune \
     -o -name '*.dart' -print0
@@ -312,6 +338,14 @@ record() {
   results+=("$1=$result"); timings+=("$1 $secs $result")
   log_history "$1" "$secs" "$result" "${2:-false}" "$started"
 }
+# fail_step <name> <message>: a step that could not even start (bad argument, missing key): the message to stderr and to the
+# step's log, a failed status, and the usual record, so last-failed.txt names it.
+fail_step() {
+  echo "$2" >&2
+  printf '# %s: started %s\n%s\n# %s: finished %s, 0.0 s, exit 1\n' "$1" "$(now_iso)" "$2" "$1" "$(now_iso)" > "$LOGS/$1.log"
+  echo "0.0 1 $(now_iso)" > "$LOGS/$1.status"
+  record "$1"
+}
 # step <name> <command> [cold]: one step, output shown as it runs
 step() {
   echo "=== $1 ==="
@@ -354,7 +388,7 @@ one_suite() {
   case "$pkg" in importer) dir=packages/wallet_importer ;; core) dir=packages/wallet_core ;; sync) dir=packages/sync ;; relay) dir=relay ;; *) dir=app; tcmd='flutter' ;; esac
   for f in "$@"; do
     f=${f#"$ROOT/"}; f=${f#"$dir/"}
-    [[ -e $dir/$f ]] || { echo "no such test file or dir in $dir: $f" >&2; failed=1; return; }
+    [[ -e $dir/$f ]] || { fail_step "$pkg:one" "no such test file or dir in $dir: $f"; return; }
     files+=("$f")
   done
   echo "($pkg: ${#files[@]} path(s), no analyze)"
@@ -373,7 +407,7 @@ analyze_pkgs() {
       sync) args+=(analyze-sync "cd packages/sync && dart analyze --fatal-infos") ;;
       relay) args+=(analyze-relay "cd relay && dart analyze --fatal-infos") ;;
       app) args+=(analyze-app "cd app && flutter analyze --fatal-infos --no-pub") ;;
-      *) echo "analyze: unknown package $p (importer core sync relay app)" >&2; failed=1; return ;;
+      *) fail_step analyze "analyze: unknown package $p (importer core sync relay app)"; return ;;
     esac
   done
   steps "${args[@]}"
@@ -401,8 +435,8 @@ run_pub() {
 }
 build_apk() {
   if [[ ! -f "${BW_KEYSTORE:-}" ]]; then
-    echo "BW_KEYSTORE is not set to the release key; refusing to build an APK that can't update the app." >&2
-    results+=("apk=FAILED"); failed=1; return
+    fail_step apk "BW_KEYSTORE is not set to the release key; refusing to build an APK that can't update the app."
+    return
   fi
   local cold=false; [[ -d app/build/app ]] || cold=true
   # BW_APK_ABIS=arm64: phone-only APK (what CI publishes); default also has x86_64 for tools/emulator.sh install
@@ -687,12 +721,12 @@ desktop_tests() {
   fi
   for f in "${names[@]}"; do
     if [[ ! -f app/integration_test/${f}_test.dart ]]; then
-      echo "no such test: app/integration_test/${f}_test.dart" >&2; results+=("desktop-$f=FAILED"); failed=1; continue
+      fail_step "desktop-$f" "no such test: app/integration_test/${f}_test.dart"; continue
     fi
     valid+=("$f"); units=$((units + ${DESKTOP_SHARDS[$f]:-1}))
   done
   [[ -n ${BW_GL_THREADS:-} ]] && export LP_NUM_THREADS=$BW_GL_THREADS  # llvmpipe rasterizer threads per app
-  jobs=$(desktop_jobs) || { failed=1; return; }
+  jobs=$(desktop_jobs) || { fail_step desktop-test "BW_JOBS must be a positive number, not '$BW_JOBS'"; return; }
   if ((jobs > 1 && units > 1)); then
     desktop_parallel "$jobs" "${valid[@]}"
   else
@@ -723,16 +757,16 @@ case "$CMD" in
   lsp)    pub_ready >&2; exec "${FLUTTER_HOME:+$FLUTTER_HOME/bin/cache/dart-sdk/bin/}dart" language-server --protocol=lsp ;;
   # launch_app & co. would start apps in this display-less container: live mode (tools/live.sh) does that instead
   mcp)    pub_ready >&2; exec "${FLUTTER_HOME:+$FLUTTER_HOME/bin/cache/dart-sdk/bin/}dart" mcp-server --disable flutter_app_lifecycle "${@:2}" ;;
-  format) pub_ready; dart_files | xargs -0 dart format; exit ;;
+  format) run_pub; [[ $failed == 0 ]] && step format 'dart_files | xargs -0 dart format' ;;
   lint)   run_pub; steps "${LINT[@]}" ;;
   analyze) run_pub; [[ $failed == 0 ]] && analyze_pkgs "${@:2}" ;;
-  outdated) outdated ;;
+  outdated) step outdated outdated ;;
   test)   run_pub; [[ $failed == 0 ]] && steps "${LINT[@]}" "${TESTS[@]}" ;;
   importer|core|sync|relay|app)
     if (($# > 1)); then run_pub; [[ $failed == 0 ]] && one_suite "$CMD" "${@:2}"
     else run_pub; [[ $failed == 0 ]] && steps "$CMD" "${SUITE[$CMD]}"; fi ;;
-  mutate) pub_ready; (($# > 2)) || usage
-          python3 -I "$ROOT/tools/mutate.py" "${@:2}" 2>&1 | tee "$LOGS/mutate.log"; exit "${PIPESTATUS[0]}" ;;
+  mutate) (($# > 2)) || usage
+          run_pub; [[ $failed == 0 ]] && step mutate "python3 -I $ROOT/tools/mutate.py $(printf '%q ' "${@:2}")" ;;
   apk)    run_pub; [[ $failed == 0 ]] && build_apk ;;
   relay-bin) case "${2:-arm64}" in arm64|x64) ;; *) usage ;; esac
           run_pub; [[ $failed == 0 ]] && step relay-bin "relay_bin ${2:-arm64}" ;;
