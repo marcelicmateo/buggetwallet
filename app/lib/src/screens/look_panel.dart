@@ -15,7 +15,7 @@ class LookPanel extends StatelessWidget {
         const SectionHead('Look'),
         SegmentedButton<String>(
           key: const ValueKey('themeMode'),
-          showSelectedIcon: false,
+          showSelectedIcon: true,
           style: SegmentedButton.styleFrom(minimumSize: const Size(0, touchMin)),
           segments: const [
             ButtonSegment(value: 'system', label: Text('System'), icon: Icon(Icons.brightness_auto_outlined)),
@@ -31,7 +31,7 @@ class LookPanel extends StatelessWidget {
         const SizedBox(height: 12),
         SegmentedButton<String>(
           key: const ValueKey('numberStyle'),
-          showSelectedIcon: false,
+          showSelectedIcon: true,
           style: SegmentedButton.styleFrom(minimumSize: const Size(0, touchMin)),
           segments: const [
             ButtonSegment(value: 'point', label: Text('1,234.50')),

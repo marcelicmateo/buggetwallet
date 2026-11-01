@@ -366,16 +366,17 @@ ThemeData buildTheme(Brightness b) {
         shape: WidgetStatePropertyAll(shape(10)),
         side: WidgetStatePropertyAll(BorderSide(color: w.lineStrong)),
         minimumSize: const WidgetStatePropertyAll(Size(44, 44)),
-        backgroundColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? w.accentSoft : Colors.transparent),
-        foregroundColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? w.accent : w.ink),
-        iconColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? w.accent : w.ink),
+        // The chosen segment is a solid accent fill with its check icon (accentSoft is too close to the page to be a cue).
+        backgroundColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? w.accent : Colors.transparent),
+        foregroundColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? onAccent : w.ink),
+        iconColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? onAccent : w.ink),
         textStyle: const WidgetStatePropertyAll(TextStyle(fontFamily: sansFamily, fontSize: BwType.bodySize, fontWeight: w6)),
       ),
       selectedIcon: const Icon(Icons.check),
     ),
     chipTheme: ChipThemeData(
       shape: shape(8),
-      side: BorderSide(color: w.line),
+      side: BorderSide(color: w.lineStrong),
       backgroundColor: Colors.transparent,
       selectedColor: w.accent,
       checkmarkColor: onAccent,
@@ -435,7 +436,9 @@ ThemeData buildTheme(Brightness b) {
       surfaceTintColor: Colors.transparent,
       elevation: 4,
       shadowColor: shadow,
-      shape: shape(12),
+      // Dark: the surface is hardly lighter than the page, so the menu gets a hairline.
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12), side: b == Brightness.dark ? BorderSide(color: w.line) : BorderSide.none),
     ),
     listTileTheme: ListTileThemeData(iconColor: w.ink2, textColor: w.ink),
     textSelectionTheme: TextSelectionThemeData(cursorColor: w.accent, selectionColor: w.accent.withValues(alpha: 0.3)),

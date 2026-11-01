@@ -609,7 +609,7 @@ class _HomeShellState extends State<HomeShell> {
             // The narrow rail grows with the text scale (like the rail itself), so large text still gets a box that fits it.
             width: extended ? 188 : (72 * MediaQuery.textScalerOf(context).scale(1)).clamp(72.0, 152.0),
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-            decoration: BoxDecoration(border: Border.all(color: context.c.line), borderRadius: radius),
+            decoration: BoxDecoration(border: Border.all(color: context.c.lineStrong), borderRadius: radius),
             child: FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(extended ? '$from – $to' : '$from –\n$to',
@@ -750,7 +750,7 @@ class _HomeShellState extends State<HomeShell> {
                                     fit: BoxFit.scaleDown,
                                     child: Text('${shortDate(p.start)} – ${shortDate(addDays(p.end, -1))}',
                                         style: labelStyle.copyWith(fontSize: BwType.metaSize, fontWeight: FontWeight.w500))),
-                                side: BorderSide(color: context.c.line),
+                                side: BorderSide(color: context.c.lineStrong),
                                 visualDensity: VisualDensity.compact),
                           ),
                         ),

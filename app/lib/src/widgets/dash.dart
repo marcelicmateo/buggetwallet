@@ -252,7 +252,10 @@ class Tile extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radius),
-          side: attention ? BorderSide(color: c.accent, width: 2) : BorderSide.none,
+          side: attention
+              ? BorderSide(color: c.accent, width: 2)
+              // Dark: the surface is hardly lighter than the page, so a tile gets a hairline there.
+              : (Theme.of(context).brightness == Brightness.dark ? BorderSide(color: c.line) : BorderSide.none),
         ),
         child: InkWell(onTap: onTap, child: Padding(padding: padding, child: child)),
       ),

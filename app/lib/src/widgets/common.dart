@@ -29,7 +29,9 @@ class Panel extends StatelessWidget {
       decoration: BoxDecoration(borderRadius: radius, boxShadow: band ? null : cardShadow(Theme.of(context).brightness)),
       child: Material(
         color: color ?? c.surface,
-        borderRadius: radius,
+        shape: RoundedRectangleBorder(
+            borderRadius: radius,
+            side: !band && Theme.of(context).brightness == Brightness.dark ? BorderSide(color: c.line) : BorderSide.none),
         child: Container(
           foregroundDecoration: band ? BoxDecoration(borderRadius: radius, border: Border(left: BorderSide(color: bar, width: 3))) : null,
           padding: padding + const EdgeInsets.symmetric(horizontal: 16),

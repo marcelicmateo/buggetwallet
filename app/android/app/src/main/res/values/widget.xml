@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Home-screen widget "Safe to spend today" and the launcher shortcut (P13). Ledger paper and ink (app/lib/src/theme.dart). -->
+<!-- Home-screen widget "Safe to spend today" and the launcher shortcut (P13). Clean neutral light colours (app/lib/src/theme.dart). -->
 <resources>
-    <color name="bw_widget_bg">#F2EEE4</color>
-    <color name="bw_widget_line">#87847C</color>
-    <color name="bw_widget_ink">#2C313C</color>
-    <color name="bw_widget_muted">#5E6372</color>
-    <color name="bw_widget_bad">#A93A32</color>
+    <color name="bw_widget_bg">#F6F7F9</color>
+    <color name="bw_widget_line">#7F8A97</color>
+    <color name="bw_widget_ink">#1F2933</color>
+    <color name="bw_widget_muted">#5B6673</color>
+    <color name="bw_widget_bad">#B3412F</color>
 
     <string name="widget_description">Safe to spend today</string>
     <string name="widget_eyebrow">SAFE TO SPEND TODAY</string>

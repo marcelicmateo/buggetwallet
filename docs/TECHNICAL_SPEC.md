@@ -370,18 +370,18 @@ with budgets.
 
 ## 7. UI and UX
 
-The interface follows one visual direction, **D3 Ledger**, chosen by the owner from ten drawn directions: a
-paper-and-ink notebook with ruled sections, tabular figures and no cards, chosen because money reads best as a
-ledger. The design system lives in `app/lib/src/theme.dart`; the spec is `docs/design/ledger-spec.md`.
+The interface follows one visual direction, **Clean neutral** (owner pick 2026-11-01, `docs/context/UX_SPEC.md` UX-C; it
+replaced the D3 Ledger notebook look): a near-white page, white cards lifted by a soft shadow, one calm blue accent, Inter for
+text and tabular mono for amounts. The design system lives in `app/lib/src/theme.dart`.
 
 ### Design system
 
 | Element            | Decision                                                                                                                                                                                                   |
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Type               | Inter for text, IBM Plex Mono with tabular figures for every amount, weights 400/500/600 only; six unmodified font files (OFL, ~2.3 MB)                                                              |
-| Colour             | Paper `#f7f5ef` / ink `#1d2433`; night ledger (navy) follows the system setting; ink-blue accent; red only for negative or over-budget; all text pairs ≥ 4.5:1, non-text ≥ 3:1, checked by a contrast test |
+| Type               | Inter for text, IBM Plex Mono with tabular figures for every amount, weights 400/500/600 only; six unmodified font files (OFL, ~1.77 MB)                                                              |
+| Colour             | Page `#F6F7F9` / white cards / ink `#1F2933`; dark theme (`#14171C`) follows the system setting; one blue accent `#2F5FC4`; red only for negative or over-budget; all text pairs ≥ 4.5:1, non-text ≥ 3:1, checked by a contrast test |
 | Money              | `14 €`, `-23.40 €`, `+1,450.00 €`: sign in front, euro after a non-breaking space, mono, right-aligned, same right edge in a list                                                                          |
-| Surfaces           | No cards, no shadows, radius 0–3; sections are ruled (1 px strong top rule, hairline bottom); totals carry a double rule; dialogs have a 1 px border                                                       |
+| Surfaces           | White cards (`Tile`, `Panel`), radius 14, soft shadow and no border (dark theme: a hairline instead); hairline dividers; totals carry a double rule; dialogs radius 16 with elevation               |
 | Buttons and inputs | Filled accent for the one primary action, outlined otherwise; inputs filled with a 1 px border, 2 px accent on focus, `€` suffix in mono                                                                   |
 | Wide windows       | A red double margin line at x ≈ 22 from 600 dp, never on phones                                                                                                                                            |
 | Charts             | Solid 1 px grid, bar radius 0, hatch for over budget, period in progress at 45 % with a dashed outline                                                                                                     |

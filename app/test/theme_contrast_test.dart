@@ -1,5 +1,5 @@
-// Ledger theme contrast: every text pair >= 4.5:1, every non-text pair >= 3:1, every token opaque. Computed from the real
-// WalletColors values (spec: docs/design/ledger-spec.md section 4.1).
+// Clean neutral theme contrast: every text pair >= 4.5:1, every non-text pair >= 3:1, every token opaque. Computed from the real
+// WalletColors values (spec: docs/context/UX_SPEC.md UX-C).
 import 'package:budget_wallet/src/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
