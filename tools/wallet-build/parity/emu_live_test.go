@@ -339,7 +339,9 @@ func go2Heavy(t *testing.T, repo string) []Case {
 		checkStepsInHistory(emuSteps...))
 	out = append(out, h(screens))
 
-	if small := smallDesktopTests(t, repo, 1); len(small) == 1 {
+	// A file that runs on Android: the smallest one by size can be desktop-only (chart_dpr skips every test there, and
+	// flutter drive then waits for the driver extension without end). onboarding runs on both, ~60 s on the emulator.
+	if small := []string{"onboarding"}; fileExists(filepath.Join(repo, "app/integration_test/onboarding_test.dart")) {
 		et := mkS(E, "emulator_test_one_small_file", 0, "test", small[0])
 		et.Artifacts = []string{"dist/screens/" + small[0]}
 		et.SkipIf = emulatorVolumes
@@ -410,4 +412,9 @@ func checkLiveFiles(t *testing.T, s *side) {
 			t.Errorf("%s: flutter-run.jsonl is empty", s.impl)
 		}
 	}
+}
+
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
 }
