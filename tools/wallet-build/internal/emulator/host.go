@@ -295,6 +295,9 @@ func (e *hostSide) common() []string {
 	a := []string{"--device", "/dev/kvm", "--shm-size=2g", "-e", "BW_DRIVE_ARGS", "-v", c.Root + ":/work:z", "-v", "bw-pub-cache:/cache/pub",
 		"-v", "bw-gradle-cache:/cache/gradle", "-v", "bw-android-user:/cache/android", "-e", "BW_NATIVE=1", "-w", "/work",
 		"-v", Volumes[0] + ":ro", "-v", Volumes[1] + ":ro", "-v", Volumes[2]}
+	for _, v := range image.ForwardEnv(e.c.Env) { // BW_TIMEOUT_EMULATOR_DRIVE
+		a = append(a, "-e", v)
+	}
 	return append(a, e.runArgs()...)
 }
 

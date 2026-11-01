@@ -375,6 +375,16 @@ func go2Heavy(t *testing.T, repo string) []Case {
 		out = append(out, h(et))
 	}
 
+	// GO-BUG2: a desktop-only file (every test skips on Android) ends the drive at "All tests skipped." instead of hanging.
+	if fileExists(filepath.Join(repo, "app/integration_test/chart_dpr_test.dart")) {
+		dpr := mkS(E, "emulator_test_desktop_only_file", 0, "test", "chart_dpr")
+		dpr.SkipIf = emulatorVolumes
+		dpr.StdoutDrop = emuNoise
+		dpr.Check = chain(checkAllSteps(0), checkRunFiles("emulator-test.log", "drive-chart_dpr.log"),
+			checkStepsInHistory("prepare", "boot", "test-chart_dpr", "total"))
+		out = append(out, h(dpr))
+	}
+
 	// start -> install -> shot -> adb -> stop, one container at a time; needs the APK from `tools/build.sh apk`.
 	sis := mkS(E, "emulator_start_install_shot_stop", 0)
 	sis.Steps = [][]string{{"start"}, {"install", debugAPK}, {"shot", "parity_x"}, {"adb", "shell", "echo", "parity"}, {"stop"}}

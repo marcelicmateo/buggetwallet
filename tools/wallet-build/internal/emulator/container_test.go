@@ -422,6 +422,97 @@ func TestLastMatchAndNames(t *testing.T) {
 	}
 }
 
+// GO-BUG2: a file whose tests all skip (desktop-only): the test reporter prints "All tests skipped." and flutter drive then waits for the
+// driver extension without end. The drive ends at that line and counts as ok.
+func TestDriveEndsWhenAllTestsSkipped(t *testing.T) {
+	r := newCRig(t)
+	r.fake.HandleCtx = func(ctx context.Context, c sys.Cmd) int {
+		if c.Argv[0] != "flutter" || c.Argv[1] != "drive" {
+			return r.handle(c)
+		}
+		c.Stdout.Write([]byte("I/flutter ( 100): 00:00 +0: loading\nI/flutter ( 100): 00:00 +0 ~1: All tests ski"))
+		c.Stdout.Write([]byte("pped.\nVMServiceFlutterDriver: Flutter Driver extension is taking a long time to become available\n"))
+		select {
+		case <-ctx.Done():
+			return 143
+		case <-time.After(10 * time.Second):
+			t.Error("the drive was not ended after the skip line")
+			return 0
+		}
+	}
+	if rc := Container(r.c, []string{"test", "flows"}); rc != 0 {
+		t.Fatalf("exit %d\n%s%s", rc, r.out.String(), r.errb.String())
+	}
+	if !strings.Contains(r.out.String(), "flows        ok") || !strings.Contains(r.out.String(), "all tests skipped") {
+		t.Errorf("out:\n%s", r.out.String())
+	}
+	if !strings.Contains(r.history(), `"step":"test-flows"`) || !strings.Contains(r.history(), `"result":"ok"`) {
+		t.Errorf("history:\n%s", r.history())
+	}
+}
+
+// A drive that is not skipped and never ends is stopped by the limit and counts as failed.
+func TestDriveTimeout(t *testing.T) {
+	r := newCRig(t, "BW_TIMEOUT_EMULATOR_DRIVE=1")
+	r.fake.HandleCtx = func(ctx context.Context, c sys.Cmd) int {
+		if c.Argv[0] != "flutter" || c.Argv[1] != "drive" {
+			return r.handle(c)
+		}
+		c.Stdout.Write([]byte("VMServiceFlutterDriver: Flutter Driver extension is taking a long time to become available\n"))
+		<-ctx.Done()
+		return 143
+	}
+	if rc := Container(r.c, []string{"test", "flows"}); rc != 1 {
+		t.Fatalf("exit %d\n%s%s", rc, r.out.String(), r.errb.String())
+	}
+	if !strings.Contains(r.out.String(), "drive flows: timed out after 1 s") || !strings.Contains(r.out.String(), "flows        FAILED") {
+		t.Errorf("out:\n%s", r.out.String())
+	}
+}
+
+func TestDriveTimeoutDefaultAndOverride(t *testing.T) {
+	// 3 x the slowest file in the timing history (layout 87 s + build 61 s + install 1 s = 149 s) is 447 s
+	if DefaultDriveTimeout < 447*time.Second {
+		t.Errorf("default %v is below 3 x the slowest file", DefaultDriveTimeout)
+	}
+	for _, tc := range []struct {
+		env  []string
+		want time.Duration
+	}{
+		{nil, DefaultDriveTimeout},
+		{[]string{"BW_TIMEOUT_EMULATOR_DRIVE=30"}, 30 * time.Second},
+		{[]string{"BW_STEP_TIMEOUT=60"}, 60 * time.Second},
+		{[]string{"BW_STEP_TIMEOUT=60", "BW_TIMEOUT_EMULATOR_DRIVE=0"}, 0},
+	} {
+		if got := DriveTimeout(sys.Env(tc.env)); got != tc.want {
+			t.Errorf("%v: %v, want %v", tc.env, got, tc.want)
+		}
+	}
+}
+
+func TestSkipWatch(t *testing.T) {
+	for _, tc := range []struct {
+		chunks []string
+		hit    bool
+	}{
+		{[]string{"00:00 +0 ~1: All tests skipped.\n"}, true},
+		{[]string{"All tests", " skipped."}, true},
+		{[]string{"All t", "ests ski", "pped."}, true},
+		{[]string{"00:00 +3 ~1: All tests passed!\n", "Skip: desktop only\n"}, false},
+		{[]string{"Some tests skipped.\n"}, false},
+	} {
+		n := 0
+		w := &skipWatch{cancel: func() { n++ }}
+		for _, c := range tc.chunks {
+			w.Write([]byte(c))
+		}
+		w.Write([]byte("more\n"))
+		if w.hit() != tc.hit || (tc.hit && n != 1) || (!tc.hit && n != 0) {
+			t.Errorf("%q: hit %v cancels %d, want hit %v", tc.chunks, w.hit(), n, tc.hit)
+		}
+	}
+}
+
 // GO-BUG3: the boot container removes the stale AVD lock when the host says nothing else runs, and only that file.
 func TestBootClearsStaleLockOnlyWhenAsked(t *testing.T) {
 	for _, tc := range []struct {

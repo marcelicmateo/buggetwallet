@@ -699,3 +699,14 @@ func TestStaleLockFlagOnlyWhenNothingRuns(t *testing.T) {
 		}
 	}
 }
+
+// GO-BUG2: BW_TIMEOUT_<STEP> variables set on the host reach the container, where the drive limit is read.
+func TestDriveTimeoutIsForwardedToTheContainer(t *testing.T) {
+	r := newRig(t, "BW_TIMEOUT_EMULATOR_DRIVE=30")
+	r.allImages()
+	r.host("screens")
+	runs := r.podmanRuns("run")
+	if got := runs[len(runs)-1]; !strings.Contains(got, " -e BW_TIMEOUT_EMULATOR_DRIVE ") {
+		t.Errorf("not forwarded: %s", got)
+	}
+}

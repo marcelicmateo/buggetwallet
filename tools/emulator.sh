@@ -116,14 +116,34 @@ boot() {  # inside the container
 # build/install/test history lines and the per-test summary (tools/build_log.py). An empty test name keeps the
 # screenshot test's old output paths (dist/screens/*.png, dist/logs/app-emulator.log).
 drive() {
-  local suite=$1 name=$2 t rc=0 total build install result log
+  local suite=$1 name=$2 t rc=0 total build install result log limit skipped pidfile line
   log="$LOGS/${name:+drive-}$suite.log"
   # Skia, not Impeller: Impeller's GLES calls trip an abort in the emulator's software GLES decoder (37.x).
   # Override with BW_DRIVE_ARGS="" once a newer emulator fixes it.
   read -ra drive_args <<<"${BW_DRIVE_ARGS---no-enable-impeller}"
+  # A drive ends early in two cases the test file has no say in: every test of the file skipped (a desktop-only file: the driver
+  # extension never comes up and `flutter drive` waits forever) and the time limit (BW_TIMEOUT_EMULATOR_DRIVE or BW_STEP_TIMEOUT, seconds,
+  # 0 = none; default 10 min = 3 x the slowest file in the timing history: layout 87 s + build 61 s + install 1 s).
+  limit=${BW_TIMEOUT_EMULATOR_DRIVE:-${BW_STEP_TIMEOUT:-600}}
+  skipped=$(mktemp -u) pidfile=$(mktemp -u)
   t=$(now_us)
-  BW_TEST_NAME=$name flutter drive --driver=test_driver/integration_test.dart --target="integration_test/${suite}_test.dart" \
-    -d "$SERIAL" "${drive_args[@]}" 2>&1 | tee "$log" || rc=$?
+  # shellcheck disable=SC2016  # the inner shell expands its own variables
+  BW_TEST_NAME=$name bash -c 'echo $$ >"$0"; exec "$@"' "$pidfile" timeout -k 10 "$limit" flutter drive \
+    --driver=test_driver/integration_test.dart --target="integration_test/${suite}_test.dart" -d "$SERIAL" "${drive_args[@]}" 2>&1 \
+    | tee "$log" | while IFS= read -r line; do
+      printf '%s\n' "$line"
+      if [[ $line == *"All tests skipped."* && ! -e $skipped ]]; then
+        : >"$skipped"
+        kill -TERM "$(cat "$pidfile")" 2>/dev/null || true
+      fi
+    done || rc=$?
+  rm -f "$pidfile"
+  if [[ -e $skipped ]]; then
+    rm -f "$skipped"; rc=0
+    echo "drive $suite: all tests skipped on this device; ended the drive"
+  elif ((rc == 124)); then
+    echo "drive $suite: timed out after $limit s (BW_TIMEOUT_EMULATOR_DRIVE); ended the drive"
+  fi
   # `flutter drive` builds, installs and runs in one go: split its time using the durations it prints
   total=$(secs_since "$t")
   build=$(grep -oP "Running Gradle task 'assembleDebug'\.\.\. *\K[0-9.]+(?=s$)" "$log" | tail -1 || true)
@@ -218,6 +238,8 @@ common=(--device /dev/kvm --shm-size=2g -e BW_DRIVE_ARGS -v "$ROOT:/work:z" -v b
 # Runs only read the SDK volumes. The AVD stays writable for the emulator's lock files; `-read-only` keeps the
 # device state itself out of it.
 common+=(-v "${VOLUMES[0]}:ro" -v "${VOLUMES[1]}:ro" -v "${VOLUMES[2]}")
+# BW_TIMEOUT_EMULATOR_DRIVE (the limit of one drive) applies inside the container
+while read -r v; do common+=(-e "$v"); done < <(compgen -e | grep '^BW_TIMEOUT_' | LC_ALL=C sort || true)
 # `--rm` emulator containers can leave bw.avd/multiinstance.lock in the writable AVD volume; when no emulator container runs, the
 # boot container removes it before the emulator starts (a lock of a running emulator must stay).
 lock_args() {
