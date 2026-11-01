@@ -7,8 +7,10 @@ import '../logging.dart';
 import '../theme.dart';
 import '../widgets/charts.dart' show ForecastStepChart;
 import '../widgets/common.dart';
+import '../widgets/currency_picker.dart';
 import '../widgets/dash.dart';
 import '../widgets/sheets.dart';
+import 'currency_offer.dart' show switchWalletCurrency;
 import 'plan_suggestions.dart';
 
 /// Budget › Payday plan (P5: moved from the Plan tab): the ledger lines with an Edit button that turns them into the fields, and the
@@ -32,8 +34,6 @@ class _PaydayPlanState extends State<PaydayPlan> {
   /// One field per plan line (P1: a fixed category of your own, by id), made when its category appears. Same rules as [f].
   final Map<String, TextEditingController> _pl = {};
   final Map<String, String> _plShown = {};
-  String currency = 'EUR';
-  String _shownCurrency = 'EUR';
 
   /// Payday plan shows the ledger lines; Edit turns them into the fields (Save / Cancel go back).
   bool _editing = false;
@@ -92,8 +92,6 @@ class _PaydayPlanState extends State<PaydayPlan> {
       if ((force || c.text.trim() == _plShown[id]) && c.text != t) c.text = t;
       _plShown[id] = t;
     }
-    if (force || currency == _shownCurrency) currency = s.currency;
-    _shownCurrency = s.currency;
   }
 
   @override
@@ -108,7 +106,7 @@ class _PaydayPlanState extends State<PaydayPlan> {
 
       // The currency sign is drawn always (the label stays floated) and read with the label, not as a node of its own: a lone "€"
       // node cut by the scroll edge has no readable contrast.
-      final sign = currencySymbol(currency);
+      final sign = currencySymbol(widget.wc.currency);
       final decoration = InputDecoration(
           label: money ? Text(label, semanticsLabel: '$label, $sign') : null,
           labelText: money ? null : label,
@@ -153,15 +151,13 @@ class _PaydayPlanState extends State<PaydayPlan> {
                 Expanded(child: field('paydayDay', 'Latest payday', money: false)),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: DropdownButtonFormField<String>(
-                    key: ValueKey(currency),
-                    isExpanded: true,
-                    initialValue: currency,
-                    decoration: const InputDecoration(labelText: 'Currency'),
-                    items: [
-                      for (final c in const ['EUR', 'USD', 'GBP', 'CHF']) DropdownMenuItem(value: c, child: Text(c))
-                    ],
-                    onChanged: (v) => setState(() => currency = v ?? currency),
+                  child: CurrencyField(
+                    key: const ValueKey('planCurrency'),
+                    wc: wc,
+                    value: wc.currency,
+                    choice: CurrencyChoice.fiat,
+                    // The same sheet as Settings › Accounts: it says what a switch does; it is not part of Save.
+                    onChanged: (v) => switchWalletCurrency(context, wc, v),
                   ),
                 ),
               ]),
@@ -392,7 +388,6 @@ class _PaydayPlanState extends State<PaydayPlan> {
     // A typed payday is kept within 1-28 before saving (45 → 28). Core clamps only stored 29-31 to 28 and reads anything
     // else stored as 15, which suits a bad value from sync, not what the owner just typed.
     if (changes['paydayDay'] case final int d) changes['paydayDay'] = d.clamp(1, 28);
-    if (currency != s.currency) changes['currency'] = currency;
     final now = s.toMap();
     changes.removeWhere((k, v) => now[k] == v);
     if (changes.containsKey('salary')) changes['salaryConfirmed'] = true;

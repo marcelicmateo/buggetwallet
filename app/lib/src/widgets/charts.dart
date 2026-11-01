@@ -77,7 +77,9 @@ class ForecastStepChart extends StatelessWidget {
     final end = daysBetween(w.start, w.end).clamp(1, 100000).toDouble();
     dates.add(w.end);
     cents.add(cents.last);
-    final spots = [for (var i = 0; i < dates.length; i++) FlSpot(daysBetween(w.start, dates[i]).clamp(0, end).toDouble(), cents[i] / 100)];
+    final spots = [
+      for (var i = 0; i < dates.length; i++) FlSpot(daysBetween(w.start, dates[i]).clamp(0, end).toDouble(), chartUnits(cents[i]))
+    ];
     final ys = [for (final s in spots) s.y];
     var maxY = ys.reduce((a, b) => a > b ? a : b);
     var minY = ys.reduce((a, b) => a < b ? a : b);
@@ -166,11 +168,11 @@ class PeriodNetChart extends StatelessWidget {
     final c = context.c;
     final dpr = MediaQuery.devicePixelRatioOf(context);
     double px(double logical) => snapPx(logical, dpr);
-    final vals = periods.map((p) => p.net / 100).toList();
+    final vals = periods.map((p) => chartUnits(p.net)).toList();
     final all = [
       ...vals,
       for (final t in trend)
-        if (t != null) t / 100
+        if (t != null) chartUnits(t)
     ];
     final maxY = all.fold<double>(50, (a, b) => b > a ? b : a) * 1.08;
     final minY = -all.fold<double>(50, (a, b) => -b > a ? -b : a) * 1.08;
@@ -192,7 +194,7 @@ class PeriodNetChart extends StatelessWidget {
         },
       ),
     );
-    final spots = [for (var i = 0; i < trend.length; i++) trend[i] == null ? FlSpot.nullSpot : FlSpot(i.toDouble(), trend[i]! / 100)];
+    final spots = [for (var i = 0; i < trend.length; i++) trend[i] == null ? FlSpot.nullSpot : FlSpot(i.toDouble(), chartUnits(trend[i]!))];
     return SizedBox(
       height: _height,
       child: Stack(children: [

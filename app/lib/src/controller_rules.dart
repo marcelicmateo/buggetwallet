@@ -163,6 +163,28 @@ extension RulesDb on WalletController {
     }
   }
 
+  /// Changes built-in rule [id]'s [pattern] and/or [category] (core's `editBuiltInRule`; null = keep). An [ArgumentError] carries
+  /// core's text (it never quotes the pattern).
+  void editBuiltInRule(String id, {String? pattern, String? category}) {
+    repo.editBuiltInRule(id, pattern: pattern, category: category);
+    logEvent(_ruleLog, Level.INFO, 'rules.builtIn', {'op': 'edit', 'pattern': pattern != null, 'category': category != null});
+    _changed();
+  }
+
+  /// Turns built-in rule [id] off or on again (an edit is kept).
+  void setBuiltInRuleOff(String id, bool off) {
+    repo.setBuiltInRuleOff(id, off);
+    logEvent(_ruleLog, Level.INFO, 'rules.builtIn', {'op': off ? 'off' : 'on'});
+    _changed();
+  }
+
+  /// Built-in rule [id] as the app ships it: the edit and the off switch are dropped.
+  void resetBuiltInRule(String id) {
+    repo.resetBuiltInRule(id);
+    logEvent(_ruleLog, Level.INFO, 'rules.builtIn', {'op': 'reset'});
+    _changed();
+  }
+
   /// Moves the pattern [id] one place in the match order.
   void moveRule(String id, MoveDirection direction) {
     repo.movePattern(id, direction);

@@ -15,6 +15,7 @@ import '../logging.dart';
 import '../theme.dart';
 import '../widgets/category_picker.dart';
 import '../widgets/common.dart';
+import '../widgets/import_problems.dart';
 import '../widgets/sheets.dart';
 import 'accounts_panel.dart';
 import 'import_flow.dart';
@@ -281,7 +282,10 @@ class _ImportStep extends StatelessWidget {
             for (final (i, l) in wc.lastImport.indexed)
               Padding(
                   padding: const EdgeInsets.only(bottom: 4),
-                  child: StatusLabel(key: ValueKey('setupImported:$i'), good: l.ok, text: '${l.file}: ${l.message}')),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    StatusLabel(key: ValueKey('setupImported:$i'), good: l.ok, text: '${l.file}: ${l.message}'),
+                    ImportProblems(problems: l.problems, invalid: l.invalid, header: false),
+                  ])),
           ]),
       ],
     ]);

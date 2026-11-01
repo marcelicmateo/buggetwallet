@@ -30,8 +30,9 @@ String billPeriodChip(RecurringPeriod p) => switch (p) {
     };
 
 /// "40–70 €" for a range of whole units, else "40.50 € to 70 €".
-String billRangeShort(int lo, int hi, String cur) =>
-    lo % 100 == 0 && hi % 100 == 0 ? '${unitsText(lo)}–${moneyExact(hi, cur)}' : '${moneyExact(lo, cur)} to ${moneyExact(hi, cur)}';
+String billRangeShort(int lo, int hi, String cur) => lo % storageScale(cur) == 0 && hi % storageScale(cur) == 0
+    ? '${unitsText(lo, cur)}–${moneyExact(hi, cur)}'
+    : '${moneyExact(lo, cur)} to ${moneyExact(hi, cur)}';
 
 /// "40–70 €, sets aside 70 €" for a bill with an amount range, else null.
 String? billRangeText(RecurringBill b, String cur) =>

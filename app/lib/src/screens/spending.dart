@@ -215,7 +215,7 @@ class _SpendingScreenState extends State<SpendingScreen> {
       label: 'Out in ${_monthName(v.month, current)}',
       value: moneyExact(v.summary.out, cur),
       visual: Sparkline(
-          values: [for (final c in series) c / 100],
+          values: [for (final c in series) chartUnits(c)],
           marked: markedAt < 0 ? null : markedAt,
           color: context.c.s1,
           semanticLabel: 'Out per month, the last ${series.length} months, ${monthLong(v.month)} marked'),

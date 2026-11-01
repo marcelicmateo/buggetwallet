@@ -8,6 +8,7 @@ import '../layout.dart';
 import '../logging.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/currency_picker.dart';
 import '../widgets/sheets.dart';
 
 /// The readable text of an [ArgumentError] from core.
@@ -32,7 +33,12 @@ class CurrenciesPanel extends StatelessWidget {
     final rows = wc.fxCurrencies();
     if (rows.isEmpty) return const SizedBox.shrink(key: ValueKey('currenciesPanel'));
     return Panel(key: const ValueKey('currenciesPanel'), children: [
-      const SectionHead('Currencies'),
+      SectionHead('Currencies',
+          trailing: TextButton.icon(
+              key: const ValueKey('fxAdd'),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Add a rate'),
+              onPressed: () => addFxRate(context, wc))),
       Explainer(wc, 'currencies',
           'Payments in another currency count in your budget at a rate you set. Without a rate they are not counted. Your payments are not changed.'),
       Rows(children: [for (final r in rows) _CurrencyRow(wc, r)]),
@@ -82,6 +88,12 @@ class _CurrencyRow extends StatelessWidget {
       ]),
     );
   }
+}
+
+/// Add a rate: pick the currency (any but the wallet's), then the rate sheet.
+Future<void> addFxRate(BuildContext context, WalletController wc) async {
+  final code = await pickCurrency(context, wc, exclude: {wc.currency});
+  if (code != null && context.mounted) await openFxSheet(context, wc, code);
 }
 
 Future<void> openFxSheet(BuildContext context, WalletController wc, String code) async {
@@ -142,8 +154,8 @@ class _FxSheetState extends State<FxSheet> {
       setState(() => _error = 'Enter a rate, like 0${numberStyle.decimal}9240. Up to 6 decimals.');
       return;
     }
-    if (rate < FxRate.minRate || rate > FxRate.maxRate) {
-      setState(() => _error = 'The rate must be above 0 and at most ${FxRate.maxRate ~/ FxRate.scale}.');
+    if (rate < FxRate.minRate || rate > FxRate.maxRateOf(widget.code)) {
+      setState(() => _error = 'The rate must be above 0 and at most ${groupInt(FxRate.maxRateOf(widget.code) ~/ FxRate.scale)}.');
       return;
     }
     try {
@@ -171,7 +183,11 @@ class _FxSheetState extends State<FxSheet> {
         },
         onSubmitted: (_) => _save(),
         style: numStyle.copyWith(fontSize: BwType.displaySize, fontWeight: FontWeight.w500),
-        decoration: InputDecoration(labelText: 'Rate', prefixText: '1 $code = ', suffixText: home, hintText: '0${numberStyle.decimal}9240'),
+        decoration: InputDecoration(
+            labelText: 'Rate',
+            prefixText: '1 $code = ',
+            suffixText: home,
+            hintText: (currencyInfo(code)?.crypto ?? false) ? '62000${numberStyle.decimal}00' : '0${numberStyle.decimal}9240'),
       ),
       if (_error != null) ...[const SizedBox(height: 8), StatusLabel(key: const ValueKey('fxError'), good: false, text: _error!)],
       const SizedBox(height: 14),

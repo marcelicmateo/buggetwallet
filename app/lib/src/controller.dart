@@ -17,7 +17,7 @@ import 'conflict_text.dart';
 import 'controller_deps.dart';
 import 'device_list.dart';
 import 'device_relay.dart';
-import 'format.dart' show NumberStyle, money, moneyExact, numberStyle, shortDateOrRaw;
+import 'format.dart' show NumberStyle, money, moneyExact, numberStyle, shortDateOrRaw, walletCurrencyCode;
 import 'hero.dart';
 import 'home_widget.dart';
 import 'ics_fetch.dart';
@@ -104,7 +104,13 @@ class ImportLine {
 
   /// Bank balance questions this import leaves (Q5): accounts the file gave no balance for. The import flow asks them in order.
   final List<BankQuestion> questions;
-  const ImportLine(this.file, this.message, this.ok, {this.added = 0, this.undo, this.questions = const []});
+
+  /// Why rows of the file were left out (core's `ImportBatch.problems`: "Row 3: the amount … has more than 2 decimals") and how many
+  /// were left out in all. Shown under the result line; never logged (they hold amounts as written).
+  final List<String> problems;
+  final int invalid;
+  const ImportLine(this.file, this.message, this.ok,
+      {this.added = 0, this.undo, this.questions = const [], this.problems = const [], this.invalid = 0});
 }
 
 /// "What did the bank app show when you downloaded this file?" (Q5): account [accountId] ([name], [currency]), the file's newest row
@@ -447,6 +453,10 @@ class WalletController extends ChangeNotifier {
   Completer<void>? _syncRun;
   List<ImportLine> lastImport = const [];
 
+  /// While the import preview of a file is open: why rows of that file are left out (core's `ImportBatch.problems`) and how many.
+  List<String> previewProblems = const [];
+  int previewInvalid = 0;
+
   Timer? _syncTimer;
   Timer? _dayTimer;
   Timer? _debounce;
@@ -736,6 +746,7 @@ class WalletController extends ChangeNotifier {
   void notifyListeners() {
     if (_disposed) return; // a sync run that was still awaiting the device key or relay when the screen went away
     numberStyle = _numberStyle; // before the screens rebuild; read from the repo only on load, reload and change
+    walletCurrencyCode = settings.currency;
     super.notifyListeners();
     sync.flush(); // the sub-states tell their own listeners after the controller's, never the other way round
     cal.flush();
@@ -760,6 +771,7 @@ class WalletController extends ChangeNotifier {
     final t = PerfTimer('wc.reload');
     _applyNumberStyle(); // the repo may have been switched
     settings = repo.settings();
+    walletCurrencyCode = settings.currency; // before the first frame parses a field
     categorizer = repo.categorizer();
     final raw = repo.transactions(); // logs repo.transactions
     final whole = <CategorizedTx>[];
@@ -941,7 +953,7 @@ class WalletController extends ChangeNotifier {
               final merchSeen = <String>{};
               for (final t in txs) {
                 if (monthOf(t.date) != month) continue;
-                if (t.kind == BudgetKind.flex && t.amount < 0) {
+                if (t.kind == BudgetKind.flex && t.amount < 0 && t.tx.currency == currency) {
                   final k = merchantName(t.tx);
                   final (n, v) = merch[k] ?? (0, 0);
                   merch[k] = (merchSeen.add('${t.tx.id}|$k') ? n + 1 : n, v - t.amount); // orders, not parts
@@ -1306,7 +1318,15 @@ class WalletController extends ChangeNotifier {
           // Q4: the preview equals the import (same batch, same revive set, after the layout is decided); Cancel writes nothing.
           final preview = repo.previewImport(batch, revive: revive.toSet());
           final bank = usedMapping?.name ?? accountSourceLabel(batch.source, csvMappings: settings.csvMappings);
-          final chosen = await confirmPreview(preview, bank);
+          previewProblems = batch.problems;
+          previewInvalid = batch.invalid;
+          final Set<String>? chosen;
+          try {
+            chosen = await confirmPreview(preview, bank);
+          } finally {
+            previewProblems = const [];
+            previewInvalid = 0;
+          }
           if (chosen == null) {
             read.revert?.call();
             logEvent(_import, Level.INFO, 'import.previewCancelled', {...f, 'rows': batch.transactions.length, 'fresh': preview.fresh});
@@ -1353,6 +1373,8 @@ class WalletController extends ChangeNotifier {
             '${s.skippedByOwner > 0 ? ' ${s.skippedByOwner} left out by you.' : ''}${_bankCheckText(s.bankChecks)}',
             true,
             added: s.added,
+            problems: batch.problems,
+            invalid: batch.invalid,
             undo: undoOf(),
             questions: _bankQuestions(batch, s.bankChecks)));
       } on ClockBehindException catch (e) {

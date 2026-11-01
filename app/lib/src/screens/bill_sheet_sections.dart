@@ -105,7 +105,9 @@ class _BillTotal extends StatelessWidget {
         onChanged: (_) => s.edit(() => s.error = null),
         style: numStyle.copyWith(fontSize: BwType.displaySize, fontWeight: FontWeight.w500),
         decoration: v.deco(context, 'Total',
-            filled: s.total.text.isNotEmpty, hint: amountHint, suffix: currencySymbol(b.currency.isEmpty ? v.wc.currency : b.currency)),
+            filled: s.total.text.isNotEmpty,
+            hint: amountHintFor(b.currency.isEmpty ? v.wc.currency : b.currency),
+            suffix: currencySymbol(b.currency.isEmpty ? v.wc.currency : b.currency)),
       ),
       const SizedBox(height: 4),
       const DoubleRule(),
@@ -193,7 +195,7 @@ class _BillItems extends StatelessWidget {
   Widget build(BuildContext context) {
     final b = v.b;
     if (b.items.isEmpty) return const SizedBox.shrink();
-    final cur = v.wc.currency;
+    final cur = b.currency.isEmpty ? v.wc.currency : b.currency;
     return _sectionColumn([
       const SizedBox(height: 14),
       const SectionHead('Items'),
@@ -211,7 +213,10 @@ class _BillPayButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final b = v.b, s = v.s;
-    if (!(b.status == BillStatus.confirmed && !b.paid && s.iban.text.trim().isNotEmpty && (parseMoney(s.total.text) ?? 0) > 0)) {
+    if (!(b.status == BillStatus.confirmed &&
+        !b.paid &&
+        s.iban.text.trim().isNotEmpty &&
+        (parseMoney(s.total.text, currency: b.currency.isEmpty ? null : b.currency) ?? 0) > 0)) {
       return const SizedBox.shrink();
     }
     return _sectionColumn([

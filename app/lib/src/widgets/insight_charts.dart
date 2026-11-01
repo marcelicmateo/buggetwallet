@@ -162,7 +162,7 @@ class SeriesBars extends StatelessWidget {
     final n = groups.length;
     final values = [
       for (final g in groups)
-        for (final r in g.rods) r.cents / 100
+        for (final r in g.rods) chartUnits(r.cents)
     ];
     final maxY = values.fold<double>(10, math.max) * 1.08;
     final minY = math.min(0.0, values.fold<double>(0, math.min)) * 1.08;
@@ -238,8 +238,8 @@ class SeriesBars extends StatelessWidget {
 
   BarChartRodData _rod(BarRod r, bool partial, double width, WalletColors c, double Function(double) px) {
     Color tint(Color x) => partial ? solidOver(x.withValues(alpha: 0.45), c.bg) : x;
-    final v = r.cents / 100;
-    final over = r.overCents.clamp(0, r.cents > 0 ? r.cents : 0) / 100;
+    final v = chartUnits(r.cents);
+    final over = r.overCents.clamp(0, r.cents > 0 ? r.cents : 0) / storageScale();
     return BarChartRodData(
       toY: v,
       width: width,

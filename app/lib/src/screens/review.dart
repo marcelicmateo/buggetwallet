@@ -10,6 +10,7 @@ import '../logging.dart';
 import '../theme.dart';
 import '../widgets/charts.dart';
 import '../widgets/common.dart';
+import '../widgets/import_problems.dart';
 import '../widgets/sheets.dart';
 import 'import_flow.dart';
 import 'spending.dart' show BudgetSummary;
@@ -108,7 +109,10 @@ class _ReviewScreenState extends State<ReviewScreen> {
                         onPressed: _importing ? null : _import,
                       ),
                     ),
-                    for (final l in wc.lastImport) StatusLabel(good: l.ok, text: l.message),
+                    for (final l in wc.lastImport) ...[
+                      StatusLabel(good: l.ok, text: l.message),
+                      ImportProblems(problems: l.problems, invalid: l.invalid, header: false),
+                    ],
                   ],
                 ),
                 _Step(
