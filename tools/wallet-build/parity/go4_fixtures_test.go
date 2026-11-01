@@ -173,8 +173,12 @@ func TestGO4Fixtures(t *testing.T) {
 			t.Run(what+"/"+impl, func(t *testing.T) {
 				out := filepath.Join(t.TempDir(), "out")
 				rc, so, se := runFixtures(t, repo, impl, bin, out, what)
-				if rc != 0 || strings.TrimSpace(so) != "ok" {
-					t.Fatalf("exit %d, stdout %q (want \"ok\"), stderr %s", rc, so, tail(se))
+				wantOut := "ok"
+				if impl != "bash" && (what == "banks" || what == "all") { // owner decision: the Excel files are frozen
+					wantOut = "pbz_synthetic.xls and revolut_synthetic.xlsx are frozen (committed as they are), not generated\nok"
+				}
+				if rc != 0 || strings.TrimSpace(so) != wantOut {
+					t.Fatalf("exit %d, stdout %q (want %q), stderr %s", rc, so, wantOut, tail(se))
 				}
 				want := fixtureWant(t, committed, what)
 				got := listRel(t, out)

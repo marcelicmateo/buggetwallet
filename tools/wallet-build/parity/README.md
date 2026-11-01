@@ -128,3 +128,8 @@ on the Go side.
 
 Masking added: `/tmp/tmp.XXXX` (mktemp in the scripts' messages), sandbox paths, the `~/.claude/projects/<dashed repo>`
 name, `SHA256: <fingerprint>` and the password values of `signing.env`.
+
+Deliberate difference: plain `relay` and `web` (no subcommand, or an unknown one) are build steps in wallet-build (the relay
+test suite, the web build), so there are no no-args/usage parity cases for them; the helpers are reached as
+`relay start|stop|status|logs|reset|image`, `web serve|stop|status|shot`, or the make targets. `fixtures banks|all` on the Go
+side print the "frozen" line before `ok` (owner decision) and are expected to.

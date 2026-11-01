@@ -514,6 +514,6 @@ func readAll(r io.Reader) []byte {
 	return b
 }
 
-var reMktemp = regexp.MustCompile(`/tmp/tmp\.[A-Za-z0-9]+`)
+var reMktemp = regexp.MustCompile(`/tmp/(?:tmp\.|relay-native-check)[A-Za-z0-9]+`)
 
 var reFingerprint = regexp.MustCompile(`SHA256: [0-9A-F:]+`)
