@@ -34,14 +34,17 @@ Future<void> _waitIdle(WalletController wc) async {
   }
 }
 
-/// Waits until [wc] has no sync running, in real time. A controller starts a run of its own 3 s (test time) after each write,
-/// and `syncNow` does nothing while one runs: a step that calls it (or taps Sync now) while that run is going is dropped, and the
-/// step's expectations then see data from before it. Nothing starts a run while this waits (the timers only fire when the test pumps).
+/// Waits until [wc] has no sync running, in real time. A controller starts a run of its own 3 s after each write (a real timer: the
+/// integration binding is live), and `syncNow` does nothing while one runs: a step that calls it (or taps Sync now) while that run
+/// is going is dropped, and the step's expectations then see data from before it. Before a tap this narrows the window but does not
+/// close it: a timer may fire between this and the tap. That stays correct because the run it starts begins after everything the
+/// test has pushed so far, so it pulls the same data the tap would (and, with the relay down, fails the way the tap would); the
+/// test then waits on `lastSync` / `syncError`, which either run sets.
 Future<void> _idle(WidgetTester t, WalletController wc) async {
   await t.runAsync(() => _waitIdle(wc));
 }
 
-/// A sync of [wc] that really runs: waits for a running one first, with nothing able to start between the two.
+/// A sync of [wc] that really runs: waits for a running one first; nothing can start between the check and the call (microtasks only).
 Future<void> _syncNow(WidgetTester t, WalletController wc) async {
   await t.runAsync(() async {
     await _waitIdle(wc);

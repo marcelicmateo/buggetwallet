@@ -58,6 +58,38 @@ void main() {
           reason: 'a window in the past zooms around its middle as before');
     });
 
+    test('a pinch on a window that sticks out moves it continuously: no jump when the fingers jitter around 1.0', () {
+      final w = r('2026-10-01', '2026-10-31'); // today is the 20th: 11 days of overhang
+      final e = edgesFor(w, first: '2025-01-01');
+      final ends = <double, int>{};
+      for (var k = 98; k <= 200; k++) {
+        final scale = k / 100;
+        ends[scale] = epochDay(e.transform(w, scale, 0.5, 0.5).end);
+      }
+      int? prev;
+      for (final entry in ends.entries) {
+        if (prev != null) {
+          expect(entry.value, lessThanOrEqualTo(prev), reason: 'the end only moves back as the fingers spread: ${entry.key}');
+          expect(prev - entry.value, lessThanOrEqualTo(3), reason: 'no jump at ${entry.key}');
+        }
+        prev = entry.value;
+      }
+      expect(ends[0.98], epochDay('2026-10-31'), reason: 'spreading less than 1 only widens it');
+      expect(ends[1.0], epochDay('2026-10-31'));
+      expect(ends[1.03]! > epochDay(today), isTrue, reason: 'a small pinch has not shrunk it by the whole overhang yet');
+      expect(e.transform(w, 1.6, 0.5, 0.5).end.compareTo(today) <= 0, isTrue, reason: 'shrunk by the overhang: it ends at today');
+      expect(e.transform(w, 2, 0.5, 0.5).end, today);
+    });
+
+    test('at the shortest window a zoom in or a pinch in changes nothing, also when it sticks out', () {
+      final w = r('2026-10-18', '2026-10-24'); // 7 days, today is the 20th
+      final e = edgesFor(w, first: '2025-01-01');
+      expect(e.zoom(w, 2), w);
+      expect(e.transform(w, 2, 0.3, 0.6), w);
+      final inside = r('2026-10-10', '2026-10-16');
+      expect(edgesFor(inside, first: '2025-01-01').zoom(inside, 2), inside);
+    });
+
     test('cannot go before the first day with data', () {
       final w = r('2026-08-01', '2026-10-20');
       final e = edgesFor(w, first: '2026-03-10');

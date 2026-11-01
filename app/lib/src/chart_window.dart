@@ -16,7 +16,7 @@ String isoOfEpochDay(int e) => isoDate(DateTime.fromMillisecondsSinceEpoch(e * D
 
 /// Where a window may go: it starts no earlier than [earliest] and ends no later than [latest] (epoch days), as far as its length
 /// allows. Built for the window a gesture starts from, so a window that already sticks out (the running month ends after today) can
-/// stay as it is but never moves further out, and a zoom that makes it shorter never leaves it sticking out at all ([limit]).
+/// stay as it is but never moves further out, and a zoom that makes it shorter takes the overhang off ([limit]).
 class ChartEdges {
   final int earliest, latest;
 
@@ -41,11 +41,14 @@ class ChartEdges {
     return ChartEdges(earliest: lo < start ? lo : start, latest: hi > end ? hi : end, limit: hi);
   }
 
-  /// The edges for a window that gets shorter: it is not allowed to stick out past [limit] any more. A running month's middle is a
-  /// future window with nothing in it, so zooming in on it ends it at today instead.
-  ChartEdges get _tight {
+  /// The edges for a window that gets [by] days shorter: its overhang past [limit] shrinks by as much, so it reaches the limit exactly
+  /// when it has shrunk by the whole overhang, and a pinch moves it continuously. A running month's middle is a future window with
+  /// nothing in it; a zoom must not land there. [by] at or above the overhang (the discrete zoom steps pass a big number) = no overhang.
+  ChartEdges _shrunkBy(int by) {
     final l = limit;
-    return l == null || l >= latest ? this : ChartEdges(earliest: earliest, latest: l, limit: l);
+    if (l == null || l >= latest) return this;
+    final over = latest - l - by;
+    return ChartEdges(earliest: earliest, latest: over > 0 ? l + over : l, limit: l);
   }
 
   /// The window of [len] days starting at [start], kept inside the edges and the length limits.
@@ -75,7 +78,9 @@ class ChartEdges {
     final len = w.days;
     final next = (len / factor).round().clamp(1, chartMaxDays);
     final at = epochDay(w.start) + focal * len;
-    return (next < len ? _tight : this).clamp((at - focal * next).round(), next);
+    if (next >= len) return clamp((at - focal * next).round(), next);
+    final shorter = _shrunkBy(len).clamp((at - focal * next).round(), next);
+    return shorter.days < len ? shorter : w; // at the shortest window a zoom in changes nothing (it must not just move it)
   }
 
   /// A drag and pinch together: [w0] is the window when the fingers went down, [scale] how far they spread since (above 1 = shorter),
@@ -87,7 +92,9 @@ class ChartEdges {
     final len0 = w0.days;
     final len = (len0 / scale).round().clamp(1, chartMaxDays);
     final day = epochDay(w0.start) + f0 * len0;
-    return (len < len0 ? _tight : this).clamp((day - f1 * len).round(), len);
+    if (len >= len0) return clamp((day - f1 * len).round(), len);
+    final shorter = _shrunkBy(len0 - len).clamp((day - f1 * len).round(), len);
+    return shorter.days < len0 ? shorter : w0;
   }
 
   /// Another window of the same length cannot be shorter / longer than this.
