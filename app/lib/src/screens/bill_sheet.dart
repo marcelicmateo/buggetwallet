@@ -5,7 +5,6 @@ import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart' show validIban;
 
 import '../controller.dart';
-import '../date_length.dart';
 import '../file_chooser.dart';
 import '../format.dart';
 import '../layout.dart';
@@ -14,10 +13,10 @@ import '../platform.dart';
 import '../theme.dart';
 import '../widgets/category_picker.dart';
 import '../widgets/common.dart';
+import '../widgets/field_editor.dart';
 import '../widgets/sheets.dart';
 import 'pay_sheet.dart';
 
-part 'bill_sheet_dates.dart';
 part 'bill_sheet_sections.dart';
 
 /// Opens one bill (the sheet with its fields) and shows the toast for its result. [chooser] saves the original file where it cannot
@@ -85,8 +84,11 @@ class _BillSheetState extends State<BillSheet> {
   late final reference = TextEditingController(text: _first?.reference ?? '');
   late final description = TextEditingController(text: _first?.description ?? '');
   late final note = TextEditingController(text: _first?.note ?? '');
-  late String? date = _first?.date;
-  late String? due = _first?.dueDate;
+
+  /// The date columns the sheet edits as a draft (written by Save), by column.
+  late final Map<Col, String?> dates = {BillCols.date: _first?.date, BillCols.dueDate: _first?.dueDate};
+  String? get date => dates[BillCols.date];
+  String? get due => dates[BillCols.dueDate];
   // A bill to review whose category is empty starts with the suggestion (earlier bills of the same payee); it is marked as one.
   late final String? _suggested =
       _first == null || _first.status != BillStatus.review || _first.category != null ? null : widget.wc.suggestedBillCategory(_first);
@@ -140,22 +142,6 @@ class _BillSheetState extends State<BillSheet> {
       setState(() => error = "Pick the category so Budget Wallet doesn't count this bill twice.");
     }
     return saved;
-  }
-
-  /// Saves a warranty or return-by date; a refusal keeps the sheet open with the reason.
-  void _saveDates(Bill b, {String? warrantyUntil, String? returnBy, bool clearWarranty = false, bool clearReturnBy = false}) {
-    final ok = widget.wc
-        .setBillDates(b.id, warrantyUntil: warrantyUntil, returnBy: returnBy, clearWarranty: clearWarranty, clearReturnBy: clearReturnBy);
-    if (!ok) setState(() => error = "Pick the category so Budget Wallet doesn't count this bill twice.");
-  }
-
-  Future<String?> _pick(String? current, {DateTime? first, DateTime? last}) async {
-    final d = await showDatePicker(
-        context: context,
-        initialDate: current != null && isCalendarDate(current) ? parseIso(current) : widget.wc.now,
-        firstDate: first ?? DateTime(2000),
-        lastDate: last ?? DateTime(2100));
-    return d == null ? null : isoDate(d);
   }
 
   Future<void> _confirm(Bill b) async {

@@ -38,6 +38,7 @@ part 'controller_categories.dart';
 part 'controller_tags.dart';
 part 'controller_rules.dart';
 part 'controller_bills.dart';
+part 'controller_fields.dart';
 part 'controller_recurring.dart';
 part 'controller_future.dart';
 part 'controller_home.dart';

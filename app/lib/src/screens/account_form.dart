@@ -12,6 +12,7 @@ import '../layout.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/currency_picker.dart';
+import '../widgets/field_editor.dart';
 import 'accounts_panel.dart' show accountTypeLabel;
 
 /// The plain name of an account kind, as the form and the rows say it.
@@ -73,8 +74,12 @@ class AccountFormSheet extends StatefulWidget {
 class _AccountFormSheetState extends State<AccountFormSheet> {
   Account? get _a => widget.account;
   late AccountKind _kind = _a?.kind ?? AccountKind.cash;
-  late final _name = TextEditingController(text: _a?.name ?? accountKindLabel(_kind));
-  late final _institution = TextEditingController(text: _a?.institution ?? '');
+
+  /// The text columns being edited (a draft; Save writes them): name and institution.
+  late final Map<Col, String?> _draft = {
+    AccountCols.name: _a?.name ?? accountKindLabel(_kind),
+    AccountCols.institution: _a?.institution ?? ''
+  };
   final _amount = TextEditingController();
   late final _rate = TextEditingController(text: _initialRate());
   late String? _source = _a?.source;
@@ -97,8 +102,6 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
 
   @override
   void dispose() {
-    _name.dispose();
-    _institution.dispose();
     _amount.dispose();
     _rate.dispose();
     super.dispose();
@@ -121,7 +124,7 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
     _confirmedDrop = false;
     setState(() {
       _kind = k;
-      if (!_nameEdited) _name.text = accountKindLabel(k);
+      if (!_nameEdited) _draft[AccountCols.name] = accountKindLabel(k);
       if (!k.takesSource) _source = null;
       if (!_editing) {
         final coin = currencyInfo(_currency)?.crypto ?? false;
@@ -167,7 +170,7 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
 
   Future<void> _save() async {
     final wc = widget.wc;
-    final inst = _kind.takesSource || _isCrypto ? _institution.text : '';
+    final inst = _kind.takesSource || _isCrypto ? _draft[AccountCols.institution] ?? '' : '';
     if (!_rateOk()) return;
     if (_editing) {
       final a = _a!;
@@ -179,7 +182,7 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
       try {
         final srcChanged = _source != a.source;
         await wc.updateAccount(a.id,
-            name: _name.text,
+            name: _draft[AccountCols.name] ?? '',
             kind: _kind != a.kind ? _kind : null,
             institution: inst.trim() == (a.institution ?? '') ? null : inst,
             source: srcChanged && _source != null ? _source : null,
@@ -201,7 +204,13 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
     }
     try {
       await wc.addAccount(
-          name: _name.text, kind: _kind, source: _source, institution: inst, currency: _currency, opening: cents, openingDate: _date);
+          name: _draft[AccountCols.name] ?? '',
+          kind: _kind,
+          source: _source,
+          institution: inst,
+          currency: _currency,
+          opening: cents,
+          openingDate: _date);
       _saveRate();
       if (mounted) Navigator.pop(context, true);
     } on ArgumentError catch (e) {
@@ -209,73 +218,69 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
     }
   }
 
+  /// The columns this kind asks for, in order (the currency, balance and date follow below, the rate for a coin). A new text column of the
+  /// account is one more entry here and one case in [_field].
+  List<Col> _fieldsOf(AccountKind k) => [
+        AccountCols.name,
+        if (k.takesSource || k == AccountKind.crypto) AccountCols.institution,
+        if (k.takesSource) AccountCols.source,
+      ];
+
+  Widget _field(Col c) {
+    final wc = widget.wc, csv = wc.settings.csvMappings;
+    if (c == AccountCols.source) {
+      return FieldEditor(c, id: 'accountSource', label: 'Import format', value: _source, today: wc.today(), options: [
+        const FieldOption(null, 'None: I set the balance'),
+        for (final p in bankProfiles) FieldOption(p.id, p.label),
+        for (final e in csv.entries) FieldOption('$csvSourcePrefix${e.key}', e.value.name, key: ValueKey('accountSource:csv:${e.key}')),
+      ], onSave: (v) {
+        setState(() {
+          _source = v as String?;
+          _confirmedDrop = false;
+          if (!_nameEdited && v != null) _draft[AccountCols.name] = accountTypeLabel(v, csvMappings: csv);
+        });
+        return null;
+      });
+    }
+    final name = c == AccountCols.name;
+    return FieldEditor(c,
+        key: ValueKey(c),
+        id: name ? 'accountName' : 'accountInstitution',
+        label: name ? null : (_isCrypto ? 'Exchange or wallet (optional)' : 'Bank or provider (optional)'),
+        value: _draft[c],
+        today: wc.today(),
+        autoSave: true,
+        capitalize: name ? TextCapitalization.sentences : TextCapitalization.words,
+        errorText: name ? _nameError : null, onSave: (v) {
+      setState(() {
+        _draft[c] = v as String?;
+        if (name) {
+          _nameEdited = true;
+          _nameError = null;
+        }
+      });
+      return null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final wc = widget.wc;
-    final csv = wc.settings.csvMappings;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Heading(_editing ? 'Edit account' : 'Add an account', key: const ValueKey('accountFormHeading')),
       const SizedBox(height: 12),
-      const Text('What is it?', style: TextStyle(fontWeight: FontWeight.w500)),
-      const SizedBox(height: 6),
-      Wrap(key: const ValueKey('accountKind'), spacing: 8, runSpacing: 8, children: [
-        for (final k in AccountKind.values)
-          ChoiceChip(
-            key: ValueKey('accountKind:${k.name}'),
-            avatar: Icon(accountKindIcon(k), size: 18),
-            label: Text(accountKindLabel(k)),
-            selected: _kind == k,
-            onSelected: (_) => _pickKind(k),
-          ),
-      ]),
-      const SizedBox(height: 12),
-      TextField(
-        key: const ValueKey('accountName'),
-        controller: _name,
-        textCapitalization: TextCapitalization.sentences,
-        onChanged: (_) => setState(() {
-          _nameEdited = true;
-          _nameError = null;
-        }),
-        decoration: InputDecoration(labelText: 'Name', errorText: _nameError, errorMaxLines: 3),
-      ),
-      if (_kind.takesSource) ...[
-        const SizedBox(height: 12),
-        TextField(
-          key: const ValueKey('accountInstitution'),
-          controller: _institution,
-          textCapitalization: TextCapitalization.words,
-          decoration: const InputDecoration(labelText: 'Bank or provider (optional)'),
-        ),
-        const SizedBox(height: 12),
-        DropdownButtonFormField<String?>(
-          key: const ValueKey('accountSource'),
-          isExpanded: true,
-          initialValue: _source,
-          decoration: const InputDecoration(labelText: 'Import format'),
-          items: [
-            const DropdownMenuItem<String?>(value: null, child: Text('None: I set the balance')),
-            for (final p in bankProfiles) DropdownMenuItem<String?>(value: p.id, child: Text(p.label)),
-            for (final e in csv.entries)
-              DropdownMenuItem<String?>(
-                  key: ValueKey('accountSource:csv:${e.key}'), value: '$csvSourcePrefix${e.key}', child: Text(e.value.name)),
-          ],
-          onChanged: (v) => setState(() {
-            _source = v;
-            _confirmedDrop = false;
-            if (!_nameEdited && v != null) _name.text = accountTypeLabel(v, csvMappings: csv);
+      FieldEditor(AccountCols.kind,
+          id: 'accountKind',
+          label: 'What is it?',
+          value: _kind,
+          today: wc.today(),
+          labelOf: (k) => accountKindLabel(k as AccountKind),
+          iconOf: (k) => accountKindIcon(k as AccountKind),
+          onSave: (k) {
+            _pickKind(k as AccountKind);
+            return null;
           }),
-        ),
-      ],
-      if (_isCrypto) ...[
-        const SizedBox(height: 12),
-        TextField(
-          key: const ValueKey('accountInstitution'),
-          controller: _institution,
-          textCapitalization: TextCapitalization.words,
-          decoration: const InputDecoration(labelText: 'Exchange or wallet (optional)'),
-        ),
-      ],
+      for (final c in _fieldsOf(_kind)) ...[const SizedBox(height: 12), _field(c)],
       const SizedBox(height: 12),
       CurrencyField(
         key: const ValueKey('accountCurrency'),
@@ -325,26 +330,21 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
               errorMaxLines: 3),
         ),
         BelowZeroBox(value: _negative, onChanged: (v) => setState(() => _negative = v)),
-        DateField(
-          key: const ValueKey('accountDate'),
-          label: 'Balance on',
-          value: _date,
-          onPick: () async {
-            final today = wc.today();
-            final d = await showDatePicker(
-                context: context, initialDate: parseIso(_date), firstDate: parseIso(addDays(today, -3650)), lastDate: parseIso(today));
-            if (d != null) {
-              setState(() {
-                _date = isoDate(d);
-                _dateError = null;
-              });
-            }
-          },
-        ),
-        if (_dateError != null) ...[
-          const SizedBox(height: 6),
-          StatusLabel(key: const ValueKey('accountDateError'), good: false, text: _dateError!)
-        ],
+        FieldEditor(AccountCols.openingDate,
+            key: const ValueKey('accountDate'),
+            id: 'accountDate',
+            label: 'Balance on',
+            value: _date,
+            today: wc.today(),
+            lengths: false,
+            autoSave: true,
+            errorText: _dateError, onSave: (d) {
+          setState(() {
+            _date = d as String;
+            _dateError = null;
+          });
+          return null;
+        }),
       ],
       if (_confirmedDrop && _editing) ...[
         const SizedBox(height: 10),
