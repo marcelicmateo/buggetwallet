@@ -7,6 +7,7 @@ import '../logging.dart';
 import '../theme.dart';
 import '../widgets/charts.dart' show ForecastStepChart;
 import '../widgets/common.dart';
+import '../widgets/currency_picker.dart';
 import '../widgets/dash.dart';
 import '../widgets/sheets.dart';
 import 'plan_suggestions.dart';
@@ -153,15 +154,12 @@ class _PaydayPlanState extends State<PaydayPlan> {
                 Expanded(child: field('paydayDay', 'Latest payday', money: false)),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: DropdownButtonFormField<String>(
-                    key: ValueKey(currency),
-                    isExpanded: true,
-                    initialValue: currency,
-                    decoration: const InputDecoration(labelText: 'Currency'),
-                    items: [
-                      for (final c in const ['EUR', 'USD', 'GBP', 'CHF']) DropdownMenuItem(value: c, child: Text(c))
-                    ],
-                    onChanged: (v) => setState(() => currency = v ?? currency),
+                  child: CurrencyField(
+                    key: const ValueKey('planCurrency'),
+                    wc: wc,
+                    value: currency,
+                    choice: CurrencyChoice.fiat,
+                    onChanged: (v) => setState(() => currency = v),
                   ),
                 ),
               ]),

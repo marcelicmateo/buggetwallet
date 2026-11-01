@@ -78,7 +78,8 @@ class BillSheet extends StatefulWidget {
 
 class _BillSheetState extends State<BillSheet> {
   late final Bill? _first = widget.wc.bill(widget.billId);
-  late final total = TextEditingController(text: _first?.total == null ? '' : centsToFieldText(_first!.total!));
+  late final total = TextEditingController(
+      text: _first?.total == null ? '' : centsToFieldText(_first!.total!, currency: _first.currency.isEmpty ? null : _first.currency));
   late final payee = TextEditingController(text: _first?.payee ?? '');
   late final iban = TextEditingController(text: _first?.iban ?? '');
   late final reference = TextEditingController(text: _first?.reference ?? '');
@@ -106,7 +107,7 @@ class _BillSheetState extends State<BillSheet> {
 
   /// The fields the owner changed, saved on top of the bill. Returns false (and says why) when the total is not an amount.
   bool _save(Bill b, {bool acceptShown = false}) {
-    final t = total.text.trim().isEmpty ? null : parseMoney(total.text);
+    final t = total.text.trim().isEmpty ? null : parseMoney(total.text, currency: b.currency.isEmpty ? null : b.currency);
     if (total.text.trim().isNotEmpty && (t == null || t <= 0)) {
       setState(() => error = 'Total: enter an amount, like ${amountExample()}.');
       return false;
@@ -162,7 +163,7 @@ class _BillSheetState extends State<BillSheet> {
     final stored = widget.wc.repo.bill(b.id)?.category;
     final dead = stored != null && widget.wc.categoryTable.isDeadCustom(stored);
     if (!_save(b, acceptShown: !dead)) return;
-    final t = total.text.trim().isEmpty ? null : parseMoney(total.text);
+    final t = total.text.trim().isEmpty ? null : parseMoney(total.text, currency: b.currency.isEmpty ? null : b.currency);
     if (date == null || (t ?? 0) <= 0) {
       logNav('bill.invalid');
       setState(() => error = 'Add a date and a total first.');

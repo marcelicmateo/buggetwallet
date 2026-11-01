@@ -18,8 +18,8 @@ class _PartDraft {
   final TextEditingController note;
   String category;
   Set<String> tags;
-  _PartDraft({required int cents, required this.category, Set<String>? tags, String? note})
-      : amount = TextEditingController(text: cents == 0 ? '' : centsToFieldText(cents)),
+  _PartDraft({required int cents, required String currency, required this.category, Set<String>? tags, String? note})
+      : amount = TextEditingController(text: cents == 0 ? '' : centsToFieldText(cents, currency: currency)),
         note = TextEditingController(text: note ?? ''),
         tags = {...?tags};
   void dispose() {
@@ -63,12 +63,15 @@ class _SplitSheetState extends State<SplitSheet> {
   List<_PartDraft> _initial() {
     final s = stored;
     if (s != null && s.isNotEmpty) {
-      return [for (final p in s) _PartDraft(cents: p.amount.abs(), category: p.category, tags: p.tags.toSet(), note: p.note)];
+      return [
+        for (final p in s)
+          _PartDraft(currency: tx.currency, cents: p.amount.abs(), category: p.category, tags: p.tags.toSet(), note: p.note)
+      ];
     }
     final cat = widget.firstCategory ?? widget.row.category;
     return [
-      _PartDraft(cents: total, category: cat, tags: widget.firstTags ?? widget.row.tags.toSet()),
-      _PartDraft(cents: 0, category: cat),
+      _PartDraft(currency: tx.currency, cents: total, category: cat, tags: widget.firstTags ?? widget.row.tags.toSet()),
+      _PartDraft(currency: tx.currency, cents: 0, category: cat),
     ];
   }
 
@@ -82,7 +85,7 @@ class _SplitSheetState extends State<SplitSheet> {
 
   /// The cents typed in a part; null when empty, not a number or zero.
   int? _cents(_PartDraft p) {
-    final v = parseMoney(p.amount.text);
+    final v = parseMoney(p.amount.text, currency: tx.currency);
     return v == null || v == 0 ? null : v;
   }
 
@@ -186,7 +189,8 @@ class _SplitSheetState extends State<SplitSheet> {
               style: TextButton.styleFrom(minimumSize: const Size(0, touchMin)),
               icon: const Icon(Icons.add, size: 18),
               label: const Text('Add part'),
-              onPressed: () => setState(() => parts.add(_PartDraft(cents: 0, category: widget.firstCategory ?? widget.row.category)))),
+              onPressed: () => setState(
+                  () => parts.add(_PartDraft(currency: tx.currency, cents: 0, category: widget.firstCategory ?? widget.row.category)))),
         ),
       const SizedBox(height: 6),
       const DoubleRule(),

@@ -9,6 +9,7 @@ import '../layout.dart';
 import '../logging.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/currency_picker.dart';
 import '../widgets/sheets.dart';
 
 /// Opens the Map columns sheet for a CSV no bank profile and no saved layout fits (P12). Returns the owner's choice, or null
@@ -26,8 +27,6 @@ const _dateFormatNames = {
   CsvDateFormat.mdySlash: 'month/day/year',
   CsvDateFormat.dmyDash: '31-12-2026',
 };
-
-const _fixedCurrencies = ['EUR', 'USD', 'GBP', 'CHF'];
 
 /// The Map columns sheet: pick what each column means, see the first rows read that way (signed amounts in the wallet's number
 /// style), and Save & import once there is no problem. Pops a [CsvChoice]. With [editing] (a saved layout, read again from a file of
@@ -54,6 +53,7 @@ class _MapColumnsSheetState extends State<MapColumnsSheet> {
   CsvDecimal _decimal = CsvDecimal.comma;
   List<int> _desc = [];
   String? _currencyCode;
+  int _currencyNonce = 0;
 
   @override
   void initState() {
@@ -272,26 +272,43 @@ class _MapColumnsSheetState extends State<MapColumnsSheet> {
             ),
         ]),
         _gap(),
-        DropdownButtonFormField<String?>(
-          key: const ValueKey('csvMap:currency'),
-          isExpanded: true,
-          initialValue: _currencyCol != null ? 'col:$_currencyCol' : _currencyCode,
-          decoration: const InputDecoration(labelText: 'Currency'),
-          items: [
-            DropdownMenuItem<String?>(value: null, child: Text('Wallet currency (${wc.currency})')),
-            for (var i = 0; i < _shape.headers.length; i++)
-              DropdownMenuItem<String?>(value: 'col:$i', child: Text('In column ${_col(i)}', overflow: TextOverflow.ellipsis)),
-            for (final code in _fixedCurrencies) DropdownMenuItem<String?>(value: code, child: Text('Always $code')),
-          ],
-          onChanged: (v) => setState(() {
-            _currencyCol = null;
-            _currencyCode = null;
-            if (v != null && v.startsWith('col:')) {
-              _currencyCol = int.parse(v.substring(4));
-            } else {
-              _currencyCode = v;
-            }
-          }),
+        KeyedSubtree(
+          key: ValueKey('csvMap:currencyBox:$_currencyNonce'),
+          child: DropdownButtonFormField<String?>(
+            key: const ValueKey('csvMap:currency'),
+            isExpanded: true,
+            initialValue: _currencyCol != null ? 'col:$_currencyCol' : (_currencyCode != null ? 'fixed' : null),
+            decoration: const InputDecoration(labelText: 'Currency'),
+            items: [
+              DropdownMenuItem<String?>(value: null, child: Text('Wallet currency (${wc.currency})')),
+              for (var i = 0; i < _shape.headers.length; i++)
+                DropdownMenuItem<String?>(value: 'col:$i', child: Text('In column ${_col(i)}', overflow: TextOverflow.ellipsis)),
+              DropdownMenuItem<String?>(
+                  key: const ValueKey('csvMap:currency:fixed'),
+                  value: 'fixed',
+                  child: Text(_currencyCode == null ? 'One currency for every row…' : 'Always ${currencyLabel(_currencyCode!)}',
+                      overflow: TextOverflow.ellipsis)),
+            ],
+            onChanged: (v) async {
+              if (v == 'fixed') {
+                final code = await pickCurrency(context, wc, current: _currencyCode ?? wc.currency);
+                if (!mounted) return;
+                setState(() {
+                  if (code != null) {
+                    _currencyCol = null;
+                    _currencyCode = code;
+                  }
+                  _currencyNonce++; // the list shows the state again, also after a cancelled pick
+                });
+                return;
+              }
+              setState(() {
+                _currencyCol = null;
+                _currencyCode = null;
+                if (v != null && v.startsWith('col:')) _currencyCol = int.parse(v.substring(4));
+              });
+            },
+          ),
         ),
         _colPicker('skip', 'Skip rows where this is empty', _skipCol, (v) => _skipCol = v, optional: true),
         const SizedBox(height: 16),

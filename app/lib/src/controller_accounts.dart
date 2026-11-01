@@ -17,13 +17,92 @@ extension AccountsDb on WalletController {
   /// What is held, per currency (never mixed; sync duplicates left out). Empty when there are no accounts.
   Map<String, int> heldTotals() => _cached(const MemoKey('heldTotals'), () => balanceTotals(accountBalanceList()));
 
-  /// Adds an account and returns its id. A refused value is an [ArgumentError] with a readable message.
+  /// Adds an account and returns its id. [kind] and [institution] as in core's `addAccount`. A refused value is an [ArgumentError]
+  /// with a readable message.
   Future<String> addAccount(
-      {required String name, String? source, required String currency, required int opening, required String openingDate}) async {
-    final id = await repo.addAccount(name: name, source: source, currency: currency, opening: opening, openingDate: openingDate);
-    logEvent(_accLog, Level.INFO, 'accounts.add', {'cash': source == null});
+      {required String name,
+      String? source,
+      required String currency,
+      required int opening,
+      required String openingDate,
+      AccountKind? kind,
+      String? institution}) async {
+    final id = await repo.addAccount(
+        name: name, source: source, currency: currency, opening: opening, openingDate: openingDate, kind: kind, institution: institution);
+    logEvent(_accLog, Level.INFO, 'accounts.add', {'cash': source == null, 'kind': (kind ?? AccountKind.cash).name});
     _changed();
     return id;
+  }
+
+  /// Changes the given fields of an account (core's `updateAccount`: null = unchanged, a blank [institution] clears it,
+  /// [clearSource] drops the import format). An [ArgumentError] carries core's text.
+  Future<void> updateAccount(String id,
+      {String? name,
+      int? opening,
+      String? openingDate,
+      AccountKind? kind,
+      String? institution,
+      String? source,
+      bool clearSource = false}) async {
+    await repo.updateAccount(id,
+        name: name,
+        opening: opening,
+        openingDate: openingDate,
+        kind: kind,
+        institution: institution,
+        source: source,
+        clearSource: clearSource);
+    logEvent(_accLog, Level.INFO, 'accounts.update', {'kind': kind?.name});
+    _changed();
+  }
+
+  /// [b]'s balance in the wallet currency (core's `balanceInHome`: itself when the account is in it, else at the owner's rate), or
+  /// null when there is no rate.
+  int? accountHomeValue(AccountBalance b) => balanceInHome(b, settings);
+
+  // ---------- currencies ----------
+
+  /// The currency codes in use other than the wallet's (payments, accounts, rates), most used first, at most five. Cached per data version.
+  List<String> recentCurrencies() => _cached(const MemoKey('recentCurrencies'), () {
+        final n = <String, int>{};
+        for (final t in wholeTxs) {
+          n[t.tx.currency] = (n[t.tx.currency] ?? 0) + 1;
+        }
+        for (final a in accountsAll()) {
+          n[a.currency] = (n[a.currency] ?? 0) + 1;
+        }
+        for (final c in settings.fxRates.keys) {
+          n[c] = (n[c] ?? 0) + 1;
+        }
+        n.remove(currency);
+        final codes = n.keys.toList()..sort((x, y) => n[y]! != n[x]! ? n[y]!.compareTo(n[x]!) : x.compareTo(y));
+        return codes.take(5).toList();
+      });
+
+  /// How many live payments are in [code] (for "Your N payments in EUR keep their currency"). Cached per data version.
+  int paymentCountIn(String code) =>
+      _cached(MemoKey('paymentsIn', code), () => wholeTxs.where((t) => t.tx.live && t.tx.currency == code).length);
+
+  /// Makes [code] the wallet currency (core's `setWalletCurrency`: existing payments keep their own currency). An [ArgumentError]
+  /// carries core's text.
+  void setWalletCurrency(String code) {
+    repo.setWalletCurrency(code);
+    logEvent(_accLog, Level.INFO, 'accounts.walletCurrency');
+    _changed();
+  }
+
+  /// The currency X to offer as the wallet currency ("Most payments are in X."): core's `prevalentCurrency`, unless the owner
+  /// already said no to X on this device. Null when there is nothing to offer. Nothing is written here.
+  String? walletCurrencyOffer() {
+    final x = prevalentCurrency([for (final t in wholeTxs) t.tx], currency);
+    if (x == null || repo.localValue('currencyOfferNo') == x) return null;
+    return x;
+  }
+
+  /// "Not now" to the offer of [code]: it is not offered again (device-local).
+  void dismissWalletCurrencyOffer(String code) {
+    repo.setLocalValue('currencyOfferNo', code);
+    logEvent(_accLog, Level.INFO, 'accounts.currencyOffer.dismissed');
   }
 
   Future<void> renameAccount(String id, String name) async {

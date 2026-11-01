@@ -101,14 +101,17 @@ void main() {
     final wc = demoWallet();
     await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 3000));
     await openPlanEdit(tester);
-    await tester.ensureVisible(find.byType(DropdownButtonFormField<String>));
-    await tester.tap(find.byType(DropdownButtonFormField<String>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('USD').last);
-    await tester.pumpAndSettle();
+    await tester.ensureVisible(_key('planCurrency'));
+    await tester.tap(_key('planCurrency'));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.enterText(_key('currencySearch'), 'usd');
+    await tester.pump();
+    await tester.tap(_key('currency:USD'));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.descendant(of: _key('planCurrency'), matching: find.text('USD · US Dollar')), findsOneWidget);
     await _tapKey(tester, 'planCancel');
     await openPlanEdit(tester);
-    expect(tester.widget<DropdownButtonFormField<String>>(find.byType(DropdownButtonFormField<String>)).initialValue, 'EUR');
+    expect(find.descendant(of: _key('planCurrency'), matching: find.text('EUR · Euro')), findsOneWidget);
     expect(wc.settings.currency, 'EUR');
   });
 

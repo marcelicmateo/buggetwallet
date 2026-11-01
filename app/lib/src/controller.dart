@@ -17,7 +17,7 @@ import 'conflict_text.dart';
 import 'controller_deps.dart';
 import 'device_list.dart';
 import 'device_relay.dart';
-import 'format.dart' show NumberStyle, money, moneyExact, numberStyle, shortDateOrRaw;
+import 'format.dart' show NumberStyle, money, moneyExact, numberStyle, shortDateOrRaw, walletCurrencyCode;
 import 'hero.dart';
 import 'home_widget.dart';
 import 'ics_fetch.dart';
@@ -736,6 +736,7 @@ class WalletController extends ChangeNotifier {
   void notifyListeners() {
     if (_disposed) return; // a sync run that was still awaiting the device key or relay when the screen went away
     numberStyle = _numberStyle; // before the screens rebuild; read from the repo only on load, reload and change
+    walletCurrencyCode = settings.currency;
     super.notifyListeners();
     sync.flush(); // the sub-states tell their own listeners after the controller's, never the other way round
     cal.flush();

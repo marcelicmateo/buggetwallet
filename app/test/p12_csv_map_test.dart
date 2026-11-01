@@ -757,9 +757,11 @@ void main() {
     await wc.importFiles([('a.csv', _bytes(_csvA))], askMapping: (_, bytes) async => _choiceFor(bytes));
     final id = wc.csvLayouts().single.key;
     await pumpApp(t, Scaffold(body: SingleChildScrollView(child: AccountFormSheet(wc: wc))));
-    await t.tap(find.byKey(const ValueKey('accountType')));
+    await t.tap(find.byKey(const ValueKey('accountKind:bank')));
     await t.pump(const Duration(milliseconds: 300));
-    await t.tap(find.byKey(ValueKey('accountType:csv:$id')).last);
+    await t.tap(find.byKey(const ValueKey('accountSource')));
+    await t.pump(const Duration(milliseconds: 300));
+    await t.tap(find.byKey(ValueKey('accountSource:csv:$id')).last);
     await t.pump(const Duration(milliseconds: 300));
     expect(t.widget<TextField>(find.byKey(const ValueKey('accountName'))).controller!.text, 'Erste (CSV)');
     await t.enterText(find.byKey(const ValueKey('accountOpening')), '10');

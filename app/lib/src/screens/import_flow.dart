@@ -10,6 +10,7 @@ import '../widgets/common.dart';
 import 'accounts_panel.dart' show askBankBalance;
 import 'csv_layouts_panel.dart';
 import 'csv_map_sheet.dart';
+import 'currency_offer.dart';
 import 'first_plan_sheet.dart';
 import 'import_preview_sheet.dart';
 
@@ -68,6 +69,8 @@ Future<void> pickAndImport(BuildContext context, WalletController wc, FileChoose
     final q = wc.questionNow(built); // counted again now; none when a check as new as the file exists
     if (q != null) await askBankBalance(context, wc, q, fromImport: true);
   }
+  // Most payments in one other currency: offer it as the wallet currency (before the plan, which is in that currency).
+  if (context.mounted && lines.any((l) => l.ok && l.added > 0)) await offerWalletCurrency(context, wc);
   // An import that added rows and leaves plan suggestions: "Looks right?" once per wallet.
   if (context.mounted && lines.any((l) => l.ok && l.added > 0)) await offerFirstPlan(context, wc);
 }
