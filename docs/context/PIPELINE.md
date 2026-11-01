@@ -111,8 +111,8 @@ STAGE_GO_DESIGN (owner answers recorded).
    rate frozen; manual CRC check (archive 4.5.2); re-import must not refill an owner-written null account;
    balanceInHome per row at its own date (UX_SPEC); toMap keeps ecb; ignore future dates; docs; test wording.
    Then review the delta, merge. **2026-11-01 (after GO4):** fixes done (b2b0d71 merge v2, c0460e9 the 11 fixes, deedf31 `fetchEcbFile` in sync;
-   core 3542, sync 482, app 2583, lint green) → delta review (reviewer high) running; step 2 UI (ui-builder sonnet/high,
-   worktree on deedf31) running; GO bug: TestDesktopTestParallelShards flaked once (displays 101/102) → devops fix running.
+   core 3542, sync 482, app 2583, lint green) → delta review: 0 high, 1 medium (fill cost), 3 low → fixed 6841f7b (core 3545, sync 483); core merged 978c690; step 2 UI (ui-builder sonnet/high,
+   worktree on deedf31) running; GO bug: TestDesktopTestParallelShards flaked once (test assumed both workers get units) → fixed 0777940, merged 04b473b.
 2. UX-ACC + UX-FX UI (ask "Which account is this?" before importBatch, ECB fetch + "Get rates now" + rate source
    shown, pass accounts: everywhere).
 3. Stage run (`tools/build.sh -q stage || cat dist/logs/last-failed.txt`, haiku watcher), screenshots, push, STATUS.
