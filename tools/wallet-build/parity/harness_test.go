@@ -59,6 +59,10 @@ type Case struct {
 	// run one after the other on each side. The sequence stops at the first non-zero exit. Per step the command, exit
 	// code and masked stdout/stderr are compared (seqLines), instead of the single step table.
 	Steps [][]string
+	// StdoutDrop removes matching stdout lines before the comparison (live device/flutter output whose content and count follow timing).
+	StdoutDrop *regexp.Regexp
+	// Before runs before each side of the case (e.g. clearing a stale lock a previous case left behind).
+	Before func(t *testing.T)
 	// Cleanup runs (BW_IMPL=bash, own temp data dir, output ignored) after each side, also after a failure, to stop
 	// what the case started (its container). Only for cases that skip themselves when something already runs.
 	Cleanup [][]string
@@ -93,6 +97,7 @@ type side struct {
 	repo           string
 	runs           []string // absolute run dirs, chronological
 	steps          []stepOut
+	drop           *regexp.Regexp
 	artifacts      []string
 	m              *masker
 }
@@ -186,7 +191,10 @@ func execSide(t *testing.T, repo, impl string, c Case) *side {
 		}
 	}
 	data := t.TempDir()
-	s := &side{impl: impl, args: c.Args, data: data, repo: repo}
+	s := &side{impl: impl, args: c.Args, data: data, repo: repo, drop: c.StdoutDrop}
+	if c.Before != nil {
+		c.Before(t)
+	}
 	if len(c.Cleanup) > 0 {
 		defer func() {
 			for _, a := range c.Cleanup {
@@ -196,6 +204,9 @@ func execSide(t *testing.T, repo, impl string, c Case) *side {
 				_ = cmd.Run()
 			}
 		}()
+	}
+	if c.script() == emulatorScript {
+		waitEmulatorIdle(t)
 	}
 	timeout := 20 * time.Minute
 	if c.Heavy {
@@ -285,6 +296,8 @@ var (
 	reISO     = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:[+-]\d{2}:\d{2}|Z)`)
 	reTmp     = regexp.MustCompile(`/tmp/tmp\.[A-Za-z0-9]+`)
 	reSecs    = regexp.MustCompile(`\b\d+(?:\.\d+)? s\b`)
+	reSecsNS  = regexp.MustCompile(`\b\d+(?:\.\d+)?(?:ms|s)\b`) // Gradle: "... 24.9s"
+	reURIAll  = regexp.MustCompile(`\b(?:https?|wss?)://\S+`)
 	reMs      = regexp.MustCompile(`\b\d+ ms\b`)
 	reTenths  = regexp.MustCompile(`(^|\s)\d+\.\d(\s|$)`)
 	reSpaces  = regexp.MustCompile(`[ \t]+`)
@@ -337,6 +350,8 @@ func (m *masker) text(s string) string {
 	s = reISO.ReplaceAllString(s, "<TS>")
 	s = reTmp.ReplaceAllString(s, "<TMP>")
 	s = reSecs.ReplaceAllString(s, "<S> s")
+	s = reSecsNS.ReplaceAllString(s, "<T>")
+	s = reURIAll.ReplaceAllString(s, "<URI>") // VM service / driver addresses: port and token change every run
 	s = reMs.ReplaceAllString(s, "<N> ms")
 	return s
 }
@@ -441,6 +456,9 @@ func stepTable(s *side) []string {
 	}
 	var res []string
 	for _, ln := range s.m.table(out) {
+		if s.drop != nil && s.drop.MatchString(ln) {
+			continue
+		}
 		if strings.HasPrefix(ln, "pub ") {
 			continue
 		}

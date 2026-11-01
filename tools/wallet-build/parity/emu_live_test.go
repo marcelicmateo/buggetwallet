@@ -11,12 +11,14 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // GO2: parity cases for tools/emulator.sh and tools/live.sh (+ live_vm.py), the entry scripts of `wallet-build emulator`
 // and `wallet-build live`. Same harness as GO1; the case's Script field names the entry script.
 
 const (
+	debugAPK       = "app/build/app/outputs/flutter-apk/app-debug.apk" // left by emulator screens/test; any APK installs
 	emulatorScript = "tools/emulator.sh"
 	liveScript     = "tools/live.sh"
 	emulatorName   = "bw-emulator"
@@ -46,6 +48,15 @@ func maskNames(in []string) []string {
 func maskSeq(m *masker, s string) []string {
 	var out []string
 	for _, ln := range m.table(s) {
+		// bash wart (reported): on a fresh BW_DATA_DIR emulator.sh's prepare() prints "line N: .../history/steps.jsonl: No
+		// such file or directory" (its `wc -l <` redirect error escapes the 2>/dev/null); the Go port is silent.
+		if strings.Contains(ln, "history/steps.jsonl: No such file or directory") ||
+			strings.Contains(ln, "tail: cannot open") && strings.Contains(ln, "history/steps.jsonl") {
+			continue
+		}
+		if strings.TrimSpace(ln) == "" {
+			continue
+		}
 		ln = reURI.ReplaceAllString(ln, "<URI>")
 		ln = reLoopback.ReplaceAllString(ln, "<HOST:PORT>")
 		ln = reKB.ReplaceAllString(ln, "<N> KB")
@@ -89,6 +100,36 @@ func podmanOK() string {
 	}
 	return ""
 }
+
+// waitEmulatorIdle: a previous case's `podman run --rm` container (or its emulator) may still hold the AVD lock in the
+// writable bw-emulator-avd volume; wait up to 60 s until no container from the emulator image runs.
+func waitEmulatorIdle(t testing.TB) {
+	t.Helper()
+	for i := 0; i < 30; i++ {
+		out, err := exec.Command("podman", "ps", "--format", "{{.Image}}").Output()
+		if err != nil || !strings.Contains(string(out), "budget-wallet-emu") {
+			return
+		}
+		time.Sleep(2 * time.Second)
+	}
+	t.Logf("a container from the emulator image still runs after 60 s; the AVD may stay locked")
+}
+
+// clearStaleAVDLock: the emulator of an earlier container leaves bw.avd/multiinstance.lock in the writable
+// bw-emulator-avd volume; with the same pids in the next container the emulator takes it for a live instance and `start`
+// dies after boot. Only the lock file is removed, only when no container of the emulator image runs.
+func clearStaleAVDLock(t *testing.T) {
+	t.Helper()
+	waitEmulatorIdle(t)
+	out, err := exec.Command("podman", "run", "--rm", "-v", "bw-emulator-avd:/opt/avd", "docker.io/library/busybox:latest",
+		"rm", "-f", "/opt/avd/bw.avd/multiinstance.lock").CombinedOutput()
+	if err != nil {
+		t.Logf("could not clear the AVD lock (%v): %s", err, tail(string(out)))
+	}
+}
+
+// logcat and flutter progress lines whose count and content follow timing.
+var emuNoise = regexp.MustCompile(`^[VDIWEF]/\S.*\(\s*\d+\):|^\d\d:\d\d \+\d+|^flutter: |^VMServiceFlutterDriver: `)
 
 func podmanHas(args ...string) bool {
 	return exec.Command("podman", args...).Run() == nil
@@ -172,14 +213,16 @@ func quietS(script, name string, want int, env string, args ...string) Case {
 	return c
 }
 
-// checkStepsInHistory: the history lines carry these steps in this order (as a subsequence), all with result ok.
+// checkStepsInHistory: the history lines carry these steps in this order (as a subsequence), none FAILED.
 func checkStepsInHistory(want ...string) func(t *testing.T, s *side) {
 	return func(t *testing.T, s *side) {
 		t.Helper()
 		var got []string
 		for _, j := range historyLines(s, "steps.jsonl") {
-			if r := j.vals["result"]; r != `"ok"` {
-				t.Errorf("%s steps.jsonl: step %s has result %s, want \"ok\"", s.impl, j.vals["step"], r)
+			// bash's log_history lines for the emulator's own steps (screens, <name>) carry no result; the field is
+			// compared between the sides by the history diff. Only an explicit failure is an error here.
+			if r := j.vals["result"]; r == `"FAILED"` {
+				t.Errorf("%s steps.jsonl: step %s has result FAILED", s.impl, j.vals["step"])
 			}
 			got = append(got, strings.Trim(j.vals["step"], `"`))
 		}
@@ -329,14 +372,15 @@ func livePodCase(t *testing.T, repo, impl string) []string {
 func go2Heavy(t *testing.T, repo string) []Case {
 	h := func(c Case) Case { c.Heavy = true; return c }
 	E, L := emulatorScript, liveScript
-	emuSteps := []string{"prepare", "boot", "build", "install", "test", "total"}
 	var out []Case
 
 	screens := mkS(E, "emulator_screens", 0, "screens")
 	screens.Artifacts = []string{"dist/screens"}
 	screens.SkipIf = emulatorVolumes
-	screens.Check = chain(checkAllSteps(0), checkRunFiles("emulator-screens.log", "emulator.log", "screens/*.png"),
-		checkStepsInHistory(emuSteps...))
+	screens.StdoutDrop = emuNoise
+	screens.Before = clearStaleAVDLock
+	screens.Check = chain(checkAllSteps(0), checkRunFiles("emulator-screens.log", "emulator.log", "*.png"), // screens copies dist/screens/*.png to the run dir root
+		checkStepsInHistory("prepare", "boot", "build", "total"))
 	out = append(out, h(screens))
 
 	// A file that runs on Android: the smallest one by size can be desktop-only (chart_dpr skips every test there, and
@@ -345,26 +389,29 @@ func go2Heavy(t *testing.T, repo string) []Case {
 		et := mkS(E, "emulator_test_one_small_file", 0, "test", small[0])
 		et.Artifacts = []string{"dist/screens/" + small[0]}
 		et.SkipIf = emulatorVolumes
-		et.Check = chain(checkAllSteps(0), checkRunFiles("emulator-test.log", "drive-"+small[0]+".log", "tests-"+small[0]+"-summary.txt"),
-			checkStepsInHistory(emuSteps...))
+		et.StdoutDrop = emuNoise
+		et.Before = clearStaleAVDLock
+		et.Check = chain(checkAllSteps(0), checkRunFiles("emulator-test.log", "drive-"+small[0]+".log", "tests-"+small[0]+"-summary.txt", "screens/*"),
+			checkStepsInHistory("prepare", "boot", "build", "install", "test-"+small[0], small[0], "total"))
 		out = append(out, h(et))
 	}
 
 	// start -> install -> shot -> adb -> stop, one container at a time; needs the APK from `tools/build.sh apk`.
 	sis := mkS(E, "emulator_start_install_shot_stop", 0)
-	sis.Steps = [][]string{{"start"}, {"install"}, {"shot", "parity_x"}, {"adb", "shell", "echo", "parity"}, {"stop"}}
+	sis.Steps = [][]string{{"start"}, {"install", debugAPK}, {"shot", "parity_x"}, {"adb", "shell", "echo", "parity"}, {"stop"}}
 	sis.Cleanup = [][]string{{"stop"}}
+	sis.Before = clearStaleAVDLock
 	sis.Artifacts = []string{"dist/screens/parity_x.png"}
 	sis.SkipIf = func(t *testing.T, repo string) string {
 		if why := emulatorVolumes(t, repo); why != "" {
 			return why
 		}
-		if _, err := os.Stat(filepath.Join(repo, "dist", "BudgetWallet-android.apk")); err != nil {
-			return "no dist/BudgetWallet-android.apk (tools/build.sh apk builds it)"
+		if _, err := os.Stat(filepath.Join(repo, "app", "build", "app", "outputs", "flutter-apk", "app-debug.apk")); err != nil {
+			return "no app/build/app/outputs/flutter-apk/app-debug.apk (emulator_screens or a debug build makes it)"
 		}
 		return ""
 	}
-	sis.Check = chain(checkAllSteps(0), checkStepsInHistory("prepare", "boot", "install"), func(t *testing.T, s *side) {
+	sis.Check = chain(checkAllSteps(0), checkStepsInHistory("prepare", "emulator-install"), func(t *testing.T, s *side) {
 		for _, st := range s.steps {
 			if len(st.args) > 0 && st.args[0] == "stop" && strings.TrimSpace(st.stdout) != "stopped" {
 				t.Errorf("%s: stop printed %q, want \"stopped\"", s.impl, st.stdout)
