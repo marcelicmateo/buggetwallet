@@ -208,6 +208,7 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
     [[ -z $out ]] || { echo "gofmt: these files need formatting (run gofmt -w):"; echo "$out"; rc=1; }
     echo "--- go vet ./..."; (cd "$d" && GOTOOLCHAIN=local go vet ./...) || rc=1
     echo "--- go test ./..."; (cd "$d" && GOTOOLCHAIN=local go test ./...) || rc=1
+    if [[ -d $d/parity ]]; then echo "--- go vet -tags parity ./... (parity)"; (cd "$d/parity" && GOTOOLCHAIN=local go vet -tags parity ./...) || rc=1; fi
     echo "--- go version -m dist/bin/wallet-build"
     mkdir -p "$ROOT/dist/bin"
     (cd "$d" && GOTOOLCHAIN=local CGO_ENABLED=0 go build -trimpath -o "$ROOT/dist/bin/wallet-build" .) || { echo "wallet-build did not build"; return 1; }
@@ -215,8 +216,10 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
     grep -q 'CGO_ENABLED=0' <<<"$out" || { echo "dist/bin/wallet-build was not built with CGO_ENABLED=0"; rc=1; }
     return "$rc"
   }
+  # A failing go-check is a failed step, not a stop: the Dart checks still run, and the run exits non-zero at the end.
+  gc_failed=0
   if [[ "$CMD" == lint || "$CMD" == test ]]; then
-    BW_TIMED_COLD=false timed_log go-check "$BW_RUN_DIR/go-check.log" go_check || exit 1
+    BW_TIMED_COLD=false timed_log go-check "$BW_RUN_DIR/go-check.log" go_check || gc_failed=1
   fi
   if [[ "$CMD" == lsp ]]; then
     # Same path inside and outside, so file URIs match what the editor sends.
@@ -249,10 +252,12 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
   elif [[ "$CMD" == apk || "$CMD" == all ]]; then
     fail_host "$CMD" "No Android signing key in $SIGNING_DIR. Run tools/make-signing-key.sh first, otherwise the APK can't update the installed app."
   fi
-  tty=(); [[ -t 0 && -t 1 ]] && tty=(-it)
+  tty=(); [[ -t 0 && -t 1 && ${BW_QUIET:-} != 1 ]] && tty=(-it)
   [[ -n "${BW_RUN_DIR:-}" && "$CMD" == shell ]] && tty=()  # shell -c: logged through a pipe, no terminal
   inner=(tools/build.sh "$CMD" "${@:2}"); [[ "$CMD" == shell ]] && inner=(bash "${@:2}")
   [[ -n "${BW_RUN_DIR:-}" ]] && mapfile -t run < <(run_mounts)
+  # step time limits set on the host (BW_TIMEOUT_<STEP>) apply inside the container too
+  fwd=(); while read -r v; do fwd+=(-e "$v"); done < <(compgen -e | grep '^BW_TIMEOUT_' | LC_ALL=C sort || true)
   # Rootless: container root is the host user, so build outputs stay owned by you.
   # Named volumes keep the pub and Gradle caches between runs.
   # No exec: the shell must stay to remove the run's .running marker on exit (tools/timing.sh)
@@ -264,12 +269,14 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
     -v bw-android-user:/cache/android \
     "${signing[@]}" "${run[@]}" \
     -e BW_NATIVE=1 -e BW_JOBS -e BW_GL_THREADS -e BW_APK_ABIS -e BW_FUZZ_ITERATIONS -e BW_FUZZ_SEED \
+    -e BW_STEP_TIMEOUT -e BW_HEADLESS_TIMEOUT -e BW_SMOKE_SECONDS "${fwd[@]}" \
     -w /work "$IMAGE" "${inner[@]}")
   if [[ "$CMD" == shell && -n "${BW_RUN_DIR:-}" ]]; then  # shell -c: output to the terminal and to the run's shell.log
     BW_TIMED_SPLIT=1 BW_TIMED_COLD=false timed_log shell "$BW_RUN_DIR/shell.log" "${podrun[@]}" || rc=$?
   else
     "${podrun[@]}" || rc=$?
   fi
+  [[ $rc == 0 && $gc_failed == 1 ]] && rc=1
   exit "$rc"
 fi
 

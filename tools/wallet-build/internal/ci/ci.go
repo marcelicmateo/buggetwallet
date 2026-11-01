@@ -22,24 +22,29 @@ type CI struct {
 func New(c *run.Ctx) *CI { return &CI{C: c, Sleep: time.Sleep} }
 
 const (
-	pollEvery   = 20 * time.Second
-	waitLimit   = 30 * time.Minute
-	appearLimit = 5 * time.Minute
+	pollEvery = 20 * time.Second
+	waitLimit = 30 * time.Minute
 )
 
 func (x *CI) git(args ...string) (string, int) {
 	return x.C.Capture(x.C.Root, append([]string{"git"}, args...)...)
 }
 
+func (x *CI) gitQuiet(args ...string) (string, int) {
+	return x.C.CaptureQuiet(x.C.Root, append([]string{"git"}, args...)...)
+}
+
 // Capture runs the version control tool with args in the repository (for `times --ci`).
 func (x *CI) Capture(args ...string) (string, int) { return x.git(args...) }
 
 // ShowLog is the text of <name>.txt on the ci-logs branch.
-func (x *CI) ShowLog(name string) (string, int) {
-	if _, rc := x.git("fetch", "-q", "origin", "ci-logs:refs/remotes/origin/ci-logs"); rc != 0 {
+func (x *CI) ShowLog(name string) (string, int) { return x.showLog(name, x.git) }
+
+func (x *CI) showLog(name string, git func(...string) (string, int)) (string, int) {
+	if _, rc := git("fetch", "-q", "origin", "ci-logs:refs/remotes/origin/ci-logs"); rc != 0 {
 		return "", rc
 	}
-	return x.git("show", "origin/ci-logs:"+name+".txt")
+	return git("show", "origin/ci-logs:"+name+".txt")
 }
 
 func (x *CI) checkRuns(sha string) (string, int) {
@@ -85,6 +90,15 @@ var (
 	reSkip = regexp.MustCompile(`(?i)continue-on-error|0 errors`)
 )
 
+func hasCheck(table, name string) bool {
+	for _, l := range strings.Split(table, "\n") {
+		if strings.HasPrefix(l, name+"\t") {
+			return true
+		}
+	}
+	return false
+}
+
 // Log is `ci log [name]`.
 func (x *CI) Log(args []string) int {
 	name := "latest"
@@ -122,7 +136,7 @@ func (x *CI) Status(args []string) int {
 	if rc != 0 {
 		return 1
 	}
-	if br, _ := x.git("branch", "-r", "--contains", sha); !strings.Contains(br, "origin/") {
+	if br, _ := x.gitQuiet("branch", "-r", "--contains", sha); !strings.Contains(br, "origin/") {
 		c.Eprintf("note: %s is not on GitHub yet (push it first)\n", sha[:min(7, len(sha))])
 	}
 	start := c.Clock()
@@ -140,8 +154,10 @@ func (x *CI) Status(args []string) int {
 			}
 		}
 		elapsed := c.Clock().Sub(start)
-		if wait && table == "" && elapsed < appearLimit {
-			pending++ // allow ~5 min for the first check run to appear
+		// the "log" job merges the others and is created last; more jobs can also appear after the first ones finish: until
+		// its check run is there the commit counts as pending (all green needs it), for the whole wait
+		if !hasCheck(table, "log") {
+			pending++
 		}
 		if !wait || (table != "" && pending == 0) || elapsed >= waitLimit {
 			break
@@ -161,7 +177,7 @@ func (x *CI) Status(args []string) int {
 			failed++
 		}
 	}
-	latest, _ := x.ShowLog("latest")
+	latest, _ := x.showLog("latest", x.gitQuiet)
 	match := strings.Contains(strings.SplitN(latest, "\n", 2)[0], sha)
 	if failed > 0 {
 		c.Printf("\n")

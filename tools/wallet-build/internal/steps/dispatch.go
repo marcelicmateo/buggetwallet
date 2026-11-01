@@ -1,7 +1,10 @@
 package steps
 
 import (
+	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"wallet-build/internal/run"
@@ -19,6 +22,10 @@ func GoCheck(sc *run.StepCtx) int {
 		}
 		sc.Printf("go not found on PATH: the host needs Go for tools/wallet-build\n")
 		return 1
+	}
+	if sc.Env.Get("BW_NATIVE") == "1" && goTooOld(sc) { // ubuntu-latest's Go before GO3 sets up the pinned one
+		sc.Printf("go not found (CI before GO3), skipped\n")
+		return 0
 	}
 	rc := 0
 	mod := "tools/wallet-build"
@@ -40,6 +47,12 @@ func GoCheck(sc *run.StepCtx) int {
 	if sc.CmdEnv(mod, goEnv, "go", "test", "./...") != 0 {
 		rc = 1
 	}
+	if st, err := os.Stat(filepath.Join(sc.C.Root, mod, "parity")); err == nil && st.IsDir() { // the nested module of the parity tests
+		sc.Printf("--- go vet -tags parity ./... (parity)\n")
+		if sc.CmdEnv(mod+"/parity", goEnv, "go", "vet", "-tags", "parity", "./...") != 0 {
+			rc = 1
+		}
+	}
 	sc.Printf("--- go version -m dist/bin/wallet-build\n")
 	var info strings.Builder
 	if r := sc.Do(sys.Cmd{Argv: []string{"go", "version", "-m", "dist/bin/wallet-build"}, Env: sc.Env.With(goEnv...), Stdout: &info, Stderr: sc.Out}); r != 0 {
@@ -50,6 +63,41 @@ func GoCheck(sc *run.StepCtx) int {
 		rc = 1
 	}
 	return rc
+}
+
+var (
+	reModGo  = regexp.MustCompile(`(?m)^go (\d+)\.(\d+)(?:\.(\d+))?\s*$`)
+	reGoVers = regexp.MustCompile(`go(\d+)\.(\d+)(?:\.(\d+))?`)
+)
+
+func versionParts(m []string) [3]int {
+	var v [3]int
+	for i := 0; i < 3; i++ {
+		v[i], _ = strconv.Atoi(m[i+1])
+	}
+	return v
+}
+
+// goTooOld: the go on PATH is older than the go line of tools/wallet-build/go.mod (it could not build the tool).
+func goTooOld(sc *run.StepCtx) bool {
+	mod, err := os.ReadFile(filepath.Join(sc.C.Root, "tools", "wallet-build", "go.mod"))
+	if err != nil {
+		return false
+	}
+	want := reModGo.FindStringSubmatch(string(mod))
+	var out strings.Builder
+	sc.Do(sys.Cmd{Argv: []string{"go", "version"}, Stdout: &out})
+	have := reGoVers.FindStringSubmatch(out.String())
+	if want == nil || have == nil {
+		return false
+	}
+	w, h := versionParts(want), versionParts(have)
+	for i := range w {
+		if h[i] != w[i] {
+			return h[i] < w[i]
+		}
+	}
+	return false
 }
 
 func dartExe(c *run.Ctx) string {

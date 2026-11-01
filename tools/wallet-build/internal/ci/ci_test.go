@@ -57,11 +57,11 @@ func TestColumn(t *testing.T) {
 
 func TestStatusGreen(t *testing.T) {
 	latest := "commit: " + sha + "  ref: v2  run: 1\n\nlint=ok:12.0 apk=ok:400.0\njobs ok\n"
-	e := newEnv(t, latest, "lint\tcompleted\tsuccess\napk\tcompleted\tsuccess\nlinux\tcompleted\tskipped\n")
+	e := newEnv(t, latest, "lint\tcompleted\tsuccess\napk\tcompleted\tsuccess\nlinux\tcompleted\tskipped\nlog\tcompleted\tsuccess\n")
 	if rc := e.x.Status(nil); rc != 0 {
 		t.Fatalf("rc %d\n%s", rc, e.out)
 	}
-	want := "commit 0123456\nlint   completed  success\napk    completed  success\nlinux  completed  skipped\nall green\nlint=ok:12.0 apk=ok:400.0\n"
+	want := "commit 0123456\nlint   completed  success\napk    completed  success\nlinux  completed  skipped\nlog    completed  success\nall green\nlint=ok:12.0 apk=ok:400.0\n"
 	if e.out.String() != want {
 		t.Errorf("got\n%s\nwant\n%s", e.out, want)
 	}
@@ -71,7 +71,7 @@ func TestStatusFailedShowsFailingLines(t *testing.T) {
 	var log strings.Builder
 	log.WriteString("commit: " + sha + "  ref: v2  run: 1\n\nlint=ok core=failure\njobs\n")
 	log.WriteString("ok line\nTest failed: x\ncontinue-on-error: true\n0 errors\nan Exception happened\n")
-	e := newEnv(t, log.String(), "lint\tcompleted\tsuccess\ncore\tcompleted\tfailure\n")
+	e := newEnv(t, log.String(), "lint\tcompleted\tsuccess\ncore\tcompleted\tfailure\nlog\tcompleted\tsuccess\n")
 	if rc := e.x.Status(nil); rc != 1 {
 		t.Fatalf("rc %d", rc)
 	}
@@ -85,7 +85,7 @@ func TestStatusFailedShowsFailingLines(t *testing.T) {
 		t.Errorf("noise lines shown:\n%s", out)
 	}
 	// the log of another commit is not shown
-	e = newEnv(t, "commit: ffffffffffffffffffffffffffffffffffffffff\n", "core\tcompleted\tfailure\n")
+	e = newEnv(t, "commit: ffffffffffffffffffffffffffffffffffffffff\n", "core\tcompleted\tfailure\nlog\tcompleted\tsuccess\n")
 	e.x.Status(nil)
 	if !strings.Contains(e.out.String(), "ci-logs/latest.txt is for another commit") {
 		t.Errorf("out %s", e.out)
@@ -104,7 +104,7 @@ func TestStatusRunningAndEmpty(t *testing.T) {
 }
 
 func TestStatusWaitPollsUntilDone(t *testing.T) {
-	e := newEnv(t, "x\n\nsteps\n", "", "lint\tin_progress\t-\n", "lint\tcompleted\tsuccess\n")
+	e := newEnv(t, "x\n\nsteps\n", "", "lint\tin_progress\t-\n", "lint\tcompleted\tsuccess\n", "lint\tcompleted\tsuccess\nlog\tcompleted\tsuccess\n")
 	e.x.Sleep = func(d time.Duration) {
 		if d != 20*time.Second {
 			t.Errorf("poll interval %v", d)
@@ -120,7 +120,7 @@ func TestStatusWaitPollsUntilDone(t *testing.T) {
 			polls++
 		}
 	}
-	if polls != 3 {
+	if polls != 4 {
 		t.Errorf("polled %d times", polls)
 	}
 }
@@ -145,5 +145,17 @@ func TestMainDispatch(t *testing.T) {
 	}
 	if _, ok := e.x.Main([]string{"nope"}); ok {
 		t.Error("unknown subcommand is a usage error")
+	}
+}
+
+// all jobs completed but "log" (created last) is not there yet: not green
+func TestStatusNeedsTheLogCheckRun(t *testing.T) {
+	e := newEnv(t, "", "lint\tcompleted\tsuccess\napk\tcompleted\tsuccess\n")
+	if rc := e.x.Status(nil); rc != 2 || !strings.HasSuffix(e.out.String(), "still running\n") {
+		t.Errorf("rc %d\n%s", rc, e.out)
+	}
+	e = newEnv(t, "", "lint\tcompleted\tsuccess\n", "lint\tcompleted\tsuccess\napk\tcompleted\tsuccess\nlog\tcompleted\tsuccess\n")
+	if rc := e.x.Status([]string{"--wait"}); rc != 0 || !strings.Contains(e.out.String(), "all green") {
+		t.Errorf("--wait waits for log: rc %d\n%s", rc, e.out)
 	}
 }

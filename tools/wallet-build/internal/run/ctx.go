@@ -100,20 +100,30 @@ func (c *Ctx) Getenv(k string) string { return c.Env.Get(k) }
 // Setenv changes the environment handed to children (and read by later steps).
 func (c *Ctx) Setenv(kv ...string) { c.Env = c.Env.With(kv...) }
 
-// Capture runs a command in dir and returns its stdout (trimmed of the final newline) and exit code.
+// Capture runs a command in dir and returns its stdout (trimmed of the final newline) and exit code; its stderr goes to ours,
+// so authentication and network errors are visible.
 func (c *Ctx) Capture(dir string, argv ...string) (string, int) {
+	return c.capture(dir, c.Err, argv...)
+}
+
+// CaptureQuiet is Capture with the command's stderr thrown away (2>/dev/null).
+func (c *Ctx) CaptureQuiet(dir string, argv ...string) (string, int) {
+	return c.capture(dir, nil, argv...)
+}
+
+func (c *Ctx) capture(dir string, errw io.Writer, argv ...string) (string, int) {
 	var buf bytes.Buffer
-	rc := c.R.Run(c.Ctx, sys.Cmd{Argv: argv, Dir: dir, Env: c.Env, Stdout: &buf})
+	rc := c.R.Run(c.Ctx, sys.Cmd{Argv: argv, Dir: dir, Env: c.Env, Stdout: &buf, Stderr: errw})
 	return strings.TrimRight(buf.String(), "\n"), rc
 }
 
 // CommitID is the short sha, with -dirty when the tree has uncommitted changes (untracked files count); "unknown" without git.
 func (c *Ctx) CommitID() string {
-	sha, rc := c.Capture("", "git", "-C", c.Root, "rev-parse", "--short", "HEAD")
+	sha, rc := c.CaptureQuiet("", "git", "-C", c.Root, "rev-parse", "--short", "HEAD")
 	if rc != 0 || sha == "" {
 		return "unknown"
 	}
-	if st, rc := c.Capture("", "git", "-C", c.Root, "status", "--porcelain"); rc == 0 && st != "" {
+	if st, rc := c.CaptureQuiet("", "git", "-C", c.Root, "status", "--porcelain"); rc == 0 && st != "" {
 		sha += "-dirty"
 	}
 	return sha

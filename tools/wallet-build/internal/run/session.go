@@ -123,12 +123,12 @@ func StepTimeout(env sys.Env, name string, def time.Duration) time.Duration {
 	return def
 }
 
-// DefaultTimeout is the table of §2: lint, analyze and :one 300 s, full suites 900 s, desktop and perf 1200 s
+// DefaultTimeout is the table of §2: lint and analyze 300 s, full suites and :one 900 s, desktop and perf 1200 s
 // (BW_HEADLESS_TIMEOUT), linux and web 1200 s, apk 2400 s, image 3600 s; mutate, shell and the rest none.
 func DefaultTimeout(env sys.Env, name string) time.Duration {
 	sec := func(n int) time.Duration { return time.Duration(n) * time.Second }
 	switch {
-	case strings.HasSuffix(name, ":one"), strings.HasPrefix(name, "analyze"):
+	case strings.HasPrefix(name, "analyze"):
 		return sec(300)
 	case strings.HasPrefix(name, "desktop-") && name != "desktop-smoke", name == "perf":
 		if n, err := strconv.Atoi(env.Get("BW_HEADLESS_TIMEOUT")); err == nil && n > 0 {
@@ -139,7 +139,8 @@ func DefaultTimeout(env sys.Env, name string) time.Duration {
 	switch name {
 	case "format", "shellcheck", "actionlint", "hook-selftest", "env-selftest", "deploy-selftest", "native-units", "apk-signature":
 		return sec(300)
-	case "importer", "core", "sync", "relay", "app", "pub", "web-test", "relay-bin":
+	case "importer", "core", "sync", "relay", "app", "pub", "web-test", "relay-bin",
+		"importer:one", "core:one", "sync:one", "relay:one", "app:one": // app:one took 321.6 s on 2026-10-22: same limit as a suite
 		return sec(900)
 	case "go-check", "outdated":
 		return sec(600)
@@ -166,6 +167,8 @@ func (s *Session) RunStepEnv(name string, fn func(sc *StepCtx) int, live bool, k
 	f, err := os.OpenFile(filepath.Join(s.Logs, name+".log"), os.O_WRONLY|os.O_CREATE|os.O_TRUNC|os.O_APPEND, 0o644)
 	if err != nil {
 		c.Eprintf("cannot write the log of %s: %v\n", name, err)
+		// a status all the same, or the step would be recorded as ok
+		_ = os.WriteFile(filepath.Join(s.Logs, name+".status"), []byte(fmt.Sprintf("0.0 1 %s\n", started)), 0o644)
 		return 1
 	}
 	lf := NewLockedFile(f)
@@ -224,7 +227,10 @@ func (s *Session) ReadStatus(name string) (secs string, rc int, started string, 
 
 // Record adds a finished step to the results, the timing table and history.
 func (s *Session) Record(name string, cold bool) {
-	secs, rc, started, _ := s.ReadStatus(name)
+	secs, rc, started, ok := s.ReadStatus(name)
+	if !ok { // no readable status: the step did not finish properly
+		secs, rc, started = "0.0", 1, s.C.NowISO()
+	}
 	result := "ok"
 	s.mu.Lock()
 	if rc != 0 {
