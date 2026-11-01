@@ -197,13 +197,14 @@ VOLUMES=(bw-emulator:/opt/android-sdk/emulator bw-emulator-image:/opt/android-sd
 prepare() {
   local v mounts=() t before log=$BW_RUN_DIR/image-emulator-setup.log
   t=$(now_us)
-  before=$(wc -l < "$BW_DATA/history/steps.jsonl" 2>/dev/null || echo 0)
+  before=0; [[ -f "$BW_DATA/history/steps.jsonl" ]] && before=$(wc -l < "$BW_DATA/history/steps.jsonl")
   img=$(emu_image); BW_IMAGE=$img
   for v in "${VOLUMES[@]}"; do mounts+=(-v "$v"); done
   podman run --rm --device /dev/kvm --shm-size=2g "${mounts[@]}" "${run[@]}" -v "$ROOT:/work:z" -e BW_NATIVE=1 -w /work "$img" \
     tools/emulator.sh setup 2>&1 | tee "$log" >&2
   # cold: an image was built (emu_image runs in a subshell, so look for its history line) or the volumes were set up
-  if grep -q "Setting up" "$log" || tail -n +"$((before + 1))" "$BW_DATA/history/steps.jsonl" | grep -q "\"run\":\"$BW_RUN_ID\".*\"step\":\"[a-z-]*image\""; then
+  if grep -q "Setting up" "$log" || { [[ -f "$BW_DATA/history/steps.jsonl" ]] &&
+    tail -n +"$((before + 1))" "$BW_DATA/history/steps.jsonl" | grep -q "\"run\":\"$BW_RUN_ID\".*\"step\":\"[a-z-]*image\""; }; then
     BW_COLD=1
   fi
   log_history prepare "$(secs_since "$t")" ok

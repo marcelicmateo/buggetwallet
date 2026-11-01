@@ -48,12 +48,6 @@ func maskNames(in []string) []string {
 func maskSeq(m *masker, s string) []string {
 	var out []string
 	for _, ln := range m.table(s) {
-		// bash wart (reported): on a fresh BW_DATA_DIR emulator.sh's prepare() prints "line N: .../history/steps.jsonl: No
-		// such file or directory" (its `wc -l <` redirect error escapes the 2>/dev/null); the Go port is silent.
-		if strings.Contains(ln, "history/steps.jsonl: No such file or directory") ||
-			strings.Contains(ln, "tail: cannot open") && strings.Contains(ln, "history/steps.jsonl") {
-			continue
-		}
 		if strings.TrimSpace(ln) == "" {
 			continue
 		}
