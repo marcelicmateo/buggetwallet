@@ -2,6 +2,7 @@ package emulator
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"os"
 	"path/filepath"
@@ -418,5 +419,45 @@ func TestLastMatchAndNames(t *testing.T) {
 	}
 	if got := strings.Join(testNames("/nowhere", []string{"flows", "x_test", "dir/y_test.dart", "z.dart"}), ","); got != "flows,x,y,z" {
 		t.Errorf("names %s", got)
+	}
+}
+
+// GO-BUG3: the boot container removes the stale AVD lock when the host says nothing else runs, and only that file.
+func TestBootClearsStaleLockOnlyWhenAsked(t *testing.T) {
+	for _, tc := range []struct {
+		env  []string
+		gone bool
+	}{{nil, false}, {[]string{"BW_CLEAR_AVD_LOCK=0"}, false}, {[]string{"BW_CLEAR_AVD_LOCK=1"}, true}} {
+		r := newCRig(t, tc.env...)
+		lock := filepath.Join(r.avd, "bw.avd", "multiinstance.lock")
+		lock2 := filepath.Join(r.avd, "bw.avd", "snapshot.lock.lock")
+		write(t, lock2, "123")
+		other := filepath.Join(r.avd, "bw.avd", "config.ini")
+		write(t, lock, "123")
+		write(t, other, "x")
+		lockAtStart := true
+		r.fake.HandleCtx = func(ctx context.Context, c sys.Cmd) int { // the lock must be gone before the emulator starts
+			if c.Argv[0] == emuBin {
+				_, err := os.Stat(lock)
+				lockAtStart = err == nil
+			}
+			return r.handle(c)
+		}
+		if rc := Container(r.c, []string{"boot"}); rc != 0 {
+			t.Fatalf("boot: %d %s", rc, r.errb.String())
+		}
+		if _, err := os.Stat(lock2); (err != nil) != tc.gone {
+			t.Errorf("%v: snapshot.lock.lock gone %v, want %v", tc.env, err != nil, tc.gone)
+		}
+		if lockAtStart == tc.gone {
+			t.Errorf("%v: lock present when the emulator started: %v", tc.env, lockAtStart)
+		}
+		_, err := os.Stat(lock)
+		if gone := err != nil; gone != tc.gone {
+			t.Errorf("%v: lock gone %v, want %v", tc.env, gone, tc.gone)
+		}
+		if _, err := os.Stat(other); err != nil {
+			t.Errorf("%v: other AVD files stay", tc.env)
+		}
 	}
 }

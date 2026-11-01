@@ -100,6 +100,10 @@ setup() {  # inside the container, volumes mounted read-write
 
 boot() {  # inside the container
   local window=${1:-}
+  # The host found no other emulator container running: a lock left in the AVD by a finished container is stale (the next emulator
+  # would take it for a live instance and die after boot).
+  # The emulator's lock files are bw.avd/*.lock (multiinstance.lock, snapshot.lock.lock, hardware-qemu.ini.lock).
+  [[ "${BW_CLEAR_AVD_LOCK:-}" == 1 ]] && rm -rf "$ANDROID_AVD_HOME"/bw.avd/*.lock
   local args=("${EMU_ARGS[@]}" -read-only -no-snapshot-save)
   [[ -z "$window" ]] && args+=(-no-window)
   emulator "${args[@]}" >/tmp/emulator.log 2>&1 &
@@ -214,6 +218,13 @@ common=(--device /dev/kvm --shm-size=2g -e BW_DRIVE_ARGS -v "$ROOT:/work:z" -v b
 # Runs only read the SDK volumes. The AVD stays writable for the emulator's lock files; `-read-only` keeps the
 # device state itself out of it.
 common+=(-v "${VOLUMES[0]}:ro" -v "${VOLUMES[1]}:ro" -v "${VOLUMES[2]}")
+# `--rm` emulator containers can leave bw.avd/multiinstance.lock in the writable AVD volume; when no emulator container runs, the
+# boot container removes it before the emulator starts (a lock of a running emulator must stay).
+lock_args() {
+  local out
+  out=$(podman ps --format '{{.Image}}' 2>/dev/null) || return 0
+  [[ "$out" == *budget-wallet-emu:* ]] || lock=(-e BW_CLEAR_AVD_LOCK=1)
+}
 running() { podman container exists "$NAME" && [[ "$(podman inspect -f '{{.State.Running}}' "$NAME")" == true ]]; }
 need_running() { running || { echo "No emulator running. Start one with: tools/emulator.sh start" >&2; exit 1; }; }
 with_run() { mapfile -t run < <(run_mounts); common+=("${run[@]}"); }  # before prepare
@@ -224,10 +235,11 @@ case "$CMD" in
     t0=$(now_us)
     with_run
     prepare
+    lock=(); lock_args
     rc=0
     # output to the terminal and to dist/logs/emulator-<cmd>.log (+ .status), no history line (the phases and total are there)
     BW_TIMED_SPLIT=1 BW_TIMED_HISTORY=0 timed_log "emulator-$CMD" "$BW_RUN_DIR/emulator-$CMD.log" \
-      podman run --rm "${common[@]}" "$img" tools/emulator.sh "$@" || rc=$?
+      podman run --rm "${common[@]}" "${lock[@]}" "$img" tools/emulator.sh "$@" || rc=$?
     if [[ $CMD == screens ]]; then
       cp "$ROOT"/dist/screens/*.png "$BW_RUN_DIR/" 2>/dev/null || true
     else
@@ -249,8 +261,9 @@ case "$CMD" in
       [[ -n "${XAUTHORITY:-}" ]] && win+=(-e XAUTHORITY=/tmp/xauth -v "$XAUTHORITY:/tmp/xauth:ro")
       win+=(--security-opt label=disable)
     fi
+    lock=(); lock_args
     # The label tells `stop` where to save the emulator's log
-    podman run -d --name "$NAME" --label "bw.run=$BW_RUN_DIR" "${common[@]}" "${win[@]}" "$img" tools/emulator.sh boot $flag >/dev/null
+    podman run -d --name "$NAME" --label "bw.run=$BW_RUN_DIR" "${common[@]}" "${lock[@]}" "${win[@]}" "$img" tools/emulator.sh boot $flag >/dev/null
     echo "booting…"
     for _ in $(seq 180); do
       podman logs "$NAME" 2>&1 | grep -q "emulator booted" && { echo "ready ($SERIAL)"; exit 0; }

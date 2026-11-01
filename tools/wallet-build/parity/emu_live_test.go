@@ -109,19 +109,6 @@ func waitEmulatorIdle(t testing.TB) {
 	t.Logf("a container from the emulator image still runs after 60 s; the AVD may stay locked")
 }
 
-// clearStaleAVDLock: the emulator of an earlier container leaves bw.avd/multiinstance.lock in the writable
-// bw-emulator-avd volume; with the same pids in the next container the emulator takes it for a live instance and `start`
-// dies after boot. Only the lock file is removed, only when no container of the emulator image runs.
-func clearStaleAVDLock(t *testing.T) {
-	t.Helper()
-	waitEmulatorIdle(t)
-	out, err := exec.Command("podman", "run", "--rm", "-v", "bw-emulator-avd:/opt/avd", "docker.io/library/busybox:latest",
-		"rm", "-f", "/opt/avd/bw.avd/multiinstance.lock").CombinedOutput()
-	if err != nil {
-		t.Logf("could not clear the AVD lock (%v): %s", err, tail(string(out)))
-	}
-}
-
 // logcat and flutter progress lines whose count and content follow timing.
 var emuNoise = regexp.MustCompile(`^[VDIWEF]/\S.*\(\s*\d+\):|^\d\d:\d\d \+\d+|^flutter: |^VMServiceFlutterDriver: `)
 
@@ -372,7 +359,6 @@ func go2Heavy(t *testing.T, repo string) []Case {
 	screens.Artifacts = []string{"dist/screens"}
 	screens.SkipIf = emulatorVolumes
 	screens.StdoutDrop = emuNoise
-	screens.Before = clearStaleAVDLock
 	screens.Check = chain(checkAllSteps(0), checkRunFiles("emulator-screens.log", "emulator.log", "*.png"), // screens copies dist/screens/*.png to the run dir root
 		checkStepsInHistory("prepare", "boot", "build", "total"))
 	out = append(out, h(screens))
@@ -384,7 +370,6 @@ func go2Heavy(t *testing.T, repo string) []Case {
 		et.Artifacts = []string{"dist/screens/" + small[0]}
 		et.SkipIf = emulatorVolumes
 		et.StdoutDrop = emuNoise
-		et.Before = clearStaleAVDLock
 		et.Check = chain(checkAllSteps(0), checkRunFiles("emulator-test.log", "drive-"+small[0]+".log", "tests-"+small[0]+"-summary.txt", "screens/*"),
 			checkStepsInHistory("prepare", "boot", "build", "install", "test-"+small[0], small[0], "total"))
 		out = append(out, h(et))
@@ -394,7 +379,6 @@ func go2Heavy(t *testing.T, repo string) []Case {
 	sis := mkS(E, "emulator_start_install_shot_stop", 0)
 	sis.Steps = [][]string{{"start"}, {"install", debugAPK}, {"shot", "parity_x"}, {"adb", "shell", "echo", "parity"}, {"stop"}}
 	sis.Cleanup = [][]string{{"stop"}}
-	sis.Before = clearStaleAVDLock
 	sis.Artifacts = []string{"dist/screens/parity_x.png"}
 	sis.SkipIf = func(t *testing.T, repo string) string {
 		if why := emulatorVolumes(t, repo); why != "" {

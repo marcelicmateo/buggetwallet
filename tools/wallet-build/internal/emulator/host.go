@@ -298,6 +298,21 @@ func (e *hostSide) common() []string {
 	return append(a, e.runArgs()...)
 }
 
+// ClearLockEnv tells the boot container to remove a stale AVD lock before it starts the emulator.
+const ClearLockEnv = "BW_CLEAR_AVD_LOCK"
+
+// lockArgs is the flag that lets a container remove the bw.avd/*.lock files (multiinstance.lock, snapshot.lock.lock), which a finished (--rm) emulator container leaves in the
+// writable AVD volume (the next emulator takes it for a live instance and dies after boot). Only when no emulator container runs: a
+// running emulator's lock stays. When podman cannot tell, the lock stays too.
+func (e *hostSide) lockArgs() []string {
+	c := e.c
+	out, rc := c.CaptureQuiet("", "podman", "ps", "--format", "{{.Image}}")
+	if rc != 0 || strings.Contains(out, "budget-wallet-emu:") {
+		return nil
+	}
+	return []string{"-e", ClearLockEnv + "=1"}
+}
+
 func (e *hostSide) screensOrTest(cmd string, rest []string) int {
 	c := e.c
 	t0 := c.Us()
@@ -307,6 +322,7 @@ func (e *hostSide) screensOrTest(cmd string, rest []string) int {
 	runDir := c.Getenv("BW_RUN_DIR")
 	name := e.name(cmd)
 	argv := append([]string{"podman", "run", "--rm", "--init", "--name", name}, e.common()...)
+	argv = append(argv, e.lockArgs()...)
 	argv = append(argv, e.img, Inner, "emulator", cmd)
 	argv = append(argv, rest...)
 	// output to the terminal and to emulator-<cmd>.log (+ .status), no history line (the phases and total are there)
@@ -356,6 +372,7 @@ func (e *hostSide) start(rest []string) int {
 	// The label tells `stop` where to save the emulator's log
 	argv := []string{"podman", "run", "-d", "--init", "--name", ContainerName, "--label", "bw.run=" + c.Getenv("BW_RUN_DIR")}
 	argv = append(argv, e.common()...)
+	argv = append(argv, e.lockArgs()...)
 	argv = append(argv, win...)
 	argv = append(argv, e.img, Inner, "emulator", "boot")
 	if flag != "" {

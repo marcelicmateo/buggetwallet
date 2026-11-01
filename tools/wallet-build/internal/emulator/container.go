@@ -234,6 +234,13 @@ func (k *cont) sdk(stdin io.Reader, tool string, args ...string) int {
 
 // boot starts the emulator from the snapshot, read-only (nothing is saved back) and waits until Android is up.
 func (k *cont) boot(window bool) int {
+	if k.c.Getenv(ClearLockEnv) == "1" { // the host found no other emulator container running: a lock in the AVD is a leftover
+		// the emulator's lock files are bw.avd/*.lock (multiinstance.lock, snapshot.lock.lock, hardware-qemu.ini.lock)
+		locks, _ := filepath.Glob(filepath.Join(k.avd, "bw.avd", "*.lock"))
+		for _, l := range locks {
+			_ = os.RemoveAll(l)
+		}
+	}
 	args := []string{"-read-only", "-no-snapshot-save"}
 	if !window {
 		args = append(args, "-no-window")
