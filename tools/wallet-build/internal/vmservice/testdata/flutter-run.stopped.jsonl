@@ -1,0 +1,3 @@
+[{"event":"app.start","params":{"appId":"zz","mode":"profile"}}]
+[{"event":"daemon.log","params":{"log":"first problem\nsecond line","error":true}}]
+[{"event":"app.stop","params":{"appId":"zz","error":"Gradle failed\nmore detail"}}]
