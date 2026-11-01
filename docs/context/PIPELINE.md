@@ -63,6 +63,7 @@ entry points). Agents: scout → devops (sonnet/high for the rewrite) + test-wri
 |---|---|---|---|---|
 | GO1 | Go build tool: build.sh commands, quiet, logs, status files, parity tests | devops + test-writer | Stage UX done | queued |
 | GO2 | emulator.sh, live.sh (+ live_vm.py) into the same tool | devops | GO1 | queued |
+| GO3 | CI slimmed (owner 2026-11-01): one composite action `.github/actions/` for checkout + cache + container + log upload (each job ~8 lines, ci.yml ~356 → ~150), release.yml reuses ci.yml's apk/linux jobs via `workflow_call` instead of copies, the `log` job's merge script becomes one Go tool command; same jobs, same parallelism, same artifacts and `ci-logs` output | devops | GO1 | queued |
 
 ## Stages BP, WS, DK (owner picked 2026-10-28; plan `STAGE_Y_PLAN.md`; one at a time after Stage M)
 | # | Item | Agent | Depends on | Status |
