@@ -17,7 +17,7 @@ import 'conflict_text.dart';
 import 'controller_deps.dart';
 import 'device_list.dart';
 import 'device_relay.dart';
-import 'format.dart' show NumberStyle, money, moneyExact, numberStyle, shortDateOrRaw, walletCurrencyCode;
+import 'format.dart' show NumberStyle, money, moneyExact, numberStyle, rateText, shortDateOrRaw, walletCurrencyCode;
 import 'hero.dart';
 import 'home_widget.dart';
 import 'ics_fetch.dart';
@@ -176,17 +176,50 @@ typedef ConfirmRemoval = Future<bool> Function(int payments);
 /// Cancel, nothing is written. [canSkip] is false when per-row Skip cannot be offered honestly.
 typedef ConfirmPreview = Future<Set<String>?> Function(ImportPreview preview, String bank);
 
-/// The owner's answer to "Which account is this?" (UX-ACC) for one export account of a file.
+/// A new account the owner described in "Which account is this?" (UX-ACC). Nothing is written when the form closes: the controller adds it
+/// just before the file is imported, after the preview is confirmed, so a Cancel anywhere leaves no account behind.
+class NewAccountDraft {
+  final String name;
+  final AccountKind kind;
+  final String? institution;
+  final String? source;
+  final String currency;
+  final int opening;
+  final String openingDate;
+  const NewAccountDraft(
+      {required this.name,
+      required this.kind,
+      required this.institution,
+      required this.source,
+      required this.currency,
+      required this.opening,
+      required this.openingDate});
+}
+
+/// The question [ImportAccountQuestion] with the day of the first row of that export account in the file: the new account's opening
+/// date starts the day before it, so the file's rows count in its balance.
+class FileAccountQuestion extends ImportAccountQuestion {
+  final String firstDate;
+  FileAccountQuestion(ImportAccountQuestion q, this.firstDate)
+      : super(
+            source: q.source,
+            currency: q.currency,
+            accountKey: q.accountKey,
+            exportAccount: q.exportAccount,
+            rows: q.rows,
+            candidates: q.candidates);
+}
+
+/// The owner's answer to "Which account is this?" (UX-ACC) for one export account of a file. Nothing is written by the answer itself.
 class AccountAnswer {
-  /// The existing account that now counts this export account (the controller sets its match key); null when [created].
+  /// The existing account that counts this export account (its match key is set when the file is imported); null when [created].
   final String? accountId;
 
-  /// The owner made a new account for it in the question (the form already wrote it with the match key).
-  final bool created;
-  const AccountAnswer.existing(String this.accountId) : created = false;
-  const AccountAnswer.created()
-      : accountId = null,
-        created = true;
+  /// The new account the owner described (added with the match key when the file is imported); null for a pick.
+  final NewAccountDraft? draft;
+  bool get created => draft != null;
+  const AccountAnswer.existing(String this.accountId) : draft = null;
+  const AccountAnswer.created(NewAccountDraft this.draft) : accountId = null;
 }
 
 /// Asked once per export account of a file that no account claims yet (`unknownImportAccounts`), before anything is written: null =
@@ -308,6 +341,12 @@ class WalletController extends ChangeNotifier {
 
   /// An ECB download is running (UX-FX, `controller_ecb.dart`): one at a time; the Currencies panel shows it.
   bool ecbFetching = false;
+
+  /// "Get rates now" was asked while the automatic fetch ran: it runs as a forced fetch after it unless that one brought the rates.
+  bool ecbGetNowQueued = false;
+
+  /// Accounts the owner picked in the question of the file being read (not written yet): they are no longer free for the next question.
+  final Set<String> pendingClaimed = {};
 
   /// The day [_memo] was filled for: a new day drops every cached value (old days would only pile up).
   String? _memoDay;
@@ -1338,9 +1377,10 @@ class WalletController extends ChangeNotifier {
         // UX-ACC: each row names its export account by a keyed fingerprint (never the IBAN itself); an unknown one is asked about now,
         // before anything is written, because rows imported before the answer would stay on the main account.
         final batch = await _withAccountKeys(read.batch);
-        if (askAccount != null && !await _askAccounts(batch, askAccount, f)) {
+        final answers = askAccount == null ? const <(ImportAccountQuestion, AccountAnswer)>[] : await _askAccounts(batch, askAccount, f);
+        if (answers == null) {
           read.revert?.call();
-          lines.add(ImportLine(name, 'Not imported. You chose Cancel.', false));
+          lines.add(ImportLine(name, 'Not imported. You skipped this file.', false));
           continue;
         }
         final mapped = usedMapping != null;
@@ -1370,6 +1410,7 @@ class WalletController extends ChangeNotifier {
           skip = chosen;
         }
         read.commit?.call(); // a new column layout is saved only now
+        await _writeAccountAnswers(answers); // and the answers to "Which account is this?", the last thing before the rows
         final s = repo.importBatch(batch, revive: revive.toSet(), skip: skip); // logs repo.importBatch
         if (revive.isNotEmpty) {
           // Only the ids this file read are done; the rest wait for their own files (January's and February's rows both come back).

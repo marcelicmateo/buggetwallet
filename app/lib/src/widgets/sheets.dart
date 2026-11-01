@@ -21,6 +21,8 @@ import 'common.dart';
 import 'split_sheet.dart';
 import 'tag_picker.dart';
 
+final _accLog = Logger('bw.accounts');
+
 /// The help text a dashboard tile keeps behind its (i): a title and a few plain lines (the sheet brings its own close button).
 Future<void> showInfoSheet(BuildContext context, String title, String text) =>
     showSheet<void>(context, InfoSheet(title: title, text: text));
@@ -541,7 +543,8 @@ class _TxSheetState extends State<TxSheet> {
           try {
             wc.setTxAccount(t.id, id);
             setState(() => accountError = null);
-          } on ArgumentError catch (e) {
+          } on ArgumentError catch (e, st) {
+            logError(_accLog, 'accounts.moveRowRefused', e, st);
             setState(() => accountError = e.message.toString());
           }
         },
@@ -648,15 +651,8 @@ class _TxSheetState extends State<TxSheet> {
         Padding(
           padding: const EdgeInsets.only(top: 2),
           child: Text(
-              // UX-FX: the source of the rate that counts it: the owner's own, the ECB's rate of that day, or the bank's amount.
-              'Counts as ${money(c.amount, c.tx.currency, decimals: 2, signed: true)}${switch ((
-                widget.wc.settings.fxRates[t.currency],
-                fxUsed(t, widget.wc.settings)
-              )) {
-                (final r?, _) => ' at ${rateText(r.rate)} · your rate',
-                (_, final u?) => ' · ${widget.wc.fxSourceText(u)}',
-                _ => " · the bank's amount",
-              }}',
+              // UX-FX: the source of the rate that counts it, as core picks it (`fxUsed`).
+              'Counts as ${money(c.amount, c.tx.currency, decimals: 2, signed: true)}${widget.wc.fxBasisText(t)}',
               key: const ValueKey('txCounted'),
               textAlign: TextAlign.end,
               style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),

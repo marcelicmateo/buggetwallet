@@ -68,7 +68,8 @@ class AccountFormSheet extends StatefulWidget {
   final Account? account;
 
   /// UX-ACC: the question "Which account is this?" asked for a new account: a bank account of the file's bank and currency (both
-  /// fixed) that gets the export account's match key. The name is the owner's.
+  /// fixed) that gets the export account's match key. The name is the owner's. Save pops a [NewAccountDraft] (nothing is written; the
+  /// controller adds the account when the file is imported).
   final ImportAccountQuestion? forImport;
   const AccountFormSheet({super.key, required this.wc, this.account, this.forImport});
   @override
@@ -91,7 +92,7 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
   late final _rate = TextEditingController(text: _initialRate());
   late String? _source = _a?.source ?? widget.forImport?.source;
   late String _currency = _a?.currency ?? widget.forImport?.currency ?? widget.wc.currency;
-  late String _date = widget.wc.today();
+  late String _date = _initialDate();
   late bool _nameEdited = _a != null;
   bool _negative = false;
 
@@ -101,6 +102,13 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
 
   bool get _editing => _a != null;
   bool get _isCrypto => _kind == AccountKind.crypto;
+
+  /// The balance date of a new account: today; for a file's account the day before its first row in the file, so the file's payments
+  /// (core counts rows dated after it) are in the balance.
+  String _initialDate() {
+    final q = widget.forImport;
+    return q is FileAccountQuestion ? addDays(q.firstDate, -1) : widget.wc.today();
+  }
 
   String _initialRate() {
     final r = widget.wc.settings.fxRates[_a?.currency ?? ''];
@@ -213,6 +221,42 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
       });
       return;
     }
+    if (widget.forImport != null) {
+      // Checked here as core would: the account is added later, when the file is imported.
+      final name = (_draft[AccountCols.name] ?? '').trim();
+      if (name.isEmpty || name.runes.length > Account.maxName) {
+        setState(() {
+          _nameError = name.isEmpty ? 'Give the account a name.' : 'The account name is limited to ${Account.maxName} characters.';
+          _amountError = _dateError = _error = null;
+        });
+        return;
+      }
+      if (cents.abs() > WalletSettings.maxAmount) {
+        setState(() {
+          _amountError = 'The balance is over the allowed amount.';
+          _nameError = _dateError = _error = null;
+        });
+        return;
+      }
+      if (_date.compareTo(wc.today()) > 0) {
+        setState(() {
+          _dateError = 'The date cannot be in the future.';
+          _nameError = _amountError = _error = null;
+        });
+        return;
+      }
+      Navigator.pop(
+          context,
+          NewAccountDraft(
+              name: name,
+              kind: _kind,
+              institution: inst.trim().isEmpty ? null : inst.trim(),
+              source: _source,
+              currency: _currency,
+              opening: cents,
+              openingDate: _date));
+      return;
+    }
     try {
       await wc.addAccount(
           name: _draft[AccountCols.name] ?? '',
@@ -221,8 +265,7 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
           institution: inst,
           currency: _currency,
           opening: cents,
-          openingDate: _date,
-          matchKey: widget.forImport?.accountKey);
+          openingDate: _date);
       _saveRate();
       if (mounted) Navigator.pop(context, true);
     } on ArgumentError catch (e) {

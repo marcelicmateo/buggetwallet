@@ -14,13 +14,13 @@ import '../widgets/sheets.dart';
 import 'account_form.dart';
 import 'accounts_panel.dart' show accountTypeLabel;
 
-/// Opens the question for [q]; the owner's answer, or null for Cancel (the file is not imported).
+/// Opens the question for [q]; the owner's answer, or null for "Skip this file" (that file is not imported; the other files go on).
 Future<AccountAnswer?> askWhichAccount(BuildContext context, WalletController wc, ImportAccountQuestion q) async {
   logNav('accountQuestion.open', {'candidates': q.candidates.length, 'rows': q.rows});
   return showSheet<AccountAnswer>(context, AccountQuestionSheet(wc: wc, q: q));
 }
 
-/// The question sheet. Pops an [AccountAnswer] (a pick, or `created` once the new-account form saved) or nothing on Cancel.
+/// The question sheet. Pops an [AccountAnswer] (a pick, or `created` once the new-account form saved) or nothing on Skip.
 class AccountQuestionSheet extends StatelessWidget {
   final WalletController wc;
   final ImportAccountQuestion q;
@@ -32,8 +32,8 @@ class AccountQuestionSheet extends StatelessWidget {
 
   Future<void> _new(BuildContext context) async {
     logNav('accountQuestion.new');
-    final saved = await showSheet<bool>(context, AccountFormSheet(wc: wc, forImport: q));
-    if (saved == true && context.mounted) Navigator.pop(context, const AccountAnswer.created());
+    final draft = await showSheet<NewAccountDraft>(context, AccountFormSheet(wc: wc, forImport: q));
+    if (draft != null && context.mounted) Navigator.pop(context, AccountAnswer.created(draft));
   }
 
   @override
@@ -75,10 +75,10 @@ class AccountQuestionSheet extends StatelessWidget {
           key: const ValueKey('accountPickCancel'),
           style: TextButton.styleFrom(minimumSize: const Size.fromHeight(buttonMin)),
           onPressed: () {
-            logNav('accountQuestion.cancel');
+            logNav('accountQuestion.skip');
             Navigator.pop(context);
           },
-          child: const Text('Cancel, import nothing')),
+          child: const Text('Skip this file')),
     ]);
   }
 }

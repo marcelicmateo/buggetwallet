@@ -64,16 +64,16 @@ class _RatesStatus extends StatelessWidget {
         if (missing > 0)
           Text(missing == 1 ? '1 amount has no rate yet.' : '$missing amounts have no rate yet.',
               key: const ValueKey('ecbMissing'), style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
-        if (fail != null)
-          Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: StatusLabel(
-                  key: const ValueKey('ecbFailure'), good: false, text: "Couldn't get rates: ${fail.why} (${shortDateOrRaw(fail.date)})."))
-        else if (wc.ecbFetching)
+        if (wc.ecbFetching)
           Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text('Getting rates…',
-                  key: const ValueKey('ecbBusy'), style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2))),
+                  key: const ValueKey('ecbBusy'), style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)))
+        else if (fail != null)
+          Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: StatusLabel(
+                  key: const ValueKey('ecbFailure'), good: false, text: "Couldn't get rates: ${fail.why} (${shortDateOrRaw(fail.date)}).")),
         Align(
           alignment: Alignment.centerLeft,
           child: TextButton.icon(

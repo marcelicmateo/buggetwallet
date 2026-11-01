@@ -47,12 +47,42 @@ extension EcbDb on WalletController {
   /// Whether a wallet currency switch from [old] to [code] leaves the payments in [old] counted by ECB rates of their own days: the
   /// device holds ECB rates and neither is a coin (coins are hand-set only). The ECB publishes about 30 currencies: one it does not
   /// publish stays "not counted" until the owner sets a rate (the Currencies panel says so per currency).
-  bool ecbCoversSwitch(String old, String code) =>
-      ecbCacheInfo().days > 0 && !(currencyInfo(old)?.crypto ?? false) && !(currencyInfo(code)?.crypto ?? false);
+  bool ecbCoversSwitch(String old, String code) {
+    final newest = ecbCacheInfo().newest;
+    if (newest == null || (currencyInfo(old)?.crypto ?? false) || (currencyInfo(code)?.crypto ?? false)) return false;
+    // The device cache (not the wallet's fx_day rows, which hold only what the wallet uses now) must hold a rate of the newest day for both
+    // currencies (EUR is 1): EUR to RSD has none, so that switch keeps the "set the rate" text.
+    // TODO(core): a repo method for this lookup (`ecbCachePairOn`); until then the cache table is read here.
+    final need = {
+      for (final c in [old, code])
+        if (c != 'EUR') c
+    };
+    if (need.isEmpty) return true;
+    try {
+      final rows = repo.db.select(
+          'SELECT DISTINCT cur FROM ecb_rates WHERE date = ? AND cur IN (${List.filled(need.length, '?').join(', ')})', [newest, ...need]);
+      return rows.length == need.length;
+    } catch (e, st) {
+      logError(_ecbLog, 'fx.coversSwitch.failed', e, st);
+      return false;
+    }
+  }
 
   /// The source of the rate that counts [t] in the wallet currency: "ECB 31 Oct" (the ECB day used), "your rate", or null (no rate
   /// needed or none found). Core's `fxUsed`.
   String? fxSourceOf(Tx t) => fxSourceText(fxUsed(t, settings));
+
+  /// What follows "Counts as 10.80 €" for payment [t], by core's `fxUsed` alone (the rate core really counts it by): " at 0.9240 · your rate"
+  /// (a hand rate), " · ECB 16 Oct", or " · the bank's amount" (the export gave the amount in the wallet currency: core uses that, never a
+  /// rate, whatever is set).
+  String fxBasisText(Tx t) => switch (fxUsed(t, settings)) {
+        final u? when !u.ecb => switch (settings.fxRates[t.currency]) {
+            final r? => ' at ${rateText(r.rate)} · your rate',
+            _ => ' · your rate',
+          },
+        final u? => ' · ${fxSourceText(u)}',
+        _ => " · the bank's amount",
+      };
 
   /// The text for core's [FxUsed].
   String? fxSourceText(FxUsed? u) => u == null ? null : (u.ecb ? 'ECB ${shortDateOrRaw(u.date)}' : 'your rate');
@@ -63,7 +93,7 @@ extension EcbDb on WalletController {
   Future<void> fetchRatesAuto({String trigger = 'auto'}) async {
     if (_disposed || ecbFetching) return;
     ecbFetching = true;
-    var fetched = false;
+    var shown = false, ok = false;
     try {
       final EcbFile? plan;
       try {
@@ -73,6 +103,8 @@ extension EcbDb on WalletController {
         return;
       }
       if (plan == null) return;
+      shown = true;
+      notifyListeners(); // "Getting rates..." and a disabled "Get rates now" from the start, also while the network is looked at
       var metered = false;
       try {
         metered = await deps.isMetered();
@@ -84,22 +116,35 @@ extension EcbDb on WalletController {
         logEvent(_ecbLog, Level.INFO, 'fx.fetchSkipped', {'trigger': trigger, 'reason': 'metered', 'file': plan.name});
         return;
       }
-      fetched = true;
-      notifyListeners(); // "Getting rates..." on the panel
-      await _fetchRates(plan, trigger);
+      ok = await _fetchRates(plan, trigger);
     } finally {
       ecbFetching = false;
-      if (fetched && !_disposed) notifyListeners();
+      final queued = ecbGetNowQueued;
+      ecbGetNowQueued = false;
+      if (shown && !_disposed) notifyListeners();
+      // A "Get rates now" asked meanwhile: forced, unless this run just brought the rates.
+      if (queued && !ok && !_disposed) unawaited(getRatesNow());
     }
   }
 
-  /// "Get rates now": the owner asked, so a metered network and the daily limit do not stop it. True when the rates came in.
+  /// "Get rates now": the owner asked, so a metered network and the daily limit do not stop it. True when the rates came in. Asked while
+  /// the automatic fetch runs, it is queued and runs forced after it (false now).
   Future<bool> getRatesNow() async {
-    if (_disposed || ecbFetching) return false;
+    if (_disposed) return false;
+    if (ecbFetching) {
+      ecbGetNowQueued = true;
+      return false;
+    }
     ecbFetching = true;
     notifyListeners();
     try {
-      final plan = repo.ecbFetchPlan(force: true);
+      final EcbFile? plan;
+      try {
+        plan = repo.ecbFetchPlan(force: true);
+      } catch (e, st) {
+        logError(_ecbLog, 'fx.plan.failed', e, st, fields: {'trigger': 'button'});
+        return false;
+      }
       if (plan == null) return false;
       return await _fetchRates(plan, 'button');
     } finally {
@@ -109,8 +154,12 @@ extension EcbDb on WalletController {
   }
 
   Future<bool> _fetchRates(EcbFile file, String trigger) async {
-    repo.noteEcbAttempt();
     final f = <String, Object?>{'trigger': trigger, 'file': file.name};
+    try {
+      repo.noteEcbAttempt();
+    } catch (e, st) {
+      logError(_ecbLog, 'fx.attempt.failed', e, st, fields: f); // the download goes on; at worst it is tried again today
+    }
     String? failed;
     try {
       final bytes = await deps.ecbFetcher(file);

@@ -222,24 +222,60 @@ extension ImportAndBackup on WalletController {
     }
   }
 
-  /// Asks [ask] about every export account of [batch] no account claims yet; false = the owner cancelled (nothing of this file is
-  /// written; an answer already given stays, it is the owner's own write). An existing account answers with its match key here; a new
-  /// one is already written by the form. Logs counts only, never the account, the IBAN or the names.
-  Future<bool> _askAccounts(ImportBatch batch, AskAccount ask, Map<String, Object?> f) async {
+  /// Asks [ask] about every export account of [batch] no account claims yet. Null = the owner cancelled (nothing is written). Otherwise
+  /// the answers, in order, for [_writeAccountAnswers] to write just before the file is imported (after the preview is confirmed), so
+  /// a Cancel at any question or in the preview leaves no key and no account behind. Logs counts only, never the account, the IBAN or
+  /// the names.
+  Future<List<(ImportAccountQuestion, AccountAnswer)>?> _askAccounts(ImportBatch batch, AskAccount ask, Map<String, Object?> f) async {
     final unknown = repo.unknownImportAccounts(batch);
-    if (unknown.isEmpty) return true;
+    if (unknown.isEmpty) return const [];
     logEvent(_import, Level.INFO, 'import.accountQuestion', {...f, 'accounts': unknown.length});
-    for (final q in unknown) {
-      final a = await ask(q);
-      if (a == null) {
-        logEvent(_import, Level.INFO, 'import.accountCancelled', f);
-        return false;
+    final answers = <(ImportAccountQuestion, AccountAnswer)>[];
+    pendingClaimed.clear();
+    try {
+      for (final q in unknown) {
+        // The day of its first row: a new account's balance starts the day before, so these rows count in it.
+        String? first;
+        for (final t in batch.transactions) {
+          if (t.accountKey == q.accountKey && t.source == q.source && t.currency == q.currency) {
+            if (first == null || t.date.compareTo(first) < 0) first = t.date;
+          }
+        }
+        final a = await ask(first == null ? q : FileAccountQuestion(q, first));
+        if (a == null) {
+          logEvent(_import, Level.INFO, 'import.accountCancelled', f);
+          return null;
+        }
+        final id = a.accountId;
+        if (id != null) pendingClaimed.add(id);
+        answers.add((q, a));
+        logEvent(_import, Level.INFO, 'import.accountAnswered', {'new': a.created, 'rows': q.rows});
       }
-      final id = a.accountId;
-      if (id != null) await updateAccount(id, matchKey: q.accountKey);
-      logEvent(_import, Level.INFO, 'import.accountAnswered', {'new': a.created, 'rows': q.rows});
+    } finally {
+      pendingClaimed.clear();
     }
-    return true;
+    return answers;
+  }
+
+  /// Writes what the owner answered: a pick gets its export account's match key, a new account is added with it. Called once, right
+  /// before the rows are imported.
+  Future<void> _writeAccountAnswers(List<(ImportAccountQuestion, AccountAnswer)> answers) async {
+    for (final (q, a) in answers) {
+      final id = a.accountId, d = a.draft;
+      if (id != null) {
+        await updateAccount(id, matchKey: q.accountKey);
+      } else if (d != null) {
+        await addAccount(
+            name: d.name,
+            kind: d.kind,
+            source: d.source,
+            institution: d.institution,
+            currency: d.currency,
+            opening: d.opening,
+            openingDate: d.openingDate,
+            matchKey: q.accountKey);
+      }
+    }
   }
 
   // ---------- bank balance after an import (Q5) ----------

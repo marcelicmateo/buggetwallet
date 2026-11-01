@@ -89,7 +89,13 @@ extension AccountsDb on WalletController {
   /// without a key (the main account) first. Empty when there is none: the owner makes a new account.
   List<Account> freeAccountsFor(ImportAccountQuestion q) => [
         for (final a in accountsAll())
-          if (!a.isCash && a.countsRows && a.source == q.source && a.currency == q.currency && a.matchKey == null) a
+          if (!a.isCash &&
+              a.countsRows &&
+              a.source == q.source &&
+              a.currency == q.currency &&
+              a.matchKey == null &&
+              !pendingClaimed.contains(a.id))
+            a
       ]..sort((a, b) => a.id.compareTo(b.id));
 
   /// The account that counts bank row [t] now (core's `RowAccounts`), or null (none).

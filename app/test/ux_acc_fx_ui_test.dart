@@ -2,6 +2,7 @@
 // the ECB exchange rates (UX-FX): the automatic fetch (never on a metered network), "Get rates now", the failure line on the Currencies
 // panel, the source of every shown rate ("ECB 16 Oct" / "your rate"), foreign account rows and the wallet currency switch. All data is
 // SYNTHETIC on the fixed clock 20 Oct 2026; the ECB files are example values in the ECB's CSV shape.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -110,16 +111,16 @@ void main() {
       final lines = await wc.importFiles([('a.csv', _bytes(_twoPockets))], askAccount: (q) async {
         asked.add(q);
         if (asked.length == 1) return AccountAnswer.existing(main);
-        savings = await wc.addAccount(
+        return AccountAnswer.created(NewAccountDraft(
             name: 'My savings',
+            kind: AccountKind.savings,
+            institution: null,
             source: q.source,
             currency: q.currency,
             opening: 5000,
-            openingDate: '2026-10-01',
-            kind: AccountKind.savings,
-            matchKey: q.accountKey);
-        return const AccountAnswer.created();
+            openingDate: '2026-10-01'));
       });
+      savings = wc.repo.accounts().firstWhere((a) => a.name == 'My savings').id;
       expect(asked.length, 2, reason: 'Current and Savings, once each');
       expect(asked.first.rows + asked.last.rows, 3);
       expect(lines.single.ok, isTrue);
@@ -146,9 +147,87 @@ void main() {
       final before = wc.repo.transactions().length;
       final lines = await wc.importFiles([('a.csv', _bytes(_twoPockets))], askAccount: (q) async => null);
       expect(lines.single.ok, isFalse);
-      expect(lines.single.message, contains('Cancel'));
+      expect(lines.single.message, contains('skipped'));
       expect(wc.repo.transactions().length, before);
       expect(wc.repo.accounts().firstWhere((a) => a.id == main).matchKey, isNull);
+      await _drain();
+    });
+
+    NewAccountDraft draftOf(ImportAccountQuestion q) => NewAccountDraft(
+        name: 'Pocket',
+        kind: AccountKind.bank,
+        institution: null,
+        source: q.source,
+        currency: q.currency,
+        opening: 5000,
+        openingDate: '2026-10-01');
+
+    test('Cancel at the 2nd question writes nothing: no key after a pick, no account after "New account"', () async {
+      for (final firstIsNew in [false, true]) {
+        final (wc, main) = await _revolut();
+        var n = 0;
+        final lines = await wc.importFiles([('a.csv', _bytes(_twoPockets))], askAccount: (q) async {
+          n++;
+          if (n == 2) return null;
+          return firstIsNew ? AccountAnswer.created(draftOf(q)) : AccountAnswer.existing(main);
+        });
+        expect(n, 2);
+        expect(lines.single.ok, isFalse);
+        expect(wc.repo.accounts().length, 1, reason: 'no new account (firstIsNew=$firstIsNew)');
+        expect(wc.repo.accounts().single.matchKey, isNull, reason: 'no key (firstIsNew=$firstIsNew)');
+        expect(wc.repo.transactions(), isEmpty);
+        await _drain();
+      }
+    });
+
+    test('Cancel in the preview writes nothing either: the answers are written only once the file goes in', () async {
+      final (wc, main) = await _revolut();
+      var n = 0;
+      final lines = await wc.importFiles([('a.csv', _bytes(_twoPockets))],
+          askAccount: (q) async => ++n == 1 ? AccountAnswer.existing(main) : AccountAnswer.created(draftOf(q)),
+          confirmPreview: (preview, bank) async {
+            // While the owner looks at the preview nothing is written yet.
+            expect(wc.repo.accounts().length, 1);
+            expect(wc.repo.accounts().single.matchKey, isNull);
+            return null;
+          });
+      expect(lines.single.ok, isFalse);
+      expect(wc.repo.accounts().length, 1);
+      expect(wc.repo.accounts().single.matchKey, isNull);
+      expect(wc.repo.transactions(), isEmpty);
+      await _drain();
+    });
+
+    test('the question carries the day of the first row; the answers are written when the preview is confirmed', () async {
+      final (wc, main) = await _revolut();
+      final days = <String>[];
+      final lines = await wc.importFiles([('a.csv', _bytes(_twoPockets))],
+          askAccount: (q) async {
+            days.add((q as FileAccountQuestion).firstDate);
+            return days.length == 1 ? AccountAnswer.existing(main) : AccountAnswer.created(draftOf(q));
+          },
+          confirmPreview: (preview, bank) async => <String>{});
+      expect(days.toSet(), {'2026-10-12', '2026-10-13'}, reason: 'Current starts on the 12th, Savings on the 13th');
+      expect(lines.single.ok, isTrue);
+      expect(wc.repo.accounts().length, 2);
+      await _drain();
+    });
+
+    test('"Skip this file" skips that file only: the next file is asked and imported', () async {
+      final (wc, main) = await _revolut();
+      const other = 'Type,Product,Started Date,Completed Date,Description,Amount,Fee,Currency,State,Balance\n'
+          'Card Payment,Current,2026-10-17 10:00:00,2026-10-17 10:00:00,Synthetic shop six,-4.00,0.00,EUR,COMPLETED,90.00\n';
+      var asked = 0;
+      final lines = await wc.importFiles([('a.csv', _bytes(_twoPockets)), ('b.csv', _bytes(other))], askAccount: (q) async {
+        asked++;
+        return asked == 1 ? null : AccountAnswer.existing(main);
+      });
+      expect(lines.length, 2);
+      expect(lines.first.ok, isFalse);
+      expect(lines.last.ok, isTrue);
+      expect(asked, 2);
+      expect(wc.repo.transactions().map((t) => t.description), ['Synthetic shop six']);
+      expect(wc.repo.accounts().single.matchKey, isNotNull);
       await _drain();
     });
 
@@ -162,7 +241,7 @@ void main() {
   });
 
   group('Which account is this? (sheet)', () {
-    testWidgets('the question lists the unclaimed accounts, the main one first; Cancel imports nothing', timeout: _t, (t) async {
+    testWidgets('the question lists the unclaimed accounts, the main one first; Skip imports nothing', timeout: _t, (t) async {
       final (wc, main) = await _revolut();
       await pumpApp(
           t,
@@ -178,9 +257,11 @@ void main() {
       expect(_key('accountPick:$main'), findsOneWidget);
       expect(find.text('Revolut (main account)'), findsOneWidget);
       expect(_key('accountPickNew'), findsOneWidget);
+      expect(find.text('Skip this file'), findsOneWidget);
       expect(find.textContaining('In the file:'), findsOneWidget);
       await _tap(t, 'accountPickCancel');
-      expect(find.text('Which account is this?'), findsNothing, reason: 'Cancel ends the whole import: no second question');
+      expect(find.text('Skip this file'), findsNothing);
+      expect(find.text('Which account is this?'), findsNothing, reason: 'Skip ends this file: no second question');
       expect(wc.repo.transactions(), isEmpty);
       await t.pump(const Duration(seconds: 4));
     });
@@ -223,6 +304,37 @@ void main() {
       expect(accounts.firstWhere((a) => a.id == main).matchKey, isNot(mine.matchKey));
       expect(_row(wc, 'Synthetic shop two').account, mine.id);
       expect(_row(wc, 'Synthetic shop one').account, main);
+      // The default balance date is the day before the file's first row of it (13 Oct), so its rows count: 50.00 - 5.00 - 1.00.
+      expect(mine.openingDate, '2026-10-12');
+      final bal = wc.accountBalanceList().firstWhere((b) => b.account.id == mine.id);
+      expect(bal.rowsCounted, 2);
+      expect(bal.balance, 4400);
+      await t.pump(const Duration(seconds: 4));
+    });
+
+    testWidgets('New account at the 1st question, Skip at the 2nd: no account, no key, no rows', timeout: _t, (t) async {
+      final (wc, main) = await _revolut();
+      await pumpApp(
+          t,
+          Scaffold(
+              body: Builder(
+                  builder: (context) => FilledButton(
+                      key: const ValueKey('go'),
+                      onPressed: () => pickAndImport(context, wc, _Chooser([_Picked('a.csv', _bytes(_twoPockets))])),
+                      child: const Text('Import')))),
+          size: const Size(400, 1200));
+      await _tap(t, 'go');
+      await _tap(t, 'accountPickNew');
+      await t.enterText(_key('accountName'), 'Pocket');
+      await t.enterText(_key('accountOpening'), '10');
+      await _tap(t, 'accountSave');
+      expect(wc.repo.accounts().length, 1, reason: 'the form wrote nothing');
+      expect(find.text('Which account is this?'), findsOneWidget, reason: 'the second question');
+      await _tap(t, 'accountPickCancel');
+      expect(wc.repo.accounts().length, 1);
+      expect(wc.repo.accounts().single.id, main);
+      expect(wc.repo.accounts().single.matchKey, isNull);
+      expect(wc.repo.transactions(), isEmpty);
       await t.pump(const Duration(seconds: 4));
     });
 
@@ -350,6 +462,80 @@ void main() {
       await _drain();
     });
 
+    test('the currency switch needs a rate for the very pair: EUR to RSD keeps the "set the rate" path', () async {
+      final wc = _usdWallet();
+      expect(wc.ecbCoversSwitch('EUR', 'GBP'), isFalse, reason: 'nothing cached yet');
+      wc.seams.ecbFetcher = (_) async => utf8.encode(_ecbCsv);
+      await wc.getRatesNow();
+      expect(wc.ecbCoversSwitch('EUR', 'GBP'), isTrue);
+      expect(wc.ecbCoversSwitch('EUR', 'USD'), isTrue);
+      expect(wc.ecbCoversSwitch('EUR', 'RSD'), isFalse, reason: 'the cache holds days but no RSD');
+      expect(wc.ecbCoversSwitch('EUR', 'BTC'), isFalse);
+      await _drain();
+    });
+
+    test('the automatic fetch shows at once (also while the network is looked at); a "Get rates now" meanwhile is not lost', () async {
+      final wc = _usdWallet();
+      var calls = 0;
+      wc.seams.ecbFetcher = (_) async {
+        calls++;
+        return utf8.encode(_ecbCsv);
+      };
+      final net = Completer<bool>();
+      wc.seams.isMetered = () => net.future;
+      var notes = 0;
+      wc.addListener(() => notes++);
+      final auto = wc.fetchRatesAuto();
+      await Future<void>.delayed(Duration.zero);
+      expect(wc.ecbFetching, isTrue);
+      expect(notes, greaterThan(0), reason: 'the panel is told before the network answers');
+      expect(await wc.getRatesNow(), isFalse, reason: 'queued, not run beside the automatic one');
+      net.complete(true); // metered: the automatic run gives up, the owner's tap runs forced after it
+      await auto;
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(calls, 1);
+      expect(wc.ecbCacheInfo().newest, '2026-10-16');
+      expect(wc.ecbFetching, isFalse);
+      await _drain();
+    });
+
+    test('a tap queued during an automatic fetch that brought the rates does not download twice', () async {
+      final wc = _usdWallet();
+      var calls = 0;
+      final file = Completer<List<int>>();
+      wc.seams.ecbFetcher = (_) {
+        calls++;
+        return file.future;
+      };
+      final auto = wc.fetchRatesAuto();
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      expect(calls, 1);
+      expect(await wc.getRatesNow(), isFalse);
+      file.complete(utf8.encode(_ecbCsv));
+      await auto;
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(calls, 1);
+      await _drain();
+    });
+
+    test('closing the app mid-fetch: a disposed controller finishes quietly (download, network check, button)', () async {
+      for (final where in ['download', 'network', 'button']) {
+        final wc = _usdWallet();
+        final gate = Completer<List<int>>();
+        final net = Completer<bool>();
+        wc.seams.ecbFetcher = (_) => gate.future;
+        wc.seams.isMetered = () => where == 'network' ? net.future : Future.value(false);
+        final run = where == 'button' ? wc.getRatesNow() : wc.fetchRatesAuto();
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        expect(wc.ecbFetching, isTrue, reason: where);
+        wc.dispose();
+        gate.complete(utf8.encode(_ecbCsv));
+        net.complete(false);
+        await run; // no error, no write into the closed database, no notify after dispose
+        expect(wc.ecbFetching, isFalse, reason: where);
+      }
+    });
+
     test('import and sync trigger the same plan (once a day), and a failure never throws', () async {
       final wc = _usdWallet();
       var calls = 0;
@@ -431,6 +617,27 @@ void main() {
       await t.pump(const Duration(seconds: 4));
     });
 
+    testWidgets('a retry shows "Getting rates…" even while the last failure is stored', timeout: _t, (t) async {
+      final wc = _usdWallet();
+      wc.seams.isMetered = () async => false;
+      wc.seams.ecbFetcher = (_) async => throw const EcbFetchException(EcbFetchFailure.unreachable, 'x');
+      await wc.getRatesNow();
+      await pumpApp(t, _panel(() => CurrenciesPanel(wc: wc), wc), size: const Size(400, 1200));
+      expect(_key('ecbFailure'), findsOneWidget);
+      final gate = Completer<List<int>>();
+      wc.seams.ecbFetcher = (_) => gate.future;
+      await _tap(t, 'ecbGetNow');
+      expect(wc.ecbFetching, isTrue);
+      expect(_key('ecbBusy'), findsOneWidget);
+      expect(_key('ecbFailure'), findsNothing, reason: 'the old failure waits until this try is over');
+      expect(t.widget<TextButton>(_key('ecbGetNow')).onPressed, isNull);
+      gate.complete(utf8.encode(_ecbCsv));
+      await _settle(t);
+      expect(_key('ecbBusy'), findsNothing);
+      expect(_key('ecbFailure'), findsNothing);
+      await t.pump(const Duration(seconds: 4));
+    });
+
     testWidgets('every rate states its source: ECB day or your rate (a hand rate wins)', timeout: _t, (t) async {
       final wc = _usdWallet();
       wc.seams.ecbFetcher = (_) async => utf8.encode(_ecbCsv);
@@ -484,6 +691,43 @@ void main() {
       await t.pump();
       expect(find.text('About ${moneyExact(9000, 'EUR')} · your rate'), findsOneWidget);
       await t.pump(const Duration(seconds: 4));
+    });
+  });
+
+  group('Counts as (payment sheet)', () {
+    Widget opener(WalletController wc, CategorizedTx row) => Scaffold(
+        body: Builder(
+            builder: (context) => TextButton(
+                key: const ValueKey('openTx'),
+                onPressed: () => showSheet<String>(context, TxSheet(wc: wc, t: row)),
+                child: const Text('open'))));
+
+    testWidgets('a hand rate says "at 0.9000 · your rate"', timeout: _t, (t) async {
+      final wc = _usdWallet();
+      wc.setFxRate('USD', 900000);
+      final converted = wc.txs.firstWhere((c) => c.originalAmount != null);
+      await pumpApp(t, opener(wc, converted), size: const Size(400, 2400));
+      await _tap(t, 'openTx');
+      expect(find.text('Counts as ${money(-1080, 'EUR', decimals: 2, signed: true)} at 0.9000 · your rate'), findsOneWidget);
+      await t.pump(const Duration(seconds: 4));
+    });
+
+    test("with the bank's own amount the line says so, whatever the hand rate (core counts the bank's amount)", () {
+      final wc = _usdWallet();
+      wc.setFxRate('USD', 900000);
+      final tx = wc.repo.transactions().single;
+      expect(wc.fxBasisText(tx), ' at 0.9000 · your rate');
+      final bankSays = Tx(
+          id: tx.id,
+          source: tx.source,
+          date: tx.date,
+          amount: tx.amount,
+          currency: tx.currency,
+          bankType: tx.bankType,
+          description: tx.description,
+          homeAmount: -1100);
+      expect(homeAmount(bankSays, wc.settings), -1100, reason: 'core counts the bank\'s amount');
+      expect(wc.fxBasisText(bankSays), " · the bank's amount");
     });
   });
 
