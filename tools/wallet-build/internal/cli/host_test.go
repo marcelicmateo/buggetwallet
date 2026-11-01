@@ -495,10 +495,17 @@ func TestHostSigintStopsContainer(t *testing.T) {
 }
 
 func TestHostTimedLogTimesOut(t *testing.T) {
+	stopped := make(chan struct{})
 	h := func(ctx context.Context, c sys.Cmd) int {
 		if len(c.Argv) > 1 && c.Argv[0] == "podman" && c.Argv[1] == "run" {
-			<-ctx.Done()
+			select {
+			case <-stopped:
+			case <-ctx.Done():
+			}
 			return 143
+		}
+		if len(c.Argv) > 1 && c.Argv[1] == "stop" {
+			close(stopped) // podman stop ends the container, and with it `podman run`
 		}
 		return 0
 	}
@@ -515,5 +522,14 @@ func TestHostTimedLogTimesOut(t *testing.T) {
 	log := file(t, filepath.Join(dirs[0], "shell.log"))
 	if !strings.Contains(log, "# shell: timed out after 1 s\n# shell: finished ") || !strings.HasSuffix(log, "exit 124\n") {
 		t.Errorf("log %q", log)
+	}
+	stops := 0
+	for _, c := range fake.Calls {
+		if len(c.Argv) > 3 && c.Argv[1] == "stop" && c.Argv[2] == "-t" && c.Argv[3] == "10" {
+			stops++
+		}
+	}
+	if stops != 1 {
+		t.Errorf("a timed-out container must be stopped with podman stop -t 10: %d", stops)
 	}
 }

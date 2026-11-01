@@ -41,6 +41,7 @@ type Ctx struct {
 func New(root string, env sys.Env, out, errw io.Writer, r sys.Runner) *Ctx {
 	c := &Ctx{Root: root, Env: env, R: r, Clock: time.Now, Ctx: context.Background(), Out: out, Err: errw, ChildOut: out, ChildErr: errw}
 	c.Data = DataDir(env)
+	c.Env = c.Env.With("BW_DATA_DIR", c.Data) // exported like timing.sh does: the container has another HOME
 	c.Red = sys.NewRedactor(env)
 	return c
 }

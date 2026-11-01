@@ -114,11 +114,9 @@ func Run(args []string, environ []string, out, errw io.Writer, d Deps) int {
 	code := dispatch(c, cmd, rest, self, usage, d)
 	select {
 	case s := <-got:
-		if code == 0 || code == 1 {
-			code = 130
-			if s == syscall.SIGTERM {
-				code = 143
-			}
+		code = 130 // 128 + the signal, as a shell reports an interrupted command
+		if s == syscall.SIGTERM {
+			code = 143
 		}
 	default:
 	}

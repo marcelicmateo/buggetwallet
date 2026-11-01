@@ -77,6 +77,13 @@ func (h *Host) failHost(step, msg string) int {
 // TimedLog runs argv with its output on the terminal (stderr; split keeps stdout on stdout) and in logPath between start/end
 // stamps, then writes a .status next to the log (same name) and a history line (step name; cold as given).
 func (h *Host) TimedLog(name, logPath string, split bool, cold string, history bool, argv []string) int {
+	return h.timedLog(name, logPath, split, cold, history, func(ctx context.Context, stdout, stderr io.Writer) int {
+		return h.C.R.Run(ctx, sys.Cmd{Argv: argv, Env: h.C.Env, Stdout: stdout, Stderr: stderr})
+	})
+}
+
+// timedLog is TimedLog for any way of running the command (podman run with signal handling, or a plain process).
+func (h *Host) timedLog(name, logPath string, split bool, cold string, history bool, runIt func(ctx context.Context, stdout, stderr io.Writer) int) int {
 	c := h.C
 	_ = os.MkdirAll(filepath.Dir(logPath), 0o755)
 	startUs, started := c.Us(), c.NowISO()
@@ -101,7 +108,7 @@ func (h *Host) TimedLog(name, logPath string, split bool, cold string, history b
 	if timeout > 0 {
 		ctx, cancel = context.WithTimeout(c.Ctx, timeout)
 	}
-	rc := c.R.Run(ctx, sys.Cmd{Argv: argv, Env: c.Env, Stdout: ow, Stderr: ew})
+	rc := runIt(ctx, ow, ew)
 	timedOut := ctx.Err() == context.DeadlineExceeded
 	cancel()
 	_ = ow.Close()
@@ -313,9 +320,11 @@ func (h *Host) podRun(cmd string, rest []string) int {
 	argv = append(argv, "-w", "/work", h.Image)
 	argv = append(argv, inner...)
 	if cmd == "shell" && runDir != "" { // shell -c: output to the terminal and to the run's shell.log
-		return h.TimedLog("shell", filepath.Join(runDir, "shell.log"), true, "false", true, argv)
+		return h.timedLog("shell", filepath.Join(runDir, "shell.log"), true, "false", true, func(ctx context.Context, stdout, stderr io.Writer) int {
+			return h.runPodman(ctx, argv, name, false, stdout, stderr)
+		})
 	}
-	return h.runPodman(argv, name, tty)
+	return h.runPodman(context.Background(), argv, name, tty, c.ChildOut, c.ChildErr)
 }
 
 func (h *Host) signingPaths() (dir, envFile string) {
@@ -335,19 +344,29 @@ func orDefault(s, d string) string {
 }
 
 // runPodman runs the container. SIGINT/SIGTERM on the host stop the container (`podman stop -t 10`), which --init reaps.
-func (h *Host) runPodman(argv []string, name string, tty bool) int {
+func (h *Host) runPodman(outer context.Context, argv []string, name string, tty bool, stdout, stderr io.Writer) int {
 	c := h.C
-	cmd := sys.Cmd{Argv: argv, Env: c.Env, Stdout: c.ChildOut, Stderr: c.ChildErr}
+	cmd := sys.Cmd{Argv: argv, Env: c.Env, Stdout: stdout, Stderr: stderr}
 	if tty {
 		cmd.Stdin, cmd.Foreground = os.Stdin, true
 	}
 	sigs, stop := h.Signals()
 	defer stop()
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background()) // not outer: a signal or timeout stops the container first
 	defer cancel()
 	done := make(chan int, 1)
 	go func() { done <- c.R.Run(ctx, cmd) }()
 	select {
+	case <-outer.Done(): // the step's own time limit: same as a signal
+		c.R.Run(context.Background(), sys.Cmd{Argv: []string{"podman", "stop", "-t", "10", name}, Env: c.Env})
+		select {
+		case <-done:
+		case <-time.After(20 * time.Second):
+			cancel()
+			c.R.Run(context.Background(), sys.Cmd{Argv: []string{"podman", "rm", "-f", name}, Env: c.Env})
+			<-done
+		}
+		return 143
 	case rc := <-done:
 		return rc
 	case sig := <-sigs:

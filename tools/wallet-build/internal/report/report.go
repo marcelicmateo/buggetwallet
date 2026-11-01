@@ -98,6 +98,38 @@ func readObjs(path string) []Obj {
 	return out
 }
 
+// readTestObjs reads history/tests.jsonl (hundreds of MB) with the fast decoder: only the fields `trend` uses.
+func readTestObjs(path string) []Obj {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	var out []Obj
+	r := bufio.NewReaderSize(f, 1<<20)
+	for {
+		line, err := r.ReadBytes('\n')
+		if len(line) > 1 {
+			var row struct {
+				TS    string      `json:"ts"`
+				Run   string      `json:"run"`
+				Suite string      `json:"suite"`
+				Test  string      `json:"test"`
+				MS    json.Number `json:"ms"`
+			}
+			d := json.NewDecoder(strings.NewReader(string(line)))
+			d.UseNumber()
+			if d.Decode(&row) == nil && row.Run != "" {
+				out = append(out, Obj{{"ts", row.TS}, {"run", row.Run}, {"suite", row.Suite}, {"test", row.Test}, {"ms", row.MS}})
+			}
+		}
+		if err != nil {
+			break
+		}
+	}
+	return out
+}
+
 func get(o Obj, k string) any { v, _ := o.Get(k); return v }
 
 func str(o Obj, k, def string) string {
@@ -772,7 +804,7 @@ type TrendOpts struct {
 // Trend is `build_log.py trend`: the slowest tests over the last runs.
 func (c Config) Trend(o TrendOpts) {
 	var hist []Obj
-	for _, r := range readObjs(c.tests()) {
+	for _, r := range readTestObjs(c.tests()) {
 		if o.Step == "" || str(r, "suite", "") == o.Step {
 			hist = append(hist, r)
 		}

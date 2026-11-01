@@ -57,6 +57,18 @@ func TestSecsSinceTruncates(t *testing.T) {
 	}
 }
 
+// timing.sh exports BW_DATA_DIR; without it the container (another HOME) would write its history somewhere else.
+func TestDataDirIsExported(t *testing.T) {
+	c := New("/x/wt", sys.Env{"HOME=/home/u", "XDG_DATA_HOME=/xdg"}, io.Discard, io.Discard, &sys.Fake{})
+	if c.Data != "/xdg/budget-wallet" || c.Env.Get("BW_DATA_DIR") != "/xdg/budget-wallet" {
+		t.Errorf("data %s env %s", c.Data, c.Env.Get("BW_DATA_DIR"))
+	}
+	c = New("/x/wt", sys.Env{"HOME=/home/u"}, io.Discard, io.Discard, &sys.Fake{})
+	if c.Data != "/home/u/.local/share/budget-wallet" {
+		t.Errorf("data %s", c.Data)
+	}
+}
+
 func TestNowISO(t *testing.T) {
 	c := newCtx(t)
 	if got := c.NowISO(); got != "2026-11-01T10:13:28+01:00" {
