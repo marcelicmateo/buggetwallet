@@ -952,7 +952,7 @@ class WalletController extends ChangeNotifier {
               final merchSeen = <String>{};
               for (final t in txs) {
                 if (monthOf(t.date) != month) continue;
-                if (t.kind == BudgetKind.flex && t.amount < 0) {
+                if (t.kind == BudgetKind.flex && t.amount < 0 && t.tx.currency == currency) {
                   final k = merchantName(t.tx);
                   final (n, v) = merch[k] ?? (0, 0);
                   merch[k] = (merchSeen.add('${t.tx.id}|$k') ? n + 1 : n, v - t.amount); // orders, not parts

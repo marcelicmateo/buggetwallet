@@ -291,6 +291,14 @@ void main() {
   });
 
   group('JPY payment row', () {
+    test('a row in another currency without a rate is not a "top place" of the wallet currency', () {
+      final wc = wallet();
+      addRows(wc, 'JPY', 2, start: 10);
+      expect(wc.spending('2026-10').topPlaces, isEmpty, reason: 'it is "not counted", so it is not listed as euros either');
+      wc.setFxRate('JPY', 6500);
+      expect(wc.spending('2026-10').topPlaces, isNotEmpty, reason: 'with a rate it counts, converted');
+    });
+
     testWidgets('no decimals, yen sign, signed', (t) async {
       final wc = wallet();
       addRows(wc, 'JPY', 1);
