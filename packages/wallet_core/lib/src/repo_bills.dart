@@ -126,8 +126,8 @@ extension WalletRepoBills on WalletRepo {
     return (id, isNew);
   }
 
-  /// Changes the given fields only (null = unchanged); the clear flags set those to none. A bad date, a total ≤ 0 or
-  /// items past the limits: [ArgumentError]. A confirmed bill's planned row follows ([_billWrites]). An update of the
+  /// Changes the given fields only (null = unchanged); the clear flags set those to none: a thin wrapper over [patch]
+  /// (F1; the flags go in F2). A bad date, a total ≤ 0 or items past the limits: `ArgumentError('<label>: <reason>')`. A confirmed bill's planned row follows ([_billWrites]). An update of the
   /// due date, total or category that leaves a confirmed, unpaid bill with a total and a due date from today on
   /// without a category: [ArgumentError] (its planned row would reserve money, and only the category tells whether the
   /// payday plan already holds it). Other edits (note, payee, dates of warranty or return …) never throw for it (BILLS_API.md §3).
@@ -154,47 +154,29 @@ extension WalletRepoBills on WalletRepo {
       int? warrantyReminderDays,
       bool clearReturnReminderDays = false,
       bool clearWarrantyReminderDays = false}) {
-    for (final d in [date, dueDate, warrantyUntil, returnBy]) {
-      if (d != null && !_okDate(d)) throw ArgumentError('Bad date.');
-    }
-    if (returnReminderDays != null && (returnReminderDays < 0 || returnReminderDays > WalletSettings.maxReturnReminderDays)) {
-      throw ArgumentError('Remind 0 to ${WalletSettings.maxReturnReminderDays} days before the return date.');
-    }
-    if (warrantyReminderDays != null && (warrantyReminderDays < 0 || warrantyReminderDays > WalletSettings.maxWarrantyReminderDays)) {
-      throw ArgumentError('Remind 0 to ${WalletSettings.maxWarrantyReminderDays} days before the warranty ends.');
-    }
-    if (total != null && !_okTotal(total)) throw ArgumentError('Bad amount.');
-    final itemsText = items == null ? null : encodeBillItems(items);
-    if (items != null && itemsText == null) throw ArgumentError('Too many items or a name too long.');
-    final b = _liveBill(id);
-    final fields = <String, Object?>{
-      if (date != null) 'date': date,
-      if (clearDueDate) 'due_date': null else if (dueDate != null) 'due_date': dueDate,
-      if (total != null) 'total': total,
-      if (payee != null) 'payee': payee,
-      if (iban != null) 'iban': iban,
-      if (reference != null) 'reference': reference,
-      if (description != null) 'description': description,
-      if (clearCategory) 'category': null else if (category != null) 'category': category,
-      if (note != null) 'note': note,
-      if (itemsText != null) 'items': itemsText,
-      if (clearWarranty) 'warranty_until': null else if (warrantyUntil != null) 'warranty_until': warrantyUntil,
-      if (clearReturnBy) 'return_by': null else if (returnBy != null) 'return_by': returnBy,
+    patch(BillCols.entity, id, {
+      if (date != null) BillCols.date: date,
+      if (clearDueDate) BillCols.dueDate: clearValue else if (dueDate != null) BillCols.dueDate: dueDate,
+      if (total != null) BillCols.total: total,
+      if (payee != null) BillCols.payee: payee,
+      if (iban != null) BillCols.iban: iban,
+      if (reference != null) BillCols.reference: reference,
+      if (description != null) BillCols.description: description,
+      if (clearCategory) BillCols.category: clearValue else if (category != null) BillCols.category: category,
+      if (note != null) BillCols.note: note,
+      if (items != null)
+        BillCols.items: encodeBillItems(items) ?? (throw ArgumentError('${BillCols.items.label}: Too many items or a name too long.')),
+      if (clearWarranty) BillCols.warrantyUntil: clearValue else if (warrantyUntil != null) BillCols.warrantyUntil: warrantyUntil,
+      if (clearReturnBy) BillCols.returnBy: clearValue else if (returnBy != null) BillCols.returnBy: returnBy,
       if (clearReturnReminderDays)
-        'return_reminder_days': null
+        BillCols.returnReminderDays: clearValue
       else if (returnReminderDays != null)
-        'return_reminder_days': returnReminderDays,
+        BillCols.returnReminderDays: returnReminderDays,
       if (clearWarrantyReminderDays)
-        'warranty_reminder_days': null
+        BillCols.warrantyReminderDays: clearValue
       else if (warrantyReminderDays != null)
-        'warranty_reminder_days': warrantyReminderDays,
-    };
-    if (fields.isEmpty) return;
-    // Only an edit that changes the reserve (due date, total, category) is held to the category rule; a note,
-    // payee or warranty edit on a bill without one (confirmed before categories were asked for, or reopened) still saves: such a bill's
-    // planned row is listed, not reserved ([PlannedCost.needsCategory]), so nothing counts twice either way.
-    _write(_billWrites(b, fields, _today(), needCategory: fields.keys.any(_billReserveFields.contains)));
-    logEvent(_log, Level.INFO, 'bills.update', {'fields': fields.length});
+        BillCols.warrantyReminderDays: warrantyReminderDays,
+    });
   }
 
   /// P16b: attaches [file] (a photo or PDF, one of [attachmentTypes]) to payment [txId] and returns the new attachment's id.

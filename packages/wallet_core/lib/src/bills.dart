@@ -6,6 +6,7 @@ import 'package:cryptography/dart.dart' show DartSha256;
 import 'package:wallet_importer/wallet_importer.dart' show BillItem, BillSource;
 
 import 'categories.dart' show BudgetKind, CategoryTable, merchantKey;
+import 'cols.dart';
 import 'dates.dart';
 import 'models.dart';
 import 'search.dart' show foldText;
@@ -43,66 +44,164 @@ const maxAttachmentsPerTx = 5;
 /// Limits of a bill's item list (stored as JSON text in `bills.items`).
 const maxBillItems = 500, maxBillItemName = 200;
 
+/// The columns of the synced entity `bill` (table `bills`), in table order: one line per column gives its DDL, sync
+/// type check, snapshot, search, `WalletRepo.patch` validation and its label ([Col]).
+abstract final class BillCols {
+  static const entity = 'bill';
+  static const source = EnumCol(entity, 'source', label: 'Source', values: BillSource.values, defaultValue: BillSource.manual);
+  static const status = EnumCol(entity, 'status', label: 'Status', values: BillStatus.values, defaultValue: BillStatus.review);
+  static const externalId = TextCol(entity, 'external_id', label: 'Code', nullable: true);
+  static const date = DateCol(entity, 'date', label: 'Date', nullable: true);
+  static const dueDate = DateCol(entity, 'due_date', label: 'Due date', nullable: true);
+  static const payee = TextCol(entity, 'payee', label: 'Payee', nullable: true, searchable: true);
+  static const iban = TextCol(entity, 'iban', label: 'IBAN', nullable: true);
+  static const reference = TextCol(entity, 'reference', label: 'Reference', nullable: true);
+  static const description = TextCol(entity, 'description', label: 'Description', nullable: true, searchable: true);
+  static const category = TextCol(entity, 'category', label: 'Category', nullable: true);
+  static const note = TextCol(entity, 'note', label: 'Note', nullable: true);
+  static const total = MoneyCol(entity, 'total', label: 'Total', nullable: true, searchable: true, positive: true);
+  static const currency = TextCol(entity, 'currency', label: 'Currency', defaultValue: 'EUR');
+  static const items = JsonCol(entity, 'items', label: 'Items', defaultValue: '[]', check: billItemsProblem);
+  static const unsure = IntCol(entity, 'unsure', label: 'Unsure fields', defaultValue: 0);
+  static const linkedTx = RefCol(entity, 'linked_tx', label: 'Payment', target: 'tx', nullable: true);
+  static const warrantyUntil = DateCol(entity, 'warranty_until', label: 'Warranty until', nullable: true);
+  static const returnBy = DateCol(entity, 'return_by', label: 'Return by', nullable: true);
+  static const blob = TextCol(entity, 'blob', label: 'File', nullable: true);
+  static const blobType = TextCol(entity, 'blob_type', label: 'File type', nullable: true);
+  static const blobBytes = IntCol(entity, 'blob_bytes', label: 'File size', nullable: true);
+  static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
+  // v16 (P16b): the payment an attachment belongs to; `linked_tx` stays null for attachments, so builds before P16b
+  // never take one for the bill that paid a row. No index: the DDL (with its indexes) runs before the column migration
+  // adds this column to an existing table.
+  static const attachedTx = RefCol(entity, 'attached_tx', label: 'Attached to', target: 'tx', nullable: true);
+  // v20 (UX-A): this bill's own reminder days before its return-by / warranty date; null = the wallet setting.
+  static const returnReminderDays = IntCol(entity, 'return_reminder_days',
+      label: 'Return reminder', nullable: true, min: 0, max: WalletSettings.maxReturnReminderDays, unit: 'days before');
+  static const warrantyReminderDays = IntCol(entity, 'warranty_reminder_days',
+      label: 'Warranty reminder', nullable: true, min: 0, max: WalletSettings.maxWarrantyReminderDays, unit: 'days before');
+
+  static const all = <Col>[
+    source, status, externalId, date, dueDate, payee, iban, reference, description, category, note, total, currency, //
+    items, unsure, linkedTx, warrantyUntil, returnBy, blob, blobType, blobBytes, deleted, attachedTx, //
+    returnReminderDays, warrantyReminderDays,
+  ];
+}
+
+/// Why a stored item list ([BillCols.items]) is refused: null when [text] is a list within the limits.
+String? billItemsProblem(String text) {
+  final items = decodeBillItems(text);
+  return items == null || encodeBillItems(items) == null ? 'Too many items or a name too long.' : null;
+}
+
 /// A bill (receipt, payment slip, e-invoice, PDF or photo), synced entity `bill` (schema 7). Amounts are cents,
 /// positive = what the bill asks. Bills are information: linking one never changes the paying row's category.
-class Bill {
+/// Backed by its stored row: the getters read through [BillCols] ([Col.read]: an unknown `source`/`status` word reads
+/// as manual/review, a damaged item list as empty, a bad date or reminder count as none); `bill[col]` reads any column.
+class Bill extends RowModel {
+  Bill._(super.row);
+
+  /// A bill from its values (tests, previews); stored rows come through [fromRow].
+  factory Bill({
+    required String id,
+    BillSource source = BillSource.manual,
+    BillStatus status = BillStatus.review,
+    String? externalId,
+    String? date,
+    String? dueDate,
+    String? payee,
+    String? iban,
+    String? reference,
+    String? description,
+    String? category,
+    String? note,
+    int? total,
+    String currency = 'EUR',
+    List<BillItem> items = const [],
+    int unsure = 0,
+    String? linkedTx,
+    String? attachedTx,
+    String? warrantyUntil,
+    String? returnBy,
+    int? returnReminderDays,
+    int? warrantyReminderDays,
+    String? blob,
+    String? blobType,
+    int? blobBytes,
+    bool deleted = false,
+  }) =>
+      Bill._({
+        'id': id,
+        'source': source.name,
+        'status': status.name,
+        'external_id': externalId,
+        'date': date,
+        'due_date': dueDate,
+        'payee': payee,
+        'iban': iban,
+        'reference': reference,
+        'description': description,
+        'category': category,
+        'note': note,
+        'total': total,
+        'currency': currency,
+        'items': encodeBillItems(items) ?? items, // a list past the limits stays a list (read back as given)
+        'unsure': unsure,
+        'linked_tx': linkedTx,
+        'attached_tx': attachedTx,
+        'warranty_until': warrantyUntil,
+        'return_by': returnBy,
+        'return_reminder_days': returnReminderDays,
+        'warranty_reminder_days': warrantyReminderDays,
+        'blob': blob,
+        'blob_type': blobType,
+        'blob_bytes': blobBytes,
+        'deleted': deleted ? 1 : 0,
+      });
+
+  /// A stored row (a map as `SELECT *` gives it); the map is copied.
+  static Bill fromRow(Map<String, Object?> r) => Bill._(Map.of(r));
+
   /// `bill:<32 hex of SHA-256(externalId)>` when [externalId] is known (devices converge on one bill), else `b…`.
-  final String id;
-  final BillSource source;
-  final BillStatus status;
-  final String? externalId, date, dueDate, payee, iban, reference, description, category, note;
-  final int? total;
-  final String currency;
-  final List<BillItem> items;
+  String get id => row['id'] as String;
+  BillSource get source => BillCols.source.read(row)!;
+  BillStatus get status => BillCols.status.read(row)!;
+  String? get externalId => BillCols.externalId.read(row);
+  String? get date => BillCols.date.read(row);
+  String? get dueDate => BillCols.dueDate.read(row);
+  String? get payee => BillCols.payee.read(row);
+  String? get iban => BillCols.iban.read(row);
+  String? get reference => BillCols.reference.read(row);
+  String? get description => BillCols.description.read(row);
+  String? get category => BillCols.category.read(row);
+  String? get note => BillCols.note.read(row);
+  int? get total => BillCols.total.read(row);
+  String get currency => BillCols.currency.read(row)!;
+
+  /// The item list; a damaged one reads as empty. A bill made with [Bill.new] holds its list as given.
+  List<BillItem> get items => switch (row['items']) { final List<BillItem> l => l, final v => decodeBillItems(v) ?? const [] };
 
   /// Fields the reader guessed from free text (PDF text, OCR): the UI marks the bill as unsure while > 0.
-  final int unsure;
+  int get unsure => BillCols.unsure.read(row)!;
 
   /// The payment: a bank row or a hand-added expense ([WalletRepo.linkBill], [WalletRepo.addExpenseFromBill]). Null
   /// for an attachment (its payment is [attachedTx]).
-  final String? linkedTx;
+  String? get linkedTx => BillCols.linkedTx.read(row);
 
   /// The payment an attachment (P16b, [isAttachment]) belongs to; null for every other bill.
-  final String? attachedTx;
-  final String? warrantyUntil, returnBy;
+  String? get attachedTx => BillCols.attachedTx.read(row);
+  String? get warrantyUntil => BillCols.warrantyUntil.read(row);
+  String? get returnBy => BillCols.returnBy.read(row);
 
   /// This bill's own reminder days before [returnBy] / [warrantyUntil] (UX-A, 0..[WalletSettings.maxReturnReminderDays] /
   /// 0..[WalletSettings.maxWarrantyReminderDays]); null = the wallet setting ([effectiveReturnReminderDays]).
-  final int? returnReminderDays, warrantyReminderDays;
+  int? get returnReminderDays => BillCols.returnReminderDays.read(row);
+  int? get warrantyReminderDays => BillCols.warrantyReminderDays.read(row);
 
   /// The bill's file on the relay ([BlobRef.hash]), its type and plain size.
-  final String? blob, blobType;
-  final int? blobBytes;
-  final bool deleted;
-
-  const Bill({
-    required this.id,
-    this.source = BillSource.manual,
-    this.status = BillStatus.review,
-    this.externalId,
-    this.date,
-    this.dueDate,
-    this.payee,
-    this.iban,
-    this.reference,
-    this.description,
-    this.category,
-    this.note,
-    this.total,
-    this.currency = 'EUR',
-    this.items = const [],
-    this.unsure = 0,
-    this.linkedTx,
-    this.attachedTx,
-    this.warrantyUntil,
-    this.returnBy,
-    this.returnReminderDays,
-    this.warrantyReminderDays,
-    this.blob,
-    this.blobType,
-    this.blobBytes,
-    this.deleted = false,
-  });
+  String? get blob => BillCols.blob.read(row);
+  String? get blobType => BillCols.blobType.read(row);
+  int? get blobBytes => BillCols.blobBytes.read(row);
+  bool get deleted => BillCols.deleted.read(row)!;
 
   /// Linked to its payment; an attachment always (it is a record of its payment, [attachedTx]).
   bool get paid => linkedTx != null || isAttachment;
@@ -119,42 +218,7 @@ class Bill {
 
   /// The id of the bill with [externalId], the same on every device.
   static String idFor(String externalId) => 'bill:${sha256Hex(utf8.encode(externalId)).substring(0, 32)}';
-
-  /// Unknown `source`/`status` words (a newer build) read as manual/review; a damaged item list reads as empty.
-  static Bill fromRow(Map<String, Object?> r) => Bill(
-        id: r['id'] as String,
-        source: BillSource.values.asNameMap()[r['source']] ?? BillSource.manual,
-        status: BillStatus.values.asNameMap()[r['status']] ?? BillStatus.review,
-        externalId: _s(r['external_id']),
-        date: _s(r['date']),
-        dueDate: _s(r['due_date']),
-        payee: _s(r['payee']),
-        iban: _s(r['iban']),
-        reference: _s(r['reference']),
-        description: _s(r['description']),
-        category: _s(r['category']),
-        note: _s(r['note']),
-        total: _i(r['total']),
-        currency: _s(r['currency']) ?? 'EUR',
-        items: decodeBillItems(r['items']) ?? const [],
-        unsure: _i(r['unsure']) ?? 0,
-        linkedTx: _s(r['linked_tx']),
-        attachedTx: _s(r['attached_tx']),
-        warrantyUntil: _s(r['warranty_until']),
-        returnBy: _s(r['return_by']),
-        returnReminderDays: _days(r['return_reminder_days'], WalletSettings.maxReturnReminderDays),
-        warrantyReminderDays: _days(r['warranty_reminder_days'], WalletSettings.maxWarrantyReminderDays),
-        blob: _s(r['blob']),
-        blobType: _s(r['blob_type']),
-        blobBytes: _i(r['blob_bytes']),
-        deleted: r['deleted'] == 1,
-      );
 }
-
-String? _s(Object? v) => v is String ? v : null;
-
-/// A stored reminder-day count within 0..[max]; anything else (a damaged or synced bad value) reads as none.
-int? _days(Object? v, int max) => v is int && v >= 0 && v <= max ? v : null;
 
 /// The days before [b]'s return-by date its reminder comes (UX-A): the bill's own [Bill.returnReminderDays], else the
 /// wallet setting [WalletSettings.returnReminderDays].
@@ -162,7 +226,6 @@ int effectiveReturnReminderDays(Bill b, WalletSettings s) => b.returnReminderDay
 
 /// The days before [b]'s warranty end its reminder comes: [Bill.warrantyReminderDays], else the wallet setting.
 int effectiveWarrantyReminderDays(Bill b, WalletSettings s) => b.warrantyReminderDays ?? s.warrantyReminderDays;
-int? _i(Object? v) => v is int ? v : null;
 String? _nonEmpty(String? s) => s == null || s.trim().isEmpty ? null : s;
 
 /// Lowercase hex SHA-256 of [bytes] (synchronous, pure Dart).

@@ -102,7 +102,7 @@ void main() {
       final bs = accountBalances([
         _acc('b2', source: null, opening: 700),
         _acc('b1', source: null, opening: 100),
-        const Account(id: 'b0', name: 'gone', currency: 'EUR', opening: 5, openingDate: '2026-09-30', deleted: true),
+        Account(id: 'b0', name: 'gone', currency: 'EUR', opening: 5, openingDate: '2026-09-30', deleted: true),
       ], [
         _tx('m1', '2026-10-02', -50, source: 'manual', manual: true),
       ]);

@@ -8,6 +8,7 @@
 import 'dart:io';
 
 import 'package:test/test.dart';
+import 'package:wallet_core/src/schema.dart' show entitySchema, schemaSql;
 import 'package:wallet_core/wallet_core.dart';
 
 const _now = 1791590400000; // 2026-10-10 00:00 UTC

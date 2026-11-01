@@ -32,6 +32,8 @@ export 'src/bills.dart'
     show
         attachmentTypes,
         Bill,
+        BillCols,
+        billItemsProblem,
         billCandidates,
         billCoveredBy,
         billLinkTokens,
@@ -117,6 +119,7 @@ export 'src/categories.dart'
         rollUp,
         spendingCategories;
 export 'src/changes.dart' show ChangeEntry;
+export 'src/cols.dart' show clearValue, Col, DateCol, EnumCol, FlagCol, IntCol, JsonCol, MoneyCol, RefCol, RowModel, TextCol;
 export 'src/currencies.dart'
     show
         allCurrencies,
@@ -207,6 +210,7 @@ export 'src/matching.dart' show encodeMatchOff, MatchPlan, matchOffIds, maxMatch
 export 'src/models.dart'
     show
         Account,
+        AccountCols,
         AccountKind,
         BuiltInRuleOverride,
         CategorizedTx,
@@ -265,6 +269,7 @@ export 'src/repo.dart'
         WalletRepoIou,
         WalletRepoMatch,
         WalletRepoMeta,
+        WalletRepoPatch,
         WalletRepoPlanned,
         WalletRepoRecurring,
         WalletRepoSettings,

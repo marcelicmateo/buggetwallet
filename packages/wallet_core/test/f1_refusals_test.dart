@@ -33,8 +33,7 @@ void main() {
   tearDown(() => repo.close());
 
   Object snapshot() => [
-        for (final t in ['outbox', 'bills', 'accounts', 'planned', 'clocks'])
-          repo.db.select('SELECT * FROM $t').map((r) => Map.of(r)).toList(),
+        for (final t in ['outbox', 'bills', 'accounts', 'planned', 'clocks']) repo.db.select('SELECT * FROM $t').map(Map.of).toList(),
       ];
 
   String idOf(String entity) => entity == 'bill' ? billId : accId;
@@ -42,49 +41,49 @@ void main() {
 
   final bad = <_Bad>[
     // DateCol
-    _Bad('date: day 30 of February', 'bill', BillCols.date, '2026-02-30'),
-    _Bad('date: month 13', 'bill', BillCols.date, '2026-13-01'),
-    _Bad('date: not zero padded', 'bill', BillCols.date, '2026-1-5'),
-    _Bad('date: empty text', 'bill', BillCols.date, ''),
-    _Bad('date: a number', 'bill', BillCols.date, 20261001),
-    _Bad('due date: words', 'bill', BillCols.dueDate, 'tomorrow'),
-    _Bad('warranty until: month 0', 'bill', BillCols.warrantyUntil, '2026-00-10'),
-    _Bad('return by: day-first', 'bill', BillCols.returnBy, '10.11.2026'),
-    _Bad('opening date: day 31 of November', 'account', AccountCols.openingDate, '2026-11-31'),
-    _Bad('opening date: after today', 'account', AccountCols.openingDate, '2026-12-01'),
+    const _Bad('date: day 30 of February', 'bill', BillCols.date, '2026-02-30'),
+    const _Bad('date: month 13', 'bill', BillCols.date, '2026-13-01'),
+    const _Bad('date: not zero padded', 'bill', BillCols.date, '2026-1-5'),
+    const _Bad('date: empty text', 'bill', BillCols.date, ''),
+    const _Bad('date: a number', 'bill', BillCols.date, 20261001),
+    const _Bad('due date: words', 'bill', BillCols.dueDate, 'tomorrow'),
+    const _Bad('warranty until: month 0', 'bill', BillCols.warrantyUntil, '2026-00-10'),
+    const _Bad('return by: day-first', 'bill', BillCols.returnBy, '10.11.2026'),
+    const _Bad('opening date: day 31 of November', 'account', AccountCols.openingDate, '2026-11-31'),
+    const _Bad('opening date: after today', 'account', AccountCols.openingDate, '2026-12-01'),
     // IntCol
-    _Bad('return reminder: above 30', 'bill', BillCols.returnReminderDays, 31),
-    _Bad('return reminder: below 0', 'bill', BillCols.returnReminderDays, -1),
-    _Bad('return reminder: text', 'bill', BillCols.returnReminderDays, '7'),
-    _Bad('return reminder: fraction', 'bill', BillCols.returnReminderDays, 3.5),
-    _Bad('warranty reminder: above 90', 'bill', BillCols.warrantyReminderDays, 91),
-    _Bad('warranty reminder: below 0', 'bill', BillCols.warrantyReminderDays, -1),
+    const _Bad('return reminder: above 30', 'bill', BillCols.returnReminderDays, 31),
+    const _Bad('return reminder: below 0', 'bill', BillCols.returnReminderDays, -1),
+    const _Bad('return reminder: text', 'bill', BillCols.returnReminderDays, '7'),
+    const _Bad('return reminder: fraction', 'bill', BillCols.returnReminderDays, 3.5),
+    const _Bad('warranty reminder: above 90', 'bill', BillCols.warrantyReminderDays, 91),
+    const _Bad('warranty reminder: below 0', 'bill', BillCols.warrantyReminderDays, -1),
     // MoneyCol
-    _Bad('total: over the cap', 'bill', BillCols.total, WalletSettings.maxAmount + 1),
-    _Bad('total: text', 'bill', BillCols.total, '45.99'),
-    _Bad('total: fraction', 'bill', BillCols.total, 45.99),
-    _Bad('total: bool', 'bill', BillCols.total, true),
-    _Bad('opening: over the cap', 'account', AccountCols.opening, WalletSettings.maxAmount + 1),
-    _Bad('opening: below minus the cap', 'account', AccountCols.opening, -WalletSettings.maxAmount - 1),
-    _Bad('opening: text', 'account', AccountCols.opening, 'x'),
+    const _Bad('total: over the cap', 'bill', BillCols.total, WalletSettings.maxAmount + 1),
+    const _Bad('total: text', 'bill', BillCols.total, '45.99'),
+    const _Bad('total: fraction', 'bill', BillCols.total, 45.99),
+    const _Bad('total: bool', 'bill', BillCols.total, true),
+    const _Bad('opening: over the cap', 'account', AccountCols.opening, WalletSettings.maxAmount + 1),
+    const _Bad('opening: below minus the cap', 'account', AccountCols.opening, -WalletSettings.maxAmount - 1),
+    const _Bad('opening: text', 'account', AccountCols.opening, 'x'),
     // EnumCol
-    _Bad('kind: unknown wire name', 'account', AccountCols.kind, 'martian'),
-    _Bad('kind: a number', 'account', AccountCols.kind, 3),
-    _Bad('status: unknown wire name', 'bill', BillCols.status, 'martian'),
-    _Bad('status: a number', 'bill', BillCols.status, 7),
+    const _Bad('kind: unknown wire name', 'account', AccountCols.kind, 'martian'),
+    const _Bad('kind: a number', 'account', AccountCols.kind, 3),
+    const _Bad('status: unknown wire name', 'bill', BillCols.status, 'martian'),
+    const _Bad('status: a number', 'bill', BillCols.status, 7),
     // TextCol
-    _Bad('payee: a number', 'bill', BillCols.payee, 5),
-    _Bad('note: a list', 'bill', BillCols.note, ['a']),
+    const _Bad('payee: a number', 'bill', BillCols.payee, 5),
+    const _Bad('note: a list', 'bill', BillCols.note, ['a']),
     _Bad('name: too long', 'account', AccountCols.name, longText),
-    _Bad('name: a number', 'account', AccountCols.name, 5),
+    const _Bad('name: a number', 'account', AccountCols.name, 5),
     _Bad('institution: too long', 'account', AccountCols.institution, longText),
     // non-nullable: null and clearValue
-    _Bad('name: null', 'account', AccountCols.name, null),
-    _Bad('name: clearValue', 'account', AccountCols.name, clearValue),
-    _Bad('opening: clearValue', 'account', AccountCols.opening, clearValue),
-    _Bad('opening date: clearValue', 'account', AccountCols.openingDate, clearValue),
-    _Bad('status: null', 'bill', BillCols.status, null),
-    _Bad('status: clearValue', 'bill', BillCols.status, clearValue),
+    const _Bad('name: null', 'account', AccountCols.name, null),
+    const _Bad('name: clearValue', 'account', AccountCols.name, clearValue),
+    const _Bad('opening: clearValue', 'account', AccountCols.opening, clearValue),
+    const _Bad('opening date: clearValue', 'account', AccountCols.openingDate, clearValue),
+    const _Bad('status: null', 'bill', BillCols.status, null),
+    const _Bad('status: clearValue', 'bill', BillCols.status, clearValue),
   ];
 
   Matcher refusedNaming(Col c) => throwsA(isA<ArgumentError>().having((e) => e.toString(), 'message', contains(c.label)));
@@ -101,14 +100,14 @@ void main() {
       test('${b.name} (between two valid values)', () {
         final candidates = b.entity == 'bill'
             ? <MapEntry<Col, Object?>>[
-                MapEntry(BillCols.note, 'fine'),
-                MapEntry(BillCols.category, 'Groceries'),
-                MapEntry(BillCols.payee, 'Fine'),
+                const MapEntry(BillCols.note, 'fine'),
+                const MapEntry(BillCols.category, 'Groceries'),
+                const MapEntry(BillCols.payee, 'Fine'),
               ]
             : <MapEntry<Col, Object?>>[
-                MapEntry(AccountCols.institution, 'Fine'),
-                MapEntry(AccountCols.name, 'Fine'),
-                MapEntry(AccountCols.opening, 1234),
+                const MapEntry(AccountCols.institution, 'Fine'),
+                const MapEntry(AccountCols.name, 'Fine'),
+                const MapEntry(AccountCols.opening, 1234),
               ];
         final valid = candidates.where((e) => e.key != b.col).take(2).toList();
         final values = <Col, Object?>{valid[0].key: valid[0].value, b.col: b.value, valid[1].key: valid[1].value};

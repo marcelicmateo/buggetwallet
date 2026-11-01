@@ -267,7 +267,7 @@ void main() {
     });
 
     test('5: suggestBillCategory never takes an income\'s category; bill history shows an income\'s landed months', () {
-      const slip = Bill(id: 'b1', payee: 'Zorblex Gig', date: '2026-03-01', total: 900, currency: 'EUR');
+      final slip = Bill(id: 'b1', payee: 'Zorblex Gig', date: '2026-03-01', total: 900, currency: 'EUR');
       final b = inc('2026-03-22', 25000);
       expect(suggestBillCategory(slip, recurring: [b], txs: const []), isNot('Extra income'));
       final rows = [

@@ -266,7 +266,7 @@ void main() {
     });
 
     test('suggestBillCategory skips a recurring bill whose category is deleted', () {
-      const slip = Bill(id: 'b1', payee: 'SYNTHETIC CLUB');
+      final slip = Bill(id: 'b1', payee: 'SYNTHETIC CLUB');
       final key = billPayeeKey(slip)!;
       final rec = [_bill(key, _fixed, 1000)];
       expect(suggestBillCategory(slip, recurring: rec, txs: const [], table: _table), _fixed);
