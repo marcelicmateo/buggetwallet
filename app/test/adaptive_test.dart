@@ -106,13 +106,14 @@ void main() {
   group('Today columns', () {
     Rect rectOf(WidgetTester tester, String key) => tester.getRect(find.byKey(ValueKey(key)));
 
-    testWidgets('1280: four tile columns, the first tile sits right of the hero at the top', (tester) async {
+    testWidgets('1280: four tile columns, the hero is one short row across all of them', (tester) async {
       await pumpFull(tester, demoWallet(clock: pinnedNoon), 1.0, size: const Size(1280, 800));
       final hero = rectOf(tester, 'heroTile');
       final tiles = find.byType(Tile);
-      final beside = [for (var i = 0; i < tiles.evaluate().length; i++) tester.getRect(tiles.at(i))]
-          .where((r) => r.left >= hero.right - 1 && (r.top - hero.top).abs() < 2);
-      expect(beside, isNotEmpty);
+      final rects = [for (var i = 0; i < tiles.evaluate().length; i++) tester.getRect(tiles.at(i))];
+      expect(rects.any((r) => r.width < hero.width / 3), isTrue, reason: 'a tile a quarter of the hero wide: four columns');
+      expect(rects.where((r) => r != hero && r.top < hero.bottom - 1), isEmpty, reason: 'nothing beside the hero');
+      expect(hero.height, lessThan(hero.width / 3));
     });
 
     testWidgets('800: two tile columns, the hero spans both and the number tiles sit below it', (tester) async {

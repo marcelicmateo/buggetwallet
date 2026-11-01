@@ -342,15 +342,20 @@ void main() {
     final today = todayIso();
     final wc = await Harness.start(t, settings: {'salary': 200000, 'salaryConfirmed': true, 'periodStart': addDays(today, -10)});
     final chip = find.byKey(const ValueKey('periodChip')), badge = find.byKey(const ValueKey('periodBadgeTap'));
-    await tapVisible(t, chip.evaluate().isNotEmpty ? chip : badge);
-    await t.pumpAndSettle();
     final button = find.byKey(const ValueKey('startNewMonth'));
-    await tapVisible(t, button);
-    await t.pumpAndSettle();
+    Future<void> openPage() async {
+      await tapVisible(t, chip.evaluate().isNotEmpty ? chip : badge);
+      await t.pumpAndSettle();
+      await tapVisible(t, button);
+      await t.pumpAndSettle();
+    }
+
+    await openPage();
     expect(find.byType(DatePickerDialog), findsOneWidget);
     await tapVisible(t, find.text('Cancel'));
     await t.pumpAndSettle();
     expect(wc.settings.periodStart, addDays(today, -10));
+    expect(find.text('Expected ${shortDate(wc.period().end)}'), findsOneWidget, reason: 'the page stays open after Cancel');
 
     await tapVisible(t, button);
     await t.pumpAndSettle();
@@ -358,13 +363,12 @@ void main() {
     await t.pumpAndSettle();
     expect(wc.settings.periodStart, today);
     expect(wc.settings.incomeMode, 'planned');
-    expect(find.text('New month started ${shortDate(today)}'), findsWidgets);
-    expect(find.text('Expected ${shortDate(wc.period().end)}'), findsOneWidget);
+    expect(find.text('New month started ${shortDate(today)}'), findsOneWidget, reason: 'the page closes and the toast shows once');
+    expect(button, findsNothing);
 
     final first = '${today.substring(0, 8)}01';
     if (first != today) {
-      await tapVisible(t, button);
-      await t.pumpAndSettle();
+      await openPage();
       await tapVisible(t, find.descendant(of: find.byType(DatePickerDialog), matching: find.text('1')));
       await t.pumpAndSettle();
       await tapVisible(t, find.text('OK'));

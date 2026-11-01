@@ -7,6 +7,7 @@ import 'dart:typed_data';
 
 import 'package:budget_wallet/src/bill_inputs.dart';
 import 'package:budget_wallet/src/controller.dart';
+import 'package:budget_wallet/src/date_length.dart';
 import 'package:budget_wallet/src/file_chooser.dart';
 import 'package:budget_wallet/src/nudges.dart';
 import 'package:budget_wallet/src/pdf_parse.dart';
@@ -1232,15 +1233,50 @@ void main() {
       await tester.tap(key('warranty:chip:1m'));
       await tester.pumpAndSettle();
       expect(wc.bill(id)!.warrantyUntil, '2026-02-28', reason: '31 Jan + 1m clamps to the month end');
-      await tester.enterText(key('return:length'), '45d');
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pumpAndSettle();
-      expect(wc.bill(id)!.returnBy, '2026-03-17');
       await tester.enterText(key('return:length'), '5 x');
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
       expect(key('return:lengthError'), findsOneWidget);
+      expect(wc.bill(id)!.returnBy, isNull);
+      await tester.enterText(key('return:length'), '45d');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
       expect(wc.bill(id)!.returnBy, '2026-03-17');
+      expect(key('return:chip:1m'), findsNothing, reason: 'a set date shows the date and the reminder line, not the length row');
+      expect(key('return:reminder'), findsOneWidget);
+    });
+
+    tw('lengths count from the bill\'s saved date, from today when it has none', (tester) async {
+      final wc = bw();
+      final id = addBill(wc, syntheticBill('nd', date: null));
+      await openSheetFor(tester, wc, id, size: const Size(400, 1600));
+      await tester.ensureVisible(key('warranty:chip:1m'));
+      await tester.tap(key('warranty:chip:1m'));
+      await tester.pumpAndSettle();
+      expect(wc.bill(id)!.warrantyUntil, addLength(wc.today(), '1m'));
+    });
+
+    tw('clearing a date closes a half-edited reminder and drops its error', (tester) async {
+      final wc = bw();
+      final id = addBill(wc, syntheticBill('clr'), confirm: true);
+      wc.setBillDates(id, warrantyUntil: '2027-01-10');
+      await openSheetFor(tester, wc, id, size: const Size(400, 1600));
+      await tester.ensureVisible(key('warranty:reminderChange'));
+      await tester.tap(key('warranty:reminderChange'));
+      await tester.pump();
+      await tester.enterText(key('warranty:reminderDays'), '91');
+      await tester.tap(key('warranty:reminderSave'));
+      await tester.pump();
+      expect(key('warranty:reminderError'), findsOneWidget);
+      await tester.tap(find.byTooltip('Clear Warranty until'));
+      await tester.pumpAndSettle();
+      expect(key('warranty:reminder'), findsNothing);
+      await tester.ensureVisible(key('warranty:chip:1y'));
+      await tester.tap(key('warranty:chip:1y'));
+      await tester.pumpAndSettle();
+      expect(key('warranty:reminderError'), findsNothing);
+      expect(key('warranty:reminderDays'), findsNothing, reason: 'the reminder is back to its line, not still being edited');
+      expect(key('warranty:reminderChange'), findsOneWidget);
     });
 
     tw('the reminder line sits under its date (the bill\'s value, else the default) and refuses numbers out of range', (tester) async {

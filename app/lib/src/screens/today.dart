@@ -106,9 +106,9 @@ class TodayScreen extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(pagePad, 12, pagePad, pageBottomPad),
         children: [
-          DashGrid(children: [
-            // Two cells wide, one row tall: its height follows its content (a 2x2 hero left a block of empty paper under the figure, UX-A).
-            DashItem(span: 2, child: _Hero(f)),
+          DashGrid(fillRows: wide, children: [
+            // A wide window: the hero is one short row across the whole grid (a 2x2 hero left a block of empty paper, UX-A).
+            DashItem(span: wide ? 4 : 2, rowSpan: wide ? 1 : 2, child: _Hero(f, wide: wide)),
             // What needs the owner first.
             if (f.ended && f.newPayday == null) DashItem(span: 2, child: _PeriodEndedTile(f)),
             if (f.setupSteps.isNotEmpty)
@@ -219,8 +219,9 @@ void _openUpcoming(BuildContext context, TodayView view) {
 
 /// The hero: the safe amount to the cent, one state chip (said once), the day dots and the pace meter.
 class _Hero extends StatelessWidget {
-  const _Hero(this.f);
+  const _Hero(this.f, {this.wide = false});
   final _TodayFigures f;
+  final bool wide;
 
   DashChip _chip() {
     final p = f.p, cur = f.cur;
@@ -253,6 +254,7 @@ class _Hero extends StatelessWidget {
     final ahead = f.ahead;
     return HeroTile(
       key: const ValueKey('heroTile'),
+      wide: wide,
       valueKey: const ValueKey('safeToSpend'),
       label: f.heroLabel,
       value: moneyExact(f.hero, cur),

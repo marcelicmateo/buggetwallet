@@ -8,6 +8,7 @@ import 'package:wallet_core/wallet_core.dart';
 import '../controller.dart';
 import '../format.dart';
 import '../insights_api.dart';
+import '../layout.dart';
 import '../logging.dart';
 import '../theme.dart';
 import '../widgets/charts.dart' show DayDots;
@@ -205,9 +206,19 @@ class _NewMonthTile extends StatelessWidget {
   Future<void> _start(BuildContext context) async {
     logNav('month.pick');
     final d = await showDatePicker(context: context, initialDate: wc.now, firstDate: DateTime(2020), lastDate: wc.now);
-    if (d == null) return;
+    if (d == null || !context.mounted) return;
     wc.startNewMonth(isoDate(d));
-    if (context.mounted) toast(context, 'New month started ${shortDate(isoDate(d))}');
+    // The page closes (the answer is on Today) and the toast comes from the shell's messenger: from here, the page's own Scaffold
+    // would show it a second time on a wide window.
+    final messenger = ScaffoldMessenger.of(context);
+    final wide = layoutOf(context) != LayoutSize.compact, accessible = MediaQuery.accessibleNavigationOf(context);
+    final text = 'New month started ${shortDate(isoDate(d))}';
+    final popped = await Navigator.of(context).maybePop();
+    if (popped) {
+      toastOn(messenger, text, wide: wide, accessible: accessible);
+    } else if (context.mounted) {
+      toast(context, text);
+    }
   }
 
   @override

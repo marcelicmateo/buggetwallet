@@ -56,11 +56,15 @@ class _DashParentData extends ContainerBoxParentData<RenderBox> {
 /// Tiles in 1, 2 or 4 columns, in the same reading order at every size. Columns come from the window ([sizeFor]: compact and medium 2,
 /// expanded 4) and drop (4 → 2 → 1) while a column would be under [minColumn] dp scaled by the text scale (130 dp at 1.0, 260 dp at
 /// 2.0), so 320 dp at text scale 2.0 and 360 dp at 2.0 get one column. A tile's row is as tall as its tallest tile; a [DashItem] with
-/// `rowSpan` 2 is as tall as two rows, the next tiles fill the cells beside it. When the next tile does not fit in the cells a row has left, the tiles of that row take them (each one cell wider, the last first): no empty cell above the last row. Children are tiles, optionally wrapped in [DashItem].
+/// `rowSpan` 2 is as tall as two rows, the next tiles fill the cells beside it. Children are tiles, optionally wrapped in [DashItem].
+///
+/// With [fillRows] (Today only): when the next tile does not fit in the cells a row has left, and those cells are free, the one-row tiles
+/// of that row take them (each one cell wider, the last first), so no empty cell stays above the last row.
 class DashGrid extends MultiChildRenderObjectWidget {
   final double gap;
   final double minColumn;
-  const DashGrid({super.key, super.children, this.gap = 10, this.minColumn = 130});
+  final bool fillRows;
+  const DashGrid({super.key, super.children, this.gap = 10, this.minColumn = 130, this.fillRows = false});
 
   /// Columns for a grid [width] dp wide in a window [windowWidth] dp wide; [minColumn] is already scaled (see [minColumnFor]).
   static int columnsFor(double width, double windowWidth, {double gap = 10, double minColumn = 130}) {
@@ -79,6 +83,7 @@ class DashGrid extends MultiChildRenderObjectWidget {
         windowWidth: MediaQuery.sizeOf(context).width,
         gap: gap,
         minColumn: minColumnFor(MediaQuery.textScalerOf(context), minColumn),
+        fillRows: fillRows,
       );
 
   @override
@@ -87,7 +92,8 @@ class DashGrid extends MultiChildRenderObjectWidget {
     renderObject
       ..windowWidth = MediaQuery.sizeOf(context).width
       ..gap = gap
-      ..minColumn = minColumnFor(MediaQuery.textScalerOf(context), minColumn);
+      ..minColumn = minColumnFor(MediaQuery.textScalerOf(context), minColumn)
+      ..fillRows = fillRows;
   }
 }
 
@@ -103,12 +109,20 @@ class _Place {
 
 class _RenderDash extends RenderBox
     with ContainerRenderObjectMixin<RenderBox, _DashParentData>, RenderBoxContainerDefaultsMixin<RenderBox, _DashParentData> {
-  _RenderDash({required double windowWidth, required double gap, required double minColumn})
+  _RenderDash({required double windowWidth, required double gap, required double minColumn, required bool fillRows})
       : _windowWidth = windowWidth,
         _gap = gap,
-        _minColumn = minColumn;
+        _minColumn = minColumn,
+        _fillRows = fillRows;
 
   double _windowWidth, _gap, _minColumn;
+  bool _fillRows;
+  set fillRows(bool v) {
+    if (v == _fillRows) return;
+    _fillRows = v;
+    markNeedsLayout();
+  }
+
   set windowWidth(double v) {
     if (v == _windowWidth) return;
     _windowWidth = v;
@@ -158,26 +172,26 @@ class _RenderDash extends RenderBox
       final rows = span < cols ? data.rowSpan.clamp(1, 1 << 10) : 1;
       while (true) {
         if (c + span > cols) {
-          // Cells are left at the end of this row and the next tile does not fit in them: the tiles of the row share them, so no
-          // empty cell stays above the last row (the hero is one row tall since UX-A, which no longer absorbs odd counts).
-          final rowPlaces = [
-            for (final q in places)
-              if (q.row == r && q.rows == 1) q
-          ];
-          if (c > 0 && rowPlaces.isNotEmpty && rowPlaces.fold<int>(0, (n, q) => n + q.span) == c) {
-            for (var i = 0; i < cols - c; i++) {
-              rowPlaces[rowPlaces.length - 1 - i % rowPlaces.length].span++;
-            }
-            var col = 0;
-            for (final q in rowPlaces) {
-              q.col = col;
-              col += q.span;
-              q.width = colW * q.span + _gap * (q.span - 1);
-              q.child.layout(BoxConstraints.tightFor(width: q.width), parentUsesSize: true);
-              q.natural = q.child.size.height;
-            }
-            for (var cc = c; cc < cols; cc++) {
-              taken[r][cc] = true;
+          if (_fillRows && c > 0 && free(r, c, cols - c, 1)) {
+            final rowPlaces = [
+              for (final q in places)
+                if (q.row == r && q.rows == 1) q
+            ];
+            if (rowPlaces.isNotEmpty && rowPlaces.fold<int>(0, (n, q) => n + q.span) == c) {
+              for (var i = 0; i < cols - c; i++) {
+                rowPlaces[rowPlaces.length - 1 - i % rowPlaces.length].span++;
+              }
+              var col = 0;
+              for (final q in rowPlaces) {
+                q.col = col;
+                col += q.span;
+                q.width = colW * q.span + _gap * (q.span - 1);
+                q.child.layout(BoxConstraints.tightFor(width: q.width), parentUsesSize: true);
+                q.natural = q.child.size.height;
+              }
+              for (var cc = c; cc < cols; cc++) {
+                taken[r][cc] = true;
+              }
             }
           }
           r++;
@@ -534,10 +548,14 @@ class HeroTile extends StatelessWidget {
   final VoidCallback? onTap;
   final Color? valueColor;
 
+  /// The tile spans a whole wide row: the figure, its note and the pace meter on the left, the [dots] on the right (no measuring).
+  final bool wide;
+
   /// A key for the figure's own `Text` (tests and screens that read the number).
   final Key? valueKey;
   const HeroTile({
     super.key,
+    this.wide = false,
     this.valueKey,
     required this.label,
     required this.value,
@@ -580,6 +598,29 @@ class HeroTile extends StatelessWidget {
         children: [number, if (subText != null) subText, if (chipRow != null) chipRow]);
     Widget slot(Widget w) => IgnorePointer(child: w);
 
+    final pace = !hasPace
+        ? null
+        : Padding(padding: const EdgeInsets.only(top: 12), child: PaceMeter(used: paceUsed!, expected: paceExpected!, over: paceOver));
+    if (wide && dots != null) {
+      return Tile(
+        onTap: onTap,
+        semanticLabel: _spokenJoin([label, value, sub, chip?.spoken, dotsSpoken, paceSpoken]),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+          TileLabel(label),
+          const SizedBox(height: 6),
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [figure(), if (pace != null) pace])),
+            const SizedBox(width: dotsGap * 2),
+            slot(dots!),
+          ]),
+        ]),
+      );
+    }
+
     final body = LayoutBuilder(builder: (context, box) {
       if (dots == null) return figure();
       // The dots beside the figure whenever they fit: the figure may shrink to [dotsMinScale] of its size, the grid to its compact
@@ -610,8 +651,7 @@ class HeroTile extends StatelessWidget {
         TileLabel(label),
         const SizedBox(height: 6),
         body,
-        if (hasPace)
-          Padding(padding: const EdgeInsets.only(top: 12), child: PaceMeter(used: paceUsed!, expected: paceExpected!, over: paceOver)),
+        if (pace != null) pace,
       ]),
     );
   }
