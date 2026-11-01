@@ -50,6 +50,32 @@ abstract final class BillF {
   so a new column without a bump and a new snapshot cannot pass (F0 scout, 2026-11-01). `test/support/sim.dart` keeps
   its hand-written column lists on purpose (independent oracle): that is the one deliberate second line per field.
 
+## API fixed for F1 (lead, 2026-11-01; core, tests and UI code against these names)
+Flutter has a `TextField` widget, so the field types are named `…Col` (all exported from `wallet_core`, file
+`packages/wallet_core/lib/src/cols.dart`):
+- `sealed class Col<T>` — `entity` (op entity name), `column`, `label` (English, shown in forms and conflict text),
+  `nullable`, `searchable`, `T? defaultValue`; `ColumnDef get def` (what `entitySchema` uses); `T? read(Map<String,
+  Object?> row)` (lenient: a bad stored value reads as null/default, never throws); `Object? encode(T value)`;
+  `String? problem(T? value)` (null = fine, else a short user-facing reason without the label).
+- Kinds: `TextCol` (`maxLength`), `DateCol` (ISO `YYYY-MM-DD`; optional `notAfterToday`), `IntCol` (`min`, `max`,
+  `unit` e.g. 'days before'), `MoneyCol` (stored units, |v| ≤ `WalletSettings.maxAmount`; `currencyCol` names the
+  column that holds its currency), `FlagCol` (bool ↔ 0/1), `EnumCol<E extends Enum>` (`values`, wire = `.name` unless a
+  `wire` map is given), `RefCol` (`target` entity; text id), `JsonCol` (text holding JSON; opaque to forms).
+- `const Object clearValue` (exported as `clearValue`): in a patch map it sets a nullable column to null.
+- Per entity a holder: `abstract final class BillCols { static const entity = 'bill'; static const date = DateCol(...);
+  …; static const all = <Col>[…]; }` and `AccountCols` the same. `entitySchema['bill']` / `['account']` are built from
+  `.all` (column order and DDL byte-identical to v20.sql). Other entities keep their `ColumnDef` lists until F2.
+- `Map<String,Object?>`-backed models: `Bill`/`Account` keep their typed getters (call sites unchanged), backed by
+  `Col.read` of the stored row; `operator [](Col c)` reads any column generically. `fromRow` boilerplate goes away.
+- One generic write: `void patch(String entity, String id, Map<Col, Object?> values)` on `WalletRepo` — checks every
+  value with `problem` (and nullability / `clearValue`), throws `ArgumentError('<label>: <problem>')` before writing
+  anything, writes the changed columns in one op through `_write` (same op shape and HLC as today). Entity hooks keep
+  business rules: a patch on `bill` goes through the existing `_billWrites` rules (reservation, planned rows, category
+  needed), on `account` through its uniqueness/shape checks. `updateBill` / `updateAccount` stay as thin wrappers over
+  `patch` (existing callers unchanged) until F2 removes the `clearX` flags.
+- Done check: a test-only entity (in a test file) adds a new column with one `Col` line and gets DDL, sync type check,
+  snapshot, search and `patch` validation without touching any other core file.
+
 ## What does not change
 Wire format and sync semantics (op = entity, id, field, value, HLC; per-field last-writer-wins): the refactor is internal,
 needs **no schema bump of its own**, and an old and a new build sync with each other. `test/support/sim.dart` stays an
