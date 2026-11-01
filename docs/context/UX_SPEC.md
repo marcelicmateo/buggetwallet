@@ -112,6 +112,9 @@ Logs: outcome and counts only.
   (shown under "Other currencies, not counted", as today) unless a hand-set rate exists.
 - **Precedence:** a hand-set rate for a currency (existing setting) wins over ECB for that currency (owner: your own rate
   still wins); the rate's source is shown wherever a rate is shown ("ECB 31 Oct" / "your rate"). BTC: hand-set only.
+- **Foreign account balances in the wallet currency** (owner 2026-11-01, "day of the said transaction"): the opening
+  converted at the opening date + Σ every counted row converted at its own date (a hand rate, when set, for all); any
+  part without a rate → no value ("missing"), never a partial sum.
 - **Fetch:** automatically when the wallet needs a (currency, date) it doesn't have, at most once a day, never on a
   metered warning; a "Get rates now" action in Settings › Accounts › Currencies; failures are shown plainly and never
   block anything.
