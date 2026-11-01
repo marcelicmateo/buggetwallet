@@ -128,7 +128,8 @@ void main() {
       final wc = wallet();
       await pumpApp(t, panel(wc), size: const Size(400, 2400));
       await tapKey(t, 'accountAdd');
-      await tapKey(t, 'accountType');
+      await tapKey(t, 'accountKind:bank');
+      await tapKey(t, 'accountSource');
       expect(find.text('PBZ'), findsOneWidget);
       expect(find.text('Revolut'), findsOneWidget);
       await t.tap(find.text('Revolut').last);
@@ -179,7 +180,7 @@ void main() {
       final wc = wallet();
       final ids = await seed(wc);
       await pumpApp(t, panel(wc), size: const Size(400, 2400));
-      await tapKey(t, 'accountRename:${ids.cash}');
+      await tapKey(t, 'accountEdit:${ids.cash}');
       await t.enterText(find.byKey(const ValueKey('accountName')), '');
       await tapKey(t, 'accountSave');
       expect(find.text('Give the account a name.'), findsOneWidget);
@@ -322,7 +323,7 @@ void main() {
         wc.reload();
         await pumpApp(t, panel(wc), size: Size(w, 900), textScale: s);
         expect(t.takeException(), isNull);
-        for (final k in ['accountAdd', 'accountRename:${ids.bank}', 'accountCorrect:${ids.bank}', 'accountDelete:${ids.bank}']) {
+        for (final k in ['accountAdd', 'accountEdit:${ids.bank}', 'accountCorrect:${ids.bank}', 'accountDelete:${ids.bank}']) {
           expect(t.getSize(find.byKey(ValueKey(k))).height, greaterThanOrEqualTo(48), reason: k);
         }
         await tapKey(t, 'accountAdd');

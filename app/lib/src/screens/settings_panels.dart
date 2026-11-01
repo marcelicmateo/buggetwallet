@@ -6,6 +6,7 @@ import '../controller.dart';
 import '../file_chooser.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/import_problems.dart';
 import 'forget_browser.dart';
 import 'habits_panels.dart';
 import 'import_flow.dart';
@@ -56,7 +57,10 @@ class _ImportPanelState extends State<ImportPanel> {
           title: const Text('Always show', style: TextStyle(fontSize: BwType.bodySize)),
           subtitle: const Text('See what a file will add before it is imported. Off: files go straight in.'),
         ),
-        for (final l in widget.wc.lastImport) StatusLabel(good: l.ok, text: '${l.file}: ${l.message}'),
+        for (final l in widget.wc.lastImport) ...[
+          StatusLabel(good: l.ok, text: '${l.file}: ${l.message}'),
+          ImportProblems(problems: l.problems, invalid: l.invalid, header: false),
+        ],
       ]);
 }
 

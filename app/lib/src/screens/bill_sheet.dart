@@ -5,7 +5,6 @@ import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart' show validIban;
 
 import '../controller.dart';
-import '../date_length.dart';
 import '../file_chooser.dart';
 import '../format.dart';
 import '../layout.dart';
@@ -14,10 +13,10 @@ import '../platform.dart';
 import '../theme.dart';
 import '../widgets/category_picker.dart';
 import '../widgets/common.dart';
+import '../widgets/field_editor.dart';
 import '../widgets/sheets.dart';
 import 'pay_sheet.dart';
 
-part 'bill_sheet_dates.dart';
 part 'bill_sheet_sections.dart';
 
 /// Opens one bill (the sheet with its fields) and shows the toast for its result. [chooser] saves the original file where it cannot
@@ -78,14 +77,18 @@ class BillSheet extends StatefulWidget {
 
 class _BillSheetState extends State<BillSheet> {
   late final Bill? _first = widget.wc.bill(widget.billId);
-  late final total = TextEditingController(text: _first?.total == null ? '' : centsToFieldText(_first!.total!));
+  late final total = TextEditingController(
+      text: _first?.total == null ? '' : centsToFieldText(_first!.total!, currency: _first.currency.isEmpty ? null : _first.currency));
   late final payee = TextEditingController(text: _first?.payee ?? '');
   late final iban = TextEditingController(text: _first?.iban ?? '');
   late final reference = TextEditingController(text: _first?.reference ?? '');
   late final description = TextEditingController(text: _first?.description ?? '');
   late final note = TextEditingController(text: _first?.note ?? '');
-  late String? date = _first?.date;
-  late String? due = _first?.dueDate;
+
+  /// The date columns the sheet edits as a draft (written by Save), by column.
+  late final Map<Col, String?> dates = {BillCols.date: _first?.date, BillCols.dueDate: _first?.dueDate};
+  String? get date => dates[BillCols.date];
+  String? get due => dates[BillCols.dueDate];
   // A bill to review whose category is empty starts with the suggestion (earlier bills of the same payee); it is marked as one.
   late final String? _suggested =
       _first == null || _first.status != BillStatus.review || _first.category != null ? null : widget.wc.suggestedBillCategory(_first);
@@ -106,7 +109,7 @@ class _BillSheetState extends State<BillSheet> {
 
   /// The fields the owner changed, saved on top of the bill. Returns false (and says why) when the total is not an amount.
   bool _save(Bill b, {bool acceptShown = false}) {
-    final t = total.text.trim().isEmpty ? null : parseMoney(total.text);
+    final t = total.text.trim().isEmpty ? null : parseMoney(total.text, currency: b.currency.isEmpty ? null : b.currency);
     if (total.text.trim().isNotEmpty && (t == null || t <= 0)) {
       setState(() => error = 'Total: enter an amount, like ${amountExample()}.');
       return false;
@@ -141,28 +144,12 @@ class _BillSheetState extends State<BillSheet> {
     return saved;
   }
 
-  /// Saves a warranty or return-by date; a refusal keeps the sheet open with the reason.
-  void _saveDates(Bill b, {String? warrantyUntil, String? returnBy, bool clearWarranty = false, bool clearReturnBy = false}) {
-    final ok = widget.wc
-        .setBillDates(b.id, warrantyUntil: warrantyUntil, returnBy: returnBy, clearWarranty: clearWarranty, clearReturnBy: clearReturnBy);
-    if (!ok) setState(() => error = "Pick the category so Budget Wallet doesn't count this bill twice.");
-  }
-
-  Future<String?> _pick(String? current, {DateTime? first, DateTime? last}) async {
-    final d = await showDatePicker(
-        context: context,
-        initialDate: current != null && isCalendarDate(current) ? parseIso(current) : widget.wc.now,
-        firstDate: first ?? DateTime(2000),
-        lastDate: last ?? DateTime(2100));
-    return d == null ? null : isoDate(d);
-  }
-
   Future<void> _confirm(Bill b) async {
     // Confirm accepts the category shown, but not over a stored one that was deleted (the shown one is the automatic fallback).
     final stored = widget.wc.repo.bill(b.id)?.category;
     final dead = stored != null && widget.wc.categoryTable.isDeadCustom(stored);
     if (!_save(b, acceptShown: !dead)) return;
-    final t = total.text.trim().isEmpty ? null : parseMoney(total.text);
+    final t = total.text.trim().isEmpty ? null : parseMoney(total.text, currency: b.currency.isEmpty ? null : b.currency);
     if (date == null || (t ?? 0) <= 0) {
       logNav('bill.invalid');
       setState(() => error = 'Add a date and a total first.');
@@ -385,7 +372,7 @@ class _CashSheetState extends State<_CashSheet> {
   @override
   Widget build(BuildContext context) {
     final b = widget.bill;
-    final cur = widget.wc.currency;
+    final cur = b.currency.isEmpty ? widget.wc.currency : b.currency;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       const Heading('Add as expense'),
       const SizedBox(height: 4),

@@ -1,6 +1,6 @@
 // Plan › Rules (P7, spec docs/context/P7_SPEC.md): the rules that choose a payment's main tag, with how many payments each one decided.
 // Payee rules ("always use this main tag for <payee>", maybe with tags), text patterns (description contains / regex, with an optional
-// amount range) and the built-in rules (collapsed, read-only). Rules never use the amount alone: a range only narrows a text rule.
+// amount range) and the built-in rules (collapsed; editable like the others). Rules never use the amount alone: a range only narrows a text rule.
 // The lists and counts come from the controller (once per data version); core's `ArgumentError` text shows under the field.
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -14,6 +14,7 @@ import '../widgets/category_picker.dart';
 import '../widgets/common.dart';
 import '../widgets/sheets.dart';
 import '../widgets/tag_picker.dart';
+import 'builtin_rule_sheet.dart';
 
 final _log = Logger('bw.rules.ui');
 
@@ -31,7 +32,7 @@ String rangeText(int? lo, int? hi, String currency) {
   return 'up to ${money(hi!, currency, decimals: 2)}';
 }
 
-enum _Act { edit, up, down, delete }
+enum _Act { edit, up, down, delete, off, on, reset }
 
 class RulesPanel extends StatefulWidget {
   final WalletController wc;
@@ -96,7 +97,7 @@ class _RulesPanelState extends State<RulesPanel> {
             key: const ValueKey('builtInToggle'),
             style: TextButton.styleFrom(alignment: Alignment.centerLeft, minimumSize: const Size(0, touchMin)),
             icon: Icon(_builtIn ? Icons.expand_less : Icons.expand_more, size: 20),
-            label: Text('Built in (read-only) · ${builtIn.length}'),
+            label: Text('Built in · ${builtIn.length}'),
             onPressed: () => setState(() => _builtIn = !_builtIn)),
         if (_builtIn) Rows(children: [for (final r in builtIn) _RuleRow(wc: wc, rule: r, count: counts[r.id] ?? 0)]),
       ],
@@ -142,6 +143,23 @@ class _SuggestRow extends StatelessWidget {
   }
 }
 
+/// A small icon + word under a rule: "edited" or "off".
+class _Badge extends StatelessWidget {
+  final String text;
+  final IconData icon;
+  const _Badge(this.text, this.icon, {super.key});
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+        decoration: BoxDecoration(border: Border.all(color: context.c.line), borderRadius: BorderRadius.circular(6)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 12, color: context.c.ink2),
+          const SizedBox(width: 3),
+          Text(text, style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
+        ]),
+      );
+}
+
 class _RuleRow extends StatelessWidget {
   final WalletController wc;
   final RuleView rule;
@@ -174,6 +192,14 @@ class _RuleRow extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: BwType.bodySize, fontWeight: FontWeight.w500)),
             Muted(_kind),
+            if (rule.kind == RuleKind.builtIn && (rule.edited || rule.off))
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Wrap(spacing: 6, runSpacing: 4, children: [
+                  if (rule.edited) _Badge('edited', Icons.edit_outlined, key: ValueKey('ruleEdited:$id')),
+                  if (rule.off) _Badge('off', Icons.block, key: ValueKey('ruleOff:$id')),
+                ]),
+              ),
             if (rule.categoryLabel != null)
               Text('→ ${rule.categoryLabel}', key: ValueKey('ruleTag:$id'), style: const TextStyle(fontSize: BwType.bodySize)),
             if (rule.tags.isNotEmpty)
@@ -192,8 +218,7 @@ class _RuleRow extends StatelessWidget {
               Text(count == 1 ? 'used by 1 payment' : 'used by $count payments', key: ValueKey('ruleCount:$id'), style: meta),
           ]),
         ),
-        // Built-ins are editable in core since UX-A; their own actions come with the UI half (until then no menu).
-        if (rule.editable && rule.kind != RuleKind.builtIn)
+        if (rule.editable)
           PopupMenuButton<_Act>(
             key: ValueKey('ruleMenu:$id'),
             tooltip: 'Actions for ${rule.text}',
@@ -208,6 +233,13 @@ class _RuleRow extends StatelessWidget {
               ],
               if (rule.kind == RuleKind.pattern || rule.kind == RuleKind.payee)
                 PopupMenuItem(key: ValueKey('ruleDelete:$id'), value: _Act.delete, child: const Text('Delete')),
+              if (rule.kind == RuleKind.builtIn) ...[
+                PopupMenuItem(
+                    key: ValueKey(rule.off ? 'ruleOn:$id' : 'ruleTurnOff:$id'),
+                    value: rule.off ? _Act.on : _Act.off,
+                    child: Text(rule.off ? 'Turn on' : 'Turn off')),
+                if (rule.edited) PopupMenuItem(key: ValueKey('ruleReset:$id'), value: _Act.reset, child: const Text('Reset')),
+              ],
             ],
           ),
       ]),
@@ -218,7 +250,13 @@ class _RuleRow extends StatelessWidget {
     logNav('rules.${a.name}');
     switch (a) {
       case _Act.edit:
-        await openRuleForm(context, wc, edit: rule);
+        if (rule.kind == RuleKind.builtIn) {
+          await openBuiltInRuleForm(context, wc, rule);
+        } else {
+          await openRuleForm(context, wc, edit: rule);
+        }
+      case _Act.off || _Act.on || _Act.reset:
+        _builtInAct(context, a);
       case _Act.up || _Act.down:
         final messenger = ScaffoldMessenger.of(context);
         final wide = layoutOf(context) != LayoutSize.compact, accessible = MediaQuery.accessibleNavigationOf(context);
@@ -231,6 +269,38 @@ class _RuleRow extends StatelessWidget {
       case _Act.delete:
         _delete(context);
     }
+  }
+
+  /// Turn off / on / Reset of a built-in rule, with an Undo that puts back the pattern, the main tag and the switch it had.
+  void _builtInAct(BuildContext context, _Act a) {
+    final messenger = ScaffoldMessenger.of(context);
+    final wide = layoutOf(context) != LayoutSize.compact, accessible = MediaQuery.accessibleNavigationOf(context);
+    void say(String m, {String? label, VoidCallback? action}) =>
+        toastOn(messenger, m, wide: wide, accessible: accessible, actionLabel: label, onAction: action);
+    final (text, cat, off, edited) = (rule.text, rule.category, rule.off, rule.edited);
+    try {
+      switch (a) {
+        case _Act.off:
+          wc.setBuiltInRuleOff(rule.id, true);
+        case _Act.on:
+          wc.setBuiltInRuleOff(rule.id, false);
+        default:
+          wc.resetBuiltInRule(rule.id);
+      }
+    } catch (e, st) {
+      logError(_log, 'rules.builtIn.failed', e, st);
+      say(_problem(e));
+      return;
+    }
+    say(switch (a) { _Act.off => 'Rule turned off', _Act.on => 'Rule turned on', _ => 'Rule reset' }, label: 'Undo', action: () {
+      try {
+        if (a == _Act.reset && edited) wc.editBuiltInRule(rule.id, pattern: text, category: cat);
+        wc.setBuiltInRuleOff(rule.id, off);
+      } catch (e, st) {
+        logError(_log, 'rules.builtIn.undo.failed', e, st);
+        say(_problem(e));
+      }
+    });
   }
 
   void _delete(BuildContext context) {
@@ -261,6 +331,12 @@ class _RuleRow extends StatelessWidget {
 Future<bool?> openRuleForm(BuildContext context, WalletController wc, {RuleView? edit, String? payee, String? category, Tx? from}) {
   logNav(edit == null ? 'rules.add' : 'rules.editForm');
   return showSheet<bool>(context, RuleFormSheet(wc: wc, edit: edit, payee: payee, category: category, from: from));
+}
+
+/// Opens the form for a built-in rule: its pattern and its main tag.
+Future<bool?> openBuiltInRuleForm(BuildContext context, WalletController wc, RuleView rule) {
+  logNav('rules.builtInForm');
+  return showSheet<bool>(context, BuiltInRuleSheet(wc: wc, rule: rule));
 }
 
 enum _Mode { payee, contains, regex }

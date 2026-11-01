@@ -185,13 +185,14 @@ class IouSheet extends StatefulWidget {
 }
 
 class _IouSheetState extends State<IouSheet> {
+  String get _cur => widget.tx?.currency ?? view?.iou.currency ?? widget.wc.currency;
   late final IouView? view = widget.iouId == null ? null : widget.wc.iouById(widget.iouId!);
   late final _person = TextEditingController(text: view?.iou.person ?? '');
   late final _amount = TextEditingController(
       text: view != null
-          ? centsToFieldText(view!.iou.amount)
+          ? centsToFieldText(view!.iou.amount, currency: _cur)
           : widget.tx != null
-              ? centsToFieldText(widget.tx!.amount.abs())
+              ? centsToFieldText(widget.tx!.amount.abs(), currency: _cur)
               : '');
   late final _note = TextEditingController(text: view?.iou.note ?? '');
   final _part = TextEditingController();
@@ -210,7 +211,7 @@ class _IouSheetState extends State<IouSheet> {
   }
 
   void _save() {
-    final cents = parseMoney(_amount.text);
+    final cents = parseMoney(_amount.text, currency: _cur);
     if (cents == null) {
       setState(() => _error = invalidAmountMessage);
       return;
@@ -243,7 +244,7 @@ class _IouSheetState extends State<IouSheet> {
   }
 
   void _addPart() {
-    final cents = parseMoney(_part.text);
+    final cents = parseMoney(_part.text, currency: _cur);
     if (cents == null) {
       setState(() => _partError = invalidAmountMessage);
       return;

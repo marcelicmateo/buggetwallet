@@ -213,7 +213,7 @@ class _SearchResults extends StatelessWidget {
               for (final b in billsFound)
                 _ResultRow(
                     (b.payee ?? '').isNotEmpty ? b.payee! : ((b.description ?? '').isNotEmpty ? b.description! : 'Bill'),
-                    b.total == null ? 'No total' : moneyExact(b.total!, cur),
+                    b.total == null ? 'No total' : moneyExact(b.total!, b.currency.isEmpty ? cur : b.currency),
                     '${b.date == null ? 'No date' : shortDateOrRaw(b.date!)} · ${b.status == BillStatus.review ? 'To review' : (b.paid ? 'Paid' : 'Unpaid')}',
                     'billDb',
                     () => openBill(context, wc, b.id),

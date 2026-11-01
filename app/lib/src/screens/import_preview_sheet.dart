@@ -6,13 +6,15 @@ import '../layout.dart';
 import '../logging.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/import_problems.dart';
 import '../widgets/sheets.dart';
 
 /// Opens the import preview (Q4) for one file. Returns the ids the owner chose to leave out (Skip), or null on Cancel or close:
 /// nothing is written then. Logs `importPreview.open` with counts only, never descriptions.
-Future<Set<String>?> openImportPreview(BuildContext context, ImportPreview preview, String bank) {
-  logNav('importPreview.open', {'rows': preview.rows.length, 'fresh': preview.fresh, 'dupes': preview.duplicates});
-  return showSheet<Set<String>>(context, ImportPreviewSheet(preview: preview, bank: bank));
+Future<Set<String>?> openImportPreview(BuildContext context, ImportPreview preview, String bank,
+    {List<String> problems = const [], int invalid = 0}) {
+  logNav('importPreview.open', {'rows': preview.rows.length, 'fresh': preview.fresh, 'dupes': preview.duplicates, 'invalid': invalid});
+  return showSheet<Set<String>>(context, ImportPreviewSheet(preview: preview, bank: bank, problems: problems, invalid: invalid));
 }
 
 /// "N new · M already here · K match expenses you added · T transfers" and the rows behind each count. Each new row has a Skip
@@ -20,7 +22,11 @@ Future<Set<String>?> openImportPreview(BuildContext context, ImportPreview previ
 class ImportPreviewSheet extends StatefulWidget {
   final ImportPreview preview;
   final String bank;
-  const ImportPreviewSheet({super.key, required this.preview, required this.bank});
+
+  /// Why rows were left out of the file (core's `ImportBatch.problems`) and how many were.
+  final List<String> problems;
+  final int invalid;
+  const ImportPreviewSheet({super.key, required this.preview, required this.bank, this.problems = const [], this.invalid = 0});
   @override
   State<ImportPreviewSheet> createState() => _ImportPreviewSheetState();
 }
@@ -78,6 +84,10 @@ class _ImportPreviewSheetState extends State<ImportPreviewSheet> {
       const SizedBox(height: 10),
       Text(summary, key: const ValueKey('importPreviewSummary'), style: const TextStyle(fontWeight: FontWeight.w600)),
       const SizedBox(height: 8),
+      if (widget.problems.isNotEmpty || widget.invalid > 0) ...[
+        ImportProblems(problems: widget.problems, invalid: widget.invalid),
+        const SizedBox(height: 8),
+      ],
       for (final s in _titles.keys) ..._group(context, s, cur),
       const SizedBox(height: 14),
       FilledButton(

@@ -159,6 +159,7 @@ extension ImportAndBackup on WalletController {
               if (before != null) repo.setCsvMapping(choice.shapeId, before);
               repo.removeCsvMapping(choice.shapeId);
               settings = repo.settings();
+              walletCurrencyCode = settings.currency;
               _changed();
             }
           };
@@ -194,6 +195,7 @@ extension ImportAndBackup on WalletController {
   /// question); payments the save removed are remembered for the Undo and wait to be read again.
   void _noteSaved(CsvChoice choice, NeedsMapping need, CsvMapping? before, List<String> removed, _Remap? remap, {String? reviveBefore}) {
     settings = repo.settings();
+    walletCurrencyCode = settings.currency;
     if (removed.isNotEmpty && remap != null) {
       // Added to what is waiting already: another file's rows, or rows an Undo took away that this reading brings back.
       repo.setLocalValue('csvRevive:${choice.shapeId}', jsonEncode({...csvReviveIds(choice.shapeId), ...removed}.toList()));
