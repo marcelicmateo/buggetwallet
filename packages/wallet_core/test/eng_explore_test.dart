@@ -347,7 +347,8 @@ void main() {
     expect(res, hasLength(41));
     // ignore: avoid_print
     print('runQuery all/quarter/4 keys: ${rows.length} rows, ${sw.elapsedMilliseconds} ms');
-    expect(sw.elapsedMilliseconds, lessThan(100), reason: 'loose bound for a shared laptop; about 16 ms here');
+    // regression catcher only, about 5x the warm time under a loaded shared laptop; `make perf` holds the real frame budget.
+    expect(sw.elapsedMilliseconds, lessThan(600), reason: 'about 16 ms here, 118 ms under load');
   });
 }
 

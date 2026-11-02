@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS loan_rates(id TEXT PRIMARY KEY, loan_id TEXT NOT NULL
 CREATE INDEX IF NOT EXISTS loan_rates_loan ON loan_rates(loan_id);
 CREATE TABLE IF NOT EXISTS loan_checks(id TEXT PRIMARY KEY, loan_id TEXT NOT NULL DEFAULT '', date TEXT NOT NULL DEFAULT '', balance INTEGER NOT NULL DEFAULT 0, deleted INTEGER NOT NULL DEFAULT 0);
 CREATE INDEX IF NOT EXISTS loan_checks_loan ON loan_checks(loan_id);
+CREATE TABLE IF NOT EXISTS loan_pays(id TEXT PRIMARY KEY, loan_id TEXT NOT NULL DEFAULT '', tx TEXT NOT NULL DEFAULT '', state TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS views(id TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '', query TEXT NOT NULL DEFAULT '', pinned INTEGER NOT NULL DEFAULT 0, sort INTEGER, deleted INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS blob_cache(hash TEXT PRIMARY KEY, sealed BLOB NOT NULL, used_at INTEGER NOT NULL, bytes INTEGER NOT NULL, uploaded INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS ecb_rates(cur TEXT NOT NULL, date TEXT NOT NULL, per_eur INTEGER NOT NULL, PRIMARY KEY(cur, date));
@@ -102,8 +103,8 @@ void main() {
 
     test('every synced table has id TEXT PRIMARY KEY, a deleted flag (a tag link: its state) and no column twice', () {
       for (final e in entitySchema.values) {
-        if (e.table == 'tx_tags') {
-          // T1: a link is never deleted; removing it writes state `off`.
+        if (e.table == 'tx_tags' || e.table == 'loan_pays') {
+          // T1 (and ENG E6c loan payments): a link is never deleted; removing it writes state `off`.
           expect(e.column('deleted'), isNull);
           expect(e.column('state')?.type, ColumnType.text);
         } else {

@@ -100,9 +100,10 @@ extension WalletRepoPatch on WalletRepo {
   };
 
   /// Entities changed by their own actions only (their writes keep rules a field edit would skip: matching, totals,
-  /// links, repayments). Loan rate rows and balance checks are append-only (`addLoanRate`, `addLoanCheck`).
+  /// links, repayments). Loan rate rows and balance checks are append-only (`addLoanRate`, `addLoanCheck`); loan payment answers
+  /// (`confirmLoanPayment`, `unlinkLoanPayment`).
   static const _actionEntities = {
-    'tx', 'iou_part', 'goal_contrib', 'rule', 'txtag', 'ruletag', 'split', 'review', 'payee_alias', 'loanrate', 'loancheck', //
+    'tx', 'iou_part', 'goal_contrib', 'rule', 'txtag', 'ruletag', 'split', 'review', 'payee_alias', 'loanrate', 'loancheck', 'loanpay', //
   };
 
   int _patchBill(String id, Map<Col, Object?> values) {

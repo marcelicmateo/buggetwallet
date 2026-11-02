@@ -206,7 +206,7 @@ class WalletRepo {
   /// never-synced cache table `ecb_rates`; no data migration. Version 21 (ENG): the synced entity `view` (table `views`,
   /// saved Explore queries); `goals` gains the big-purchase fields `price`, `deposit_permille`, `costs_permille`,
   /// `loan_rate_bp`, `loan_months`, `compare_line_id`, `bought_at`, `loan_id` (`goalPlan`) and the entities `loan`,
-  /// `loanrate`, `loancheck` (ENG E6); no data migration (the old `loan` setting keeps counting until the owner moves
+  /// `loanrate`, `loancheck`, `loanpay` (ENG E6); no data migration (the old `loan` setting keeps counting until the owner moves
   /// it, `convertLegacyLoan`). Older builds ignore all of it.
   static const schemaVersion = 21;
 
@@ -284,6 +284,14 @@ class WalletRepo {
 
   /// [WalletRepoFx.ecbRates]'s last result and the [dataVersion] it was read at (UX-FX).
   (int, EcbRates)? _ecbCache;
+
+  /// [WalletRepoLoans]' loan payment state and the [dataVersion] it was made at (ENG E6c), and its description → payee
+  /// key / folded text caches over the bank outflows' descriptions, scanned up to rowid [_loanScanRowid] plus rows
+  /// without a date yet ([_loanRecheck]), kept across data versions.
+  (int, _LoanCache)? _loanCache;
+  final _loanKeys = <String, String>{}, _loanFolds = <String, String>{};
+  final _loanRecheck = <int>{};
+  int _loanScanRowid = 0;
   int _digestRuns = 0;
 
   /// The database file and its key when opened by [open] (native): [WalletRepoSyncApply.stateDigestAsync] reads it on
@@ -596,6 +604,7 @@ class WalletRepo {
         tagContext: withTags ? tagContext() : null,
         splits: withTags ? splits() : const {},
         iouTx: WalletRepoIou(this).iouLinkedTx(),
+        loanTx: WalletRepoLoans(this).loanLinkedTx(),
         builtInOverrides: st.builtInRuleOverrides);
   }
 
