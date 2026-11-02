@@ -670,11 +670,15 @@ class _HomeShellState extends State<HomeShell> {
                           ],
                         ]),
                       ),
-                      AddButton(
-                          onTap: () => _key('railAdd', _addExpense),
-                          wide: true,
-                          tooltip: _hint('Add', 'Ctrl+N'),
-                          hint: wide ? 'Ctrl N' : null),
+                      // Wide: a full-width row ("Add  Ctrl N"); the narrow rail has room for the square only.
+                      Align(
+                          alignment: Alignment.center,
+                          widthFactor: wide ? null : 1,
+                          child: AddButton(
+                              onTap: () => _key('railAdd', _addExpense),
+                              wide: wide,
+                              tooltip: _hint('Add', 'Ctrl+N'),
+                              hint: wide ? 'Ctrl N' : null)),
                       const SizedBox(height: 8),
                       for (var i = 0; i < navDestinations.length; i++)
                         Padding(
