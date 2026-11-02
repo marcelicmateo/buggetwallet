@@ -495,8 +495,9 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   while a loan has no length; `afterPerPeriod` or `shortBy`). `goalLevers(expanded, st, table, today, plan:, incomes:)`
   → `GoalLever`s (main tags whose mean of the last 3 of the 12 completed months beats their 12-month median, cut floored
   to euros; confirmed side incomes (category kind not income: salary is the plan's) at `recurringCycleCost`'s monthly;
-  a lever saving no month is dropped). No read defaults: the app fills 6 %/360 (property) or 0 %/60 at creation. Goal
-  fields via `patch(GoalCols.entity, …)`. Tests: `test/eng_goal_plan_test.dart` (+ two devices, schema-20 replay),
+  a lever saving no month is dropped). `goalPlan(applied:)` adds the switched-on levers' cuts to the monthly. No read
+  defaults: the app fills 6 %/360 (property) or 0 %/60 at creation. A new big-purchase goal: `repo.addGoal(...)` (one
+  op, target defaults to the need); later edits via `patch(GoalCols.entity, …)`. Tests: `test/eng_goal_plan_test.dart` (+ two devices, schema-20 replay),
   spec `eng_home_spec_test.dart`.
 - `loans.dart` + `repo_loans.dart` — ENG E6 loans (schema 21). Entities `loan` (`LoanCols`, table `loans`: name,
   principal, rate_bp, months, first_due, payment, account_id, payee_key, reference (≥ 4 chars), goal_id, tag_id,
@@ -507,7 +508,11 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   (a payment pays the month whose window [due − 15, next due − 15) holds it; not seen = due + 3 passed), `loanWhatIf`,
   `loanPaymentOn(l, rates, checks, date)` (the schedule's payment of that window; without a schedule the latest rate
   row's payment, else `payment`), `loanPayments(l, rates, checks, rows, currency:)` (payee key or reference, never
-  amount; `amountChanged` against `loanPaymentOn`, never for the exact-rest last month). Repo: `loans`, `loanRates`,
+  amount; `amountChanged` against `loanPaymentOn`, never for the exact-rest last month). E6d helpers (the app does no
+  loan maths): `loanBalanceOn(schedule, date)` (after the last month due ≤ date, `LoanMonth.opening` before the first),
+  `loanYears` (`LoanYear` per due-date year), `loanCheckView(l, rates, checks, date:, shownBalance:)` (diff = shown −
+  expected; nulls without a schedule), `loanRegularPayment`, `loanReferenceUsable`, `loanEndedProposals(loans, st,
+  today)` (closed 0..60 days ago, line gone, id `loanEnded:<loanId>` hidden via `dismissFinding`). Repo: `loans`, `loanRates`,
   `loanChecks`, `addLoan(Loan)`, `addLoanRate`, `addLoanCheck`, `deleteLoan`/`undeleteLoan`, edits via `patch`.
   `buyGoal(goalId, date:, purchaseTxIds:, loan:)` (one write: goal `bought_at` + `loan_id`; rows must be live payments
   out in the wallet currency; one `out:buy:<goal>` contribution = min(saved, Σ the rows that are flexible spending, as
@@ -768,7 +773,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `dismissFinding`/`undismissFinding`, async, no write when unchanged; two devices dismissing offline at once: the later
   list wins, see Known limits). `findings(expanded, st, table, today, {reviewDates, bills})` → `Finding {id, kind,
   subjectKey, otherKey?, from, to, n, strengthPermille?, ratioPermille?, series, otherSeries}`, `FindingKind`
-  aboveUsual | weeklyRhythm | movesTogether | slowCreep | seasonality | milestone. Every threshold and window is in the
+  aboveUsual | weeklyRhythm | movesTogether | slowCreep | seasonality | milestone | loanEnding (`loans:` = (loan,
+  schedule) pairs; payoff month 0..6 months ahead). Every threshold and window is in the
   file comment (lead-approved 2026-11-02): spending by `countsAsSpending` per main tag; W12 = 12 months before this one,
   tracked from the first counted row; aboveUsual 4·now ≥ 5·median and +2000 (≥ 6 months, median > 0); weeklyRhythm
   5·max ≥ 8·min weekday means, min > 0; movesTogether top 8 tags, last 24 months, ≥ 12 shared nonzero months, 4·Sxy² ≥ Sxx·Syy;

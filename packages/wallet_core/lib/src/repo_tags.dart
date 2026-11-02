@@ -184,9 +184,10 @@ extension WalletRepoTags on WalletRepo {
   /// Turns tag [tagId] on or off for transaction [txId], judged by the row's effective tags ([tagsOf]) and written on
   /// the tag the owner sees ([TagTable.resolve]: a sync duplicate counts as its original). On: the tag must be live; a
   /// no-op when the row already has it; else the original's link is written `on`, and any link of the group that is
-  /// `off` too. Off: a no-op when the row does not have it; else the original's link is written `off`, and any link of
-  /// the group that is `on` too (a rule tag stays: `off` overrides it on this row). A tag that is not live (off
-  /// only): its own link, as stored. Unknown transaction or tag: [ArgumentError].
+  /// `off` too. Off: the original's link is written `off`, and any link of the group that is `on` too (a rule tag stays:
+  /// `off` overrides it on this row); a row without the tag still gets an `off` link ("not this project", so Project
+  /// candidates leave it out for good), a no-op only when a link of the group is already `off`. A tag that is not live
+  /// (off only): its own link, as stored. Unknown transaction or tag: [ArgumentError].
   Future<void> setTxTag(String txId, String tagId, bool on) async {
     final tx = transaction(txId);
     if (tx == null) throw ArgumentError('No such transaction.');
@@ -213,6 +214,8 @@ extension WalletRepoTags on WalletRepo {
         for (final MapEntry(key: g, value: state) in links.entries) {
           if (g != o && t.resolve(g) == o && state != on) link(g, on);
         }
+      } else if (!on && !links.entries.any((e) => !e.value && t.resolve(e.key) == o)) {
+        link(o, false);
       }
     }
     if (changes.isEmpty) return;

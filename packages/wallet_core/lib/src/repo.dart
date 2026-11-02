@@ -13,6 +13,7 @@ import 'changes.dart';
 import 'cols.dart';
 import 'dates.dart';
 import 'ecb.dart';
+import 'goal_plan.dart' show goalPlan;
 import 'hlc.dart';
 import 'import_preview.dart';
 import 'loans.dart';

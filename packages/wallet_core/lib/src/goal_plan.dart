@@ -62,9 +62,17 @@ String addMonths(String ym, int n) {
 /// The planner for goal [g] ([Goal.price], [Goal.depositPermille] (null = paid in full), [Goal.costsPermille] (null =
 /// 0), [Goal.loanRateBp] (null = 0), [Goal.loanMonths]): deposit and costs are the price's permille, need = deposit +
 /// costs, left = need − [savedCents] (never below 0), loan = price − deposit. [compareCents]: the plan line the owner
-/// compares the payment with (it ends with the purchase). [today] is `YYYY-MM-DD`.
+/// compares the payment with (it ends with the purchase). [today] is `YYYY-MM-DD`. [applied]: the "Get there sooner"
+/// levers ([goalLevers]) the owner switched on; their cuts are added to [monthlyCents] (one below 0 counted as 0), so
+/// [GoalPlan.monthly], [GoalPlan.months] and [GoalPlan.readyMonth] are those with the levers.
 GoalPlan goalPlan(Goal g,
-    {required int savedCents, required int monthlyCents, int? compareCents, required int toSpendPerPeriodCents, required String today}) {
+    {required int savedCents,
+    required int monthlyCents,
+    int? compareCents,
+    required int toSpendPerPeriodCents,
+    required String today,
+    List<GoalLever> applied = const []}) {
+  if (applied.isNotEmpty) monthlyCents = applied.fold(monthlyCents > 0 ? monthlyCents : 0, (s, l) => s + l.cut);
   final price = (g.price ?? 0) < 0 ? 0 : g.price ?? 0;
   final deposit = _ratio(price, g.depositPermille ?? 1000, 1000);
   final costs = _ratio(price, g.costsPermille ?? 0, 1000);

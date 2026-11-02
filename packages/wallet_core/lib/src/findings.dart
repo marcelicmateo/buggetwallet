@@ -27,6 +27,9 @@
 //   payments; 100, 500, 1000, then every 1000), `streak` (best `reviewStreak` over time; 4, 12, 26, 52, then every 52).
 //   The highest level reached fires; n = that level; window end = the month it was reached (a dismissal holds until
 //   the next level).
+// - loanEnding (ENG §5.5 phase 5): an open loan of `loans` whose schedule's last month (payoff month) is 0..6 months
+//   after this month. subject = loan id, n = months left, series = [('payment', `loanRegularPayment`)] (the money
+//   that frees up), from = today, to = the last due date. Window end = the payoff month.
 // - id = `<kind>:<subjectKey>[:<otherKey>]:<window end YYYY-MM>` (weeklyRhythm and movesTogether without the month);
 //   dismissed ids are left out. Order: kind, then |strength| ?? ratio ?? n descending, then id.
 import 'package:wallet_importer/wallet_importer.dart' show TxKind;
@@ -35,13 +38,14 @@ import 'budget.dart' show countsAsSpending, reviewStreak;
 import 'categories.dart' show BudgetKind, CategoryTable, merchantKey;
 import 'dates.dart';
 import 'hours.dart' show roundDiv;
+import 'loans.dart' show Loan, LoanMonth, loanRegularPayment;
 import 'logs.dart';
 import 'models.dart';
 import 'recurring.dart' show medianCents;
 
 final _log = Logger('bw.findings');
 
-enum FindingKind { aboveUsual, weeklyRhythm, movesTogether, slowCreep, seasonality, milestone }
+enum FindingKind { aboveUsual, weeklyRhythm, movesTogether, slowCreep, seasonality, milestone, loanEnding }
 
 /// One finding with its basis: [n] data points (months, years, shared months, or the milestone level) over [from]..[to]
 /// (`YYYY-MM-DD`), [strengthPermille] (movesTogether only: r × 1000, signed), [ratioPermille] (now ÷ usual, max ÷ min
@@ -85,9 +89,10 @@ class Finding {
 }
 
 /// The findings in [expanded] (the expanded list, P6) as of [today], dismissed ones ([WalletSettings.dismissedFindings])
-/// left out. [reviewDates]: `WalletRepo.reviewDates()`; [bills]: the live recurring bills. Rules in the file comment.
+/// left out. [reviewDates]: `WalletRepo.reviewDates()`; [bills]: the live recurring bills; [loans]: the live loans,
+/// each with its `loanSchedule`. Rules in the file comment.
 List<Finding> findings(List<CategorizedTx> expanded, WalletSettings st, CategoryTable table, String today,
-    {List<String> reviewDates = const [], List<RecurringBill> bills = const []}) {
+    {List<String> reviewDates = const [], List<RecurringBill> bills = const [], List<(Loan, List<LoanMonth>)> loans = const []}) {
   requireIsoDate(today);
   final cur = st.currency;
   final now = _mi(monthOf(today));
@@ -187,6 +192,13 @@ List<Finding> findings(List<CategorizedTx> expanded, WalletSettings st, Category
     }
   }
   _milestones(today, payDate, reviewDates, st, add);
+  for (final (l, s) in loans) {
+    if (!l.open || s.isEmpty) continue;
+    final end = _mi(monthOf(s.last.due));
+    if (end >= now && end - now <= 6) {
+      add(FindingKind.loanEnding, l.id, null, end, today, s.last.due, end - now, series: [('payment', loanRegularPayment(l, s))]);
+    }
+  }
 
   final hidden = st.dismissedFindings.toSet();
   out.removeWhere((f) => hidden.contains(f.id));
