@@ -1,26 +1,74 @@
-// Payday done pays every goal's monthly amount once per pay period: the contribution row is keyed by goal and period,
-// so a second tap (or a second device) in the same period does not pay twice, while a new period does.
+// PS: the payday auto-save. Every goal with a monthly amount is paid once per pay period without a tap (a salary or a started
+// month sets the period; none, nothing is paid). Skipping or lowering a goal for one period, or taking money out of it, moves
+// exactly that money in or out of the period's spending money; moving it to another goal leaves spending money alone.
+import 'package:budget_wallet/src/controller.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wallet_core/wallet_core.dart';
 
 import 'support/wallet.dart';
 
+int _saved(WalletController wc, String name) => wc.goals.firstWhere((g) => g.name.startsWith(name)).saved;
+String _id(WalletController wc, String name) => wc.goals.firstWhere((g) => g.name.startsWith(name)).id;
+
 void main() {
-  test('paydayDone pays each goal once per period and again in the next period', () {
+  test('goals are paid by themselves, once per pay period', () {
     final wc = demoWallet();
-    final before = {for (final g in wc.goals) g.id: g.saved};
-    final monthly = {for (final g in wc.goals) g.id: g.monthly};
-    expect(monthly.values.any((m) => m != 0), isTrue, reason: 'the demo wallet has goals with a monthly amount');
+    expect(wc.goals.map((g) => g.saved), [10000, 10000], reason: 'paid on the first load');
+    wc.reload();
+    wc.reload();
+    expect(wc.goals.map((g) => g.saved), [10000, 10000], reason: 'a reload in the same period pays nothing more');
+    // The next salary starts the next period: paid once more.
+    wc.startNewMonth(addDays(wc.today(), 1));
+    expect(wc.goals.map((g) => g.saved), [20000, 20000]);
+  });
 
-    wc.paydayDone('2026-10-10');
-    wc.paydayDone('2026-10-10'); // same period again: no second payment
-    for (final g in wc.goals) {
-      expect(g.saved, before[g.id]! + monthly[g.id]!, reason: 'goal ${g.id} paid exactly once for 2026-10-10');
-    }
-    expect(wc.repo.settings().savedFor, '2026-10-10');
+  test('a wallet without a salary or a started month pays nothing; so does a goal without a monthly amount', () {
+    final wc = emptyWallet();
+    wc.repo.saveGoal(name: 'Trip', target: 100000, saved: 0, monthly: 5000);
+    wc.reload();
+    expect(wc.goals.single.saved, 0);
+    wc.repo.saveGoal(name: 'Open', target: 0, saved: 0, monthly: 0);
+    wc.startNewMonth(wc.today());
+    expect(_saved(wc, 'Trip'), 5000);
+    expect(_saved(wc, 'Open'), 0, reason: 'monthly 0: no row');
+  });
 
-    wc.paydayDone('2026-11-12');
-    for (final g in wc.goals) {
-      expect(g.saved, before[g.id]! + 2 * monthly[g.id]!, reason: 'goal ${g.id} paid once more for 2026-11-12');
-    }
+  test('a goal made in the middle of the period is paid once', () {
+    final wc = demoWallet();
+    wc.saveGoal(name: 'Bike', target: 50000, saved: 0, monthly: 4000);
+    wc.reload();
+    expect(_saved(wc, 'Bike'), 4000);
+  });
+
+  test('skip raises spending money by exactly the amount; lowering twice, the last one wins', () {
+    final wc = demoWallet();
+    final before = wc.period().flexBudget;
+    final id = _id(wc, 'Yearly');
+    wc.setGoalPeriodAmount(id, 0);
+    expect(_saved(wc, 'Yearly'), 0);
+    expect(wc.period().flexBudget, before + 10000);
+    wc.setGoalPeriodAmount(id, 2500);
+    wc.setGoalPeriodAmount(id, 4000);
+    expect(_saved(wc, 'Yearly'), 4000);
+    expect(wc.period().flexBudget, before + 6000);
+    expect(wc.goalPeriodAmounts()[id], 4000);
+    expect(() => wc.setGoalPeriodAmount(id, -1), throwsArgumentError);
+    expect(() => wc.setGoalPeriodAmount(id, Goal.maxContribution + 1), throwsArgumentError);
+  });
+
+  test('take out to spending raises this period\'s spending money; a move to another goal does not', () {
+    final wc = demoWallet();
+    final before = wc.period().flexBudget;
+    final a = _id(wc, 'Emergency'), b = _id(wc, 'Yearly');
+    wc.takeOutOfGoal(a, 3000);
+    expect(_saved(wc, 'Emergency'), 7000);
+    expect(wc.period().flexBudget, before + 3000);
+    wc.takeOutOfGoal(a, 2000, toGoalId: b);
+    expect(_saved(wc, 'Emergency'), 5000);
+    expect(_saved(wc, 'Yearly'), 12000);
+    expect(wc.period().flexBudget, before + 3000, reason: 'a move leaves spending money alone');
+    expect(() => wc.takeOutOfGoal(a, 5001), throwsArgumentError, reason: 'more than is saved');
+    expect(() => wc.takeOutOfGoal(a, 100, toGoalId: a), throwsArgumentError);
+    expect(_saved(wc, 'Emergency'), 5000);
   });
 }

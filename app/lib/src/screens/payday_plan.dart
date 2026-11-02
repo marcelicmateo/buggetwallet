@@ -242,7 +242,7 @@ class _PaydayPlanState extends State<PaydayPlan> {
           fixedLine(id, wc.categoryTable.label(id), s.planLines[id] ?? 0,
               key: ValueKey('ledgerPlanLine_$id'), sub: (s.planLines[id] ?? 0) > 0 ? null : 'Not counted until you fill it in')
         ),
-      for (final g in wc.goals) (null, DashRowData(title: g.name, amount: moneyExact(-g.monthly, cur))),
+      for (final g in wc.goals) (null, DashRowData(title: g.name, amount: moneyExact(-(wc.goalPeriodAmounts()[g.id] ?? 0), cur))),
       if (p.landedIncome > 0)
         (null, DashRowData(key: const ValueKey('ledgerLandedIncome'), title: 'Extra in', amount: '+${moneyExact(p.landedIncome, cur)}')),
       if (before > 0)

@@ -129,7 +129,7 @@ void main() {
     await tapVisible(t, find.text('Save goal'));
     await t.pumpAndSettle();
     final g = wc.goals.firstWhere((x) => x.name == 'Camera synthetic');
-    expect((g.target, g.saved, g.monthly), (60000, 0, 5000));
+    expect((g.target, g.saved, g.monthly), (60000, 5000, 5000), reason: 'paid for this pay period at once');
     await Harness.checkLog();
   });
 
@@ -137,7 +137,8 @@ void main() {
     final wc = await Harness.start(t, settings: plan(todayIso()));
     final flex0 = wc.period().flexBudget;
     await goTab(t, 'Save');
-    expect(find.descendant(of: find.byKey(const ValueKey('goalsTotal')), matching: find.text('0\u00A0€')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const ValueKey('goalsTotal')), matching: find.text('200\u00A0€')), findsOneWidget,
+        reason: 'two goals paid by themselves');
     expect(find.text('EMERGENCY FUND'), findsOneWidget);
 
     await scrollTo(t, find.byKey(const ValueKey('addGoal')), SaveScreen);
@@ -151,11 +152,11 @@ void main() {
     await tapVisible(t, find.text('Save goal'));
     await t.pumpAndSettle();
     var g = wc.goals.firstWhere((x) => x.name == 'Bike synthetic goal');
-    expect((g.target, g.saved, g.monthly), (60000, 0, 15000));
+    expect((g.target, g.saved, g.monthly), (60000, 15000, 15000));
     expect(wc.period().flexBudget, flex0 - 15000, reason: 'a goal takes its monthly amount off the spending money');
     final end = wc.period().end;
-    expect(find.descendant(of: goalTile('Bike synthetic goal'), matching: find.textContaining('0% of 600\u00A0€')), findsOneWidget);
-    expect(find.descendant(of: goalTile('Bike synthetic goal'), matching: find.textContaining(byMonth(end, 4))), findsOneWidget);
+    expect(find.descendant(of: goalTile('Bike synthetic goal'), matching: find.textContaining('25% of 600\u00A0€')), findsOneWidget);
+    expect(find.descendant(of: goalTile('Bike synthetic goal'), matching: find.textContaining(byMonth(end, 3))), findsOneWidget);
 
     Future<void> edit(void Function() fill) async {
       await scrollTo(t, find.text('BIKE SYNTHETIC GOAL'), SaveScreen);
@@ -167,16 +168,21 @@ void main() {
     }
 
     await edit(() {});
+    expect(t.widget<TextField>(inSheet(GoalSheet, field('This pay period'))).controller!.text, '150');
+    await Harness.shot(t, 'goal-sheet');
+    await tapVisible(t, find.byKey(const ValueKey('goalTakeOut')));
+    await t.pumpAndSettle();
+    await Harness.shot(t, 'goal-sheet-takeout');
     await t.enterText(inSheet(GoalSheet, field('Add money now')), '300');
     await t.pumpAndSettle();
-    expect(find.text('At 150\u00A0€ a month you reach it in 2 months. This comes out of your daily spending money.'), findsOneWidget);
+    expect(find.text('At 150\u00A0€ a month you reach it in 1 months. This comes out of your daily spending money.'), findsOneWidget);
     await tapVisible(t, find.text('Save goal'));
     await t.pumpAndSettle();
     g = wc.goals.firstWhere((x) => x.id == g.id);
-    expect(g.saved, 30000);
-    expect(find.descendant(of: goalTile('Bike synthetic goal'), matching: find.text('300\u00A0€')), findsOneWidget);
-    expect(find.descendant(of: find.byKey(const ValueKey('goalsTotal')), matching: find.text('300\u00A0€')), findsOneWidget);
-    expect(find.descendant(of: goalTile('Bike synthetic goal'), matching: find.textContaining(byMonth(end, 2))), findsOneWidget);
+    expect(g.saved, 45000);
+    expect(find.descendant(of: goalTile('Bike synthetic goal'), matching: find.text('450\u00A0€')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const ValueKey('goalsTotal')), matching: find.text('650\u00A0€')), findsOneWidget);
+    expect(find.descendant(of: goalTile('Bike synthetic goal'), matching: find.textContaining(byMonth(end, 1))), findsOneWidget);
 
     await edit(() {});
     await t.enterText(inSheet(GoalSheet, field('Each month')), '0');

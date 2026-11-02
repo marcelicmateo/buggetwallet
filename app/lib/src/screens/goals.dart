@@ -76,7 +76,7 @@ class GoalsScreen extends StatelessWidget {
           key: const ValueKey('goalsTotal'),
           label: 'Put aside',
           value: moneyExact(tot.saved, cur),
-          trailing: p.goalMonthly > 0 ? TileNote('${moneyExact(p.goalMonthly, cur)} a month') : null,
+          trailing: p.goalMonthly > 0 ? TileNote('${moneyExact(p.goalMonthly, cur)} this pay period') : null,
           sub: hasBar ? 'of ${moneyExact(tot.target, cur)}' : (tot.count == 0 ? 'No goals yet' : null),
           visual: hasBar ? _TotalBar(share(tot.saved, tot.target), c.s3) : null,
           visualSpoken: hasBar ? '${goalPercent(tot.saved, tot.target)} percent of the target' : null,
