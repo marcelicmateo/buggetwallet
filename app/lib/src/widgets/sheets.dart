@@ -174,7 +174,9 @@ Future<T?> openPageOrDialog<T>(BuildContext context, Widget screen, {required do
       ),
     );
   } else {
-    route = Navigator.of(context).push<T>(MaterialPageRoute(fullscreenDialog: true, builder: (_) => screen));
+    // Edge to edge (Android 15+): the page stops above the system navigation bar, the strip under it gets the page colour.
+    route = Navigator.of(context).push<T>(MaterialPageRoute(
+        fullscreenDialog: true, builder: (ctx) => ColoredBox(color: ctx.c.desk, child: SafeArea(top: false, child: screen))));
   }
   return logName == null ? route : loggedRoute(logName, route);
 }

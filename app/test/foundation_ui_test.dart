@@ -29,6 +29,16 @@ class _Opener extends StatelessWidget {
 }
 
 void main() {
+  testWidgets('openPageOrDialog on a phone: the page ends above the system navigation bar (edge to edge)', (tester) async {
+    tester.view.padding = const FakeViewPadding(bottom: 48); // pumpApp uses a 1.0 ratio: 48 dp
+    addTearDown(tester.view.resetPadding);
+    await pumpApp(tester, _Opener((_) {}), size: const Size(400, 800));
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    final page = tester.getRect(find.byType(Scaffold).last);
+    expect(page.bottom, lessThanOrEqualTo(tester.getSize(find.byType(MaterialApp)).height - 48));
+  });
+
   testWidgets('MoneyField: decimal keyboard, right-aligned, fieldKey lands on the TextField', (tester) async {
     final c = TextEditingController();
     String? seen;
