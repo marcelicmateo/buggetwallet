@@ -13,8 +13,8 @@ import '../widgets/sheets.dart';
 import 'currency_offer.dart' show switchWalletCurrency;
 import 'plan_suggestions.dart';
 
-/// Budget › Payday plan (P5: moved from the Plan tab): the ledger lines with an Edit button that turns them into the fields, and the
-/// suggestions from the imports under it.
+/// Budget › Payday plan (P5, UX-B1): the ledger lines, edited in place: a tap on a value turns that row into its field with Save and
+/// Cancel (one at a time; core's refusal shows under the field), and the suggestions from the imports.
 class PaydayPlan extends StatefulWidget {
   final WalletController wc;
   const PaydayPlan({super.key, required this.wc});
@@ -35,8 +35,19 @@ class _PaydayPlanState extends State<PaydayPlan> {
   final Map<String, TextEditingController> _pl = {};
   final Map<String, String> _plShown = {};
 
-  /// Payday plan shows the ledger lines; Edit turns them into the fields (Save / Cancel go back).
-  bool _editing = false;
+  /// The value being edited in place (a settings key, or `planLine_<id>`); null = none.
+  String? _editKey;
+
+  static const _labels = {
+    'salary': 'Salary per month',
+    'rent': 'Rent',
+    'loan': 'Loan',
+    'subs': 'Bills & subs',
+    'impulse': 'Wishlist above',
+    'coolHours': 'Wait (hours)',
+    'paydayDay': 'Latest payday',
+    'rentCashThreshold': 'Cash withdrawal counts as rent from',
+  };
 
   /// Field errors from the last Save, by key (shown under the field until it is edited).
   final Map<String, String> _errors = {};
@@ -95,86 +106,83 @@ class _PaydayPlanState extends State<PaydayPlan> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final wc = widget.wc;
-    final planIds = wc.categoryTable.planLineIds;
+  Widget build(BuildContext context) =>
+      Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: gapped(_dashboard(context, widget.wc)));
 
-    Widget field(String key, String label, {bool money = true, TextEditingController? ctl, Key? fieldKey}) {
-      void changed(String _) {
-        if (_errors.containsKey(key)) setState(() => _errors.remove(key));
-      }
-
-      // The currency sign is drawn always (the label stays floated) and read with the label, not as a node of its own: a lone "€"
-      // node cut by the scroll edge has no readable contrast.
-      final sign = currencySymbol(widget.wc.currency);
-      final decoration = InputDecoration(
-          label: money ? Text(label, semanticsLabel: '$label, $sign') : null,
-          labelText: money ? null : label,
-          floatingLabelBehavior: money ? FloatingLabelBehavior.always : null,
-          suffix: money ? ExcludeSemantics(child: Text(sign, style: numStyle.copyWith(color: context.c.ink2))) : null,
-          errorText: _errors[key],
-          errorMaxLines: 3);
-      return money
-          ? MoneyField(controller: ctl ?? f[key]!, fieldKey: fieldKey, onChanged: changed, decoration: decoration)
-          : TextField(
-              controller: f[key],
-              keyboardType: TextInputType.number,
-              textAlign: TextAlign.end,
-              style: numStyle,
-              onChanged: changed,
-              decoration: decoration,
-            );
+  /// The field of [key] (money: the wallet currency's sign is drawn always and read with the label, not as a node of its own: a lone
+  /// "€" node cut by the scroll edge has no readable contrast).
+  Widget _field(BuildContext context, String key, String label, {bool money = true, TextEditingController? ctl, Key? fieldKey}) {
+    final sign = currencySymbol(widget.wc.currency);
+    final decoration = InputDecoration(
+        label: money ? Text(label, semanticsLabel: '$label, $sign') : null,
+        labelText: money ? null : label,
+        floatingLabelBehavior: money ? FloatingLabelBehavior.always : null,
+        suffix: money ? ExcludeSemantics(child: Text(sign, style: numStyle.copyWith(color: context.c.ink2))) : null,
+        errorText: _errors[key],
+        errorMaxLines: 3);
+    void changed(String _) {
+      if (_errors.containsKey(key)) setState(() => _errors.remove(key));
     }
 
-    return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: gapped([
-          if (_editing)
-            Panel(children: [
-              const SectionHead('Payday plan'),
-              Row(children: [
-                Expanded(child: field('salary', 'Salary per month')),
-                const SizedBox(width: 10),
-                Expanded(child: field('rent', 'Rent'))
-              ]),
-              Row(children: [
-                Expanded(child: field('loan', 'Loan')),
-                const SizedBox(width: 10),
-                Expanded(child: field('subs', 'Bills & subs'))
-              ]),
-              Row(children: [
-                Expanded(child: field('impulse', 'Wishlist above')),
-                const SizedBox(width: 10),
-                Expanded(child: field('coolHours', 'Wait (hours)', money: false))
-              ]),
-              Row(children: [
-                Expanded(child: field('paydayDay', 'Latest payday', money: false)),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: CurrencyField(
-                    key: const ValueKey('planCurrency'),
-                    wc: wc,
-                    value: wc.currency,
-                    choice: CurrencyChoice.fiat,
-                    // The same sheet as Settings › Accounts: it says what a switch does; it is not part of Save.
-                    onChanged: (v) => switchWalletCurrency(context, wc, v),
-                  ),
-                ),
-              ]),
-              field('rentCashThreshold', 'Cash withdrawal counts as rent from'),
-              const Muted('ATM withdrawals this big or bigger count as rent. 0 turns it off.', size: BwType.metaSize),
-              for (final id in planIds) ...[
-                field('planLine_$id', wc.categoryTable.label(id), ctl: _pl[id], fieldKey: ValueKey('planLine_$id')),
-                if (id == planIds.last) const Muted('Your own fixed main tags: what you spend on each every month.', size: BwType.metaSize),
-              ],
-              Wrap(spacing: 8, runSpacing: 8, children: [
-                FilledButton(key: const ValueKey('planSave'), onPressed: _savePlan, child: const Text('Save')),
-                OutlinedButton(key: const ValueKey('planCancel'), onPressed: _cancelEdit, child: const Text('Cancel')),
-              ]),
-            ])
-          else
-            ..._dashboard(context, wc),
-        ]));
+    return money
+        ? MoneyField(controller: ctl ?? f[key]!, fieldKey: fieldKey, autofocus: true, onChanged: changed, decoration: decoration)
+        : TextField(
+            controller: f[key],
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            textAlign: TextAlign.end,
+            style: numStyle,
+            onChanged: changed,
+            decoration: decoration,
+          );
+  }
+
+  /// The row of [key] as its field with Save and Cancel.
+  Widget _editor(BuildContext context, String key) {
+    final line = key.startsWith('planLine_');
+    final id = line ? key.substring(9) : '';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        line
+            ? _field(context, key, widget.wc.categoryTable.label(id), ctl: _pl[id], fieldKey: ValueKey(key))
+            : _field(context, key, _labels[key]!, money: _moneyKeys.contains(key)),
+        const SizedBox(height: 8),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          FilledButton(key: const ValueKey('planSave'), onPressed: _savePlan, child: const Text('Save')),
+          OutlinedButton(key: const ValueKey('planCancel'), onPressed: _cancelEdit, child: const Text('Cancel')),
+        ]),
+      ]),
+    );
+  }
+
+  /// Ledger rows; the row whose edit key is [_editKey] is its editor. A row with a key is tappable and opens it.
+  Widget _rows(BuildContext context, List<(String?, DashRowData)> rows) {
+    final out = <Widget>[];
+    var run = <DashRowData>[];
+    void flush() {
+      if (run.isNotEmpty) out.add(DashRows(rows: run));
+      run = [];
+    }
+
+    for (final (k, r) in rows) {
+      if (k != null && k == _editKey) {
+        flush();
+        out.add(_editor(context, k));
+      } else {
+        run.add(k == null
+            ? r
+            : DashRowData(
+                title: r.title,
+                amount: r.amount,
+                sub: r.sub,
+                chip: r.chip,
+                key: r.key ?? ValueKey('planRow_$k'),
+                onTap: () => _startEdit(k)));
+      }
+    }
+    flush();
+    return Column(mainAxisSize: MainAxisSize.min, children: out);
   }
 
   // ---------- the Plan dashboard (RX4) ----------
@@ -212,34 +220,63 @@ class _PaydayPlanState extends State<PaydayPlan> {
         chip: cents > 0 && (p.fixedPaid[id] ?? 0) >= cents ? const StateChip.onPace(text: 'Paid') : null);
 
     final before = p.beforePayday;
-    final rows = <DashRowData>[
-      DashRowData(
-          title: 'Salary ${s.incomeMode == 'received' && p.received > 0 ? '(received)' : '(planned)'}', amount: moneyExact(p.income, cur)),
-      fixedLine('Rent', 'Rent', s.rent),
-      fixedLine('Loan', 'Loan', s.loan,
-          key: loanLeft == null ? null : const ValueKey('ledgerLoanLeft'),
-          sub: loanLeft == null
-              ? null
-              : '${loanLeft.payments} payment${loanLeft.payments == 1 ? '' : 's'} left · ${moneyExact(loanLeft.cents, cur)} at this rate'),
-      fixedLine('Bills & subscriptions', 'Bills & subscriptions', s.subs),
-      for (final id in planIds)
-        fixedLine(id, wc.categoryTable.label(id), s.planLines[id] ?? 0,
-            key: ValueKey('ledgerPlanLine_$id'), sub: (s.planLines[id] ?? 0) > 0 ? null : 'Not counted until you fill it in'),
-      for (final g in wc.goals) DashRowData(title: g.name, amount: moneyExact(-g.monthly, cur)),
-      if (p.landedIncome > 0)
-        DashRowData(key: const ValueKey('ledgerLandedIncome'), title: 'Extra in', amount: '+${moneyExact(p.landedIncome, cur)}'),
-      if (before > 0)
+    final rows = <(String?, DashRowData)>[
+      (
+        'salary',
         DashRowData(
-            key: const ValueKey('ledgerSetAside'),
-            title: 'Before payday',
-            amount: moneyExact(-before, cur),
-            sub: '${p.beforePaydayCount} ${p.beforePaydayCount == 1 ? 'cost' : 'costs'}'),
-      DashRowData(
-          key: const ValueKey('ledgerSpendingMoney'),
-          title: 'Spending money',
-          sub: dateRange(p.start, p.end),
-          amount: spending < 0 ? null : moneyExact(spending, cur),
-          chip: spending < 0 ? StateChip.over(text: 'Over by ${moneyExact(-spending, cur)}') : null),
+            title: 'Salary ${s.incomeMode == 'received' && p.received > 0 ? '(received)' : '(planned)'}', amount: moneyExact(p.income, cur))
+      ),
+      ('rent', fixedLine('Rent', 'Rent', s.rent)),
+      (
+        'loan',
+        fixedLine('Loan', 'Loan', s.loan,
+            key: loanLeft == null ? null : const ValueKey('ledgerLoanLeft'),
+            sub: loanLeft == null
+                ? null
+                : '${loanLeft.payments} payment${loanLeft.payments == 1 ? '' : 's'} left · ${moneyExact(loanLeft.cents, cur)} at this rate')
+      ),
+      ('subs', fixedLine('Bills & subscriptions', 'Bills & subscriptions', s.subs)),
+      for (final id in planIds)
+        (
+          'planLine_$id',
+          fixedLine(id, wc.categoryTable.label(id), s.planLines[id] ?? 0,
+              key: ValueKey('ledgerPlanLine_$id'), sub: (s.planLines[id] ?? 0) > 0 ? null : 'Not counted until you fill it in')
+        ),
+      for (final g in wc.goals) (null, DashRowData(title: g.name, amount: moneyExact(-g.monthly, cur))),
+      if (p.landedIncome > 0)
+        (null, DashRowData(key: const ValueKey('ledgerLandedIncome'), title: 'Extra in', amount: '+${moneyExact(p.landedIncome, cur)}')),
+      if (before > 0)
+        (
+          null,
+          DashRowData(
+              key: const ValueKey('ledgerSetAside'),
+              title: 'Before payday',
+              amount: moneyExact(-before, cur),
+              sub: '${p.beforePaydayCount} ${p.beforePaydayCount == 1 ? 'cost' : 'costs'}')
+        ),
+      (
+        null,
+        DashRowData(
+            key: const ValueKey('ledgerSpendingMoney'),
+            title: 'Spending money',
+            sub: dateRange(p.start, p.end),
+            amount: spending < 0 ? null : moneyExact(spending, cur),
+            chip: spending < 0 ? StateChip.over(text: 'Over by ${moneyExact(-spending, cur)}') : null)
+      ),
+    ];
+
+    // The numbers that are not part of the split: shown and edited here too.
+    final other = <(String?, DashRowData)>[
+      ('paydayDay', DashRowData(title: 'Latest payday', amount: 'Day ${s.paydayDay}')),
+      ('impulse', DashRowData(title: 'Wishlist above', amount: moneyExact(s.impulse, cur))),
+      ('coolHours', DashRowData(title: 'Wait before buying', amount: '${s.coolHours} h')),
+      (
+        'rentCashThreshold',
+        DashRowData(
+            title: 'Cash counts as rent from',
+            sub: 'ATM withdrawals this big or bigger count as rent. 0 turns it off.',
+            amount: s.rentCashThreshold == 0 ? 'Off' : moneyExact(s.rentCashThreshold, cur))
+      ),
     ];
 
     final tiles = <Widget>[
@@ -248,8 +285,7 @@ class _PaydayPlanState extends State<PaydayPlan> {
         child: Tile(
           key: const ValueKey('planTile'),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-            SplitRow(
-                start: const TileLabel('Payday plan'), end: TileAction(key: const ValueKey('planEdit'), label: 'Edit', onTap: _startEdit)),
+            const TileLabel('Payday plan'),
             const SizedBox(height: 6),
             Align(alignment: Alignment.centerLeft, child: state),
             const SizedBox(height: 10),
@@ -290,7 +326,7 @@ class _PaydayPlanState extends State<PaydayPlan> {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
             const TileLabel('Lines'),
             const SizedBox(height: 4),
-            DashRows(rows: rows),
+            _rows(context, rows),
             if (p.expectedIncome.isNotEmpty)
               Padding(
                 key: const ValueKey('ledgerExpectedIncome'),
@@ -303,6 +339,26 @@ class _PaydayPlanState extends State<PaydayPlan> {
                         style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
                 ]),
               ),
+          ]),
+        ),
+      ),
+      DashItem(
+        span: 2,
+        child: Tile(
+          key: const ValueKey('planOther'),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+            const TileLabel('Other numbers'),
+            const SizedBox(height: 4),
+            _rows(context, other),
+            const SizedBox(height: 8),
+            CurrencyField(
+              key: const ValueKey('planCurrency'),
+              wc: wc,
+              value: wc.currency,
+              choice: CurrencyChoice.fiat,
+              // The same sheet as Settings › Accounts: it says what a switch does; it is not part of Save.
+              onChanged: (v) => switchWalletCurrency(context, wc, v),
+            ),
           ]),
         ),
       ),
@@ -326,9 +382,14 @@ class _PaydayPlanState extends State<PaydayPlan> {
     ];
   }
 
-  void _startEdit() {
-    logNav('plan.edit');
-    setState(() => _editing = true);
+  /// Opens [key] as its field; whatever was typed in another one is dropped.
+  void _startEdit(String key) {
+    logNav('plan.edit', {'field': key.startsWith('planLine_') ? 'planLine' : key});
+    setState(() {
+      _errors.clear();
+      _fill(widget.wc.settings, force: true);
+      _editKey = key;
+    });
   }
 
   /// Back to the ledger lines; the fields show the saved values again.
@@ -337,7 +398,7 @@ class _PaydayPlanState extends State<PaydayPlan> {
     setState(() {
       _errors.clear();
       _fill(widget.wc.settings, force: true);
-      _editing = false;
+      _editKey = null;
     });
   }
 
@@ -404,13 +465,13 @@ class _PaydayPlanState extends State<PaydayPlan> {
       _plShown[id] = t;
     }
     if (changes.isEmpty && lines.isEmpty) {
-      setState(() => _editing = false);
+      setState(() => _editKey = null);
       toast(context, 'Nothing to save');
       return;
     }
     if (lines.isNotEmpty) widget.wc.savePlanLines(lines);
     if (changes.isNotEmpty) widget.wc.updateSettings(changes);
-    setState(() => _editing = false);
+    setState(() => _editKey = null);
     toast(context, 'Plan saved');
   }
 }

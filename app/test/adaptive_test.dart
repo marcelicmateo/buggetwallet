@@ -198,7 +198,7 @@ void main() {
     testWidgets('a plain "1" is not a shortcut: the Plan field keeps its focus and the tab stays', (tester) async {
       await pumpFull(tester, demoWallet(clock: pinnedNoon), 1.0, size: const Size(1280, 800));
       await tapTab(tester, 'Budget'); // the payday plan is on Budget
-      await openPlanEdit(tester);
+      await openPlanEdit(tester, 'rent');
       final field = find.widgetWithText(TextField, 'Rent');
       await tester.ensureVisible(field);
       await tester.tap(field);

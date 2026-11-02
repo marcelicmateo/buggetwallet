@@ -341,7 +341,7 @@ void main() {
     testWidgets('saved as 28 by core and shown as 28', (tester) async {
       final wc = budgetWallet(budgets: false);
       await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 4000));
-      await openPlanEdit(tester);
+      await openPlanEdit(tester, 'paydayDay');
       final f = find.widgetWithText(TextField, 'Latest payday');
       await tester.ensureVisible(f);
       await tester.enterText(f, '31');
@@ -352,7 +352,7 @@ void main() {
       await tester.pump(const Duration(seconds: 4));
       expect(wc.settings.paydayDay, 28);
       expect(f, findsNothing, reason: 'saving closes the fields');
-      await openPlanEdit(tester);
+      await openPlanEdit(tester, 'paydayDay');
       expect(tester.widget<TextField>(f).controller!.text, '28');
     });
   });

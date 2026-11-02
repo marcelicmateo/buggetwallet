@@ -125,7 +125,7 @@ void main() {
       expect(key('ledgerSetAside'), findsOneWidget, reason: 'precondition: a coming cost is set aside');
       String value(Finder row) =>
           t.widgetList<Text>(find.descendant(of: row, matching: find.byType(Text))).map((w) => w.data ?? '').toList().last;
-      final items = find.descendant(of: find.byType(DashRows), matching: find.byType(RuledRow));
+      final items = find.descendant(of: key('planLines'), matching: find.byType(RuledRow));
       final n = items.evaluate().length;
       var sum = 0.0;
       for (var i = 0; i < n - 1; i++) {

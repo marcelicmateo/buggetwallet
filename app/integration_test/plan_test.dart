@@ -18,6 +18,7 @@ import 'package:wallet_importer/wallet_importer.dart';
 import 'package:wallet_sync/wallet_sync.dart';
 
 import '../test/support/seams.dart';
+import '../test/support/wallet.dart' show planRow;
 import 'demo_data.dart';
 import 'support/harness.dart';
 
@@ -34,22 +35,35 @@ Future<void> showPlan(WidgetTester t) async {
 
 String fieldText(WidgetTester t, String label) => t.widget<TextField>(inPlan(field(label))).controller!.text;
 
-/// Payday plan lists the ledger lines until Edit is tapped (then it has the fields); no-op when the fields are already showing.
-Future<void> edit(WidgetTester t) async {
-  if (find.byKey(const ValueKey('planSave')).evaluate().isNotEmpty) return;
+const _planKeys = {
+  'Salary per month': 'salary',
+  'Rent': 'rent',
+  'Loan': 'loan',
+  'Bills & subs': 'subs',
+  'Wishlist above': 'impulse',
+  'Wait (hours)': 'coolHours',
+  'Latest payday': 'paydayDay',
+  'Cash withdrawal counts as rent from': 'rentCashThreshold',
+};
+
+/// Each plan value is edited in place: a tap on its row shows its field (one at a time); no-op when that field is already showing.
+Future<void> edit(WidgetTester t, String label) async {
+  if (inPlan(field(label)).evaluate().isNotEmpty) return;
   await showPlan(t);
-  await scrollTo(t, find.byKey(const ValueKey('planTile')), BudgetScreen, delta: -250);
-  final button = inPlan(find.byKey(const ValueKey('planEdit')));
-  if (button.evaluate().isEmpty) return;
-  await tapVisible(t, button);
+  final row = inPlan(planRow(_planKeys[label]!));
+  await scrollTo(t, row, BudgetScreen);
+  await tapVisible(t, row);
   await t.pumpAndSettle();
 }
 
+/// Types the values one after the other; every one but the last is saved, the last is left for [save] (or a refusal check).
 Future<void> fill(WidgetTester t, Map<String, String> values) async {
-  await edit(t);
-  for (final e in values.entries) {
-    await scrollTo(t, inPlan(field(e.key)), BudgetScreen);
-    await t.enterText(inPlan(field(e.key)), e.value);
+  final entries = values.entries.toList();
+  for (var i = 0; i < entries.length; i++) {
+    await edit(t, entries[i].key);
+    await scrollTo(t, inPlan(field(entries[i].key)), BudgetScreen);
+    await t.enterText(inPlan(field(entries[i].key)), entries[i].value);
+    if (i < entries.length - 1) await save(t);
   }
   await t.pumpAndSettle();
 }
@@ -77,11 +91,11 @@ void main() {
     await save(t);
     expect(find.text('Enter an amount, like 12.50.'), findsOneWidget);
     expect(inPlan(find.text('Numbers only')), findsOneWidget, reason: 'the wrong field says why');
-    expect(wc.settings.salary, 0, reason: 'nothing is saved while a field is wrong');
+    expect((wc.settings.salary, wc.settings.rent, wc.settings.loan), (250000, 60050, 0), reason: 'the wrong value is not saved');
     await fill(t, {'Loan': '-5'});
     await save(t);
     expect(find.text('Enter an amount, like 12.50.'), findsOneWidget);
-    expect(wc.settings.salary, 0);
+    expect(wc.settings.loan, 0);
 
     await fill(t, {
       'Loan': '250',
@@ -97,7 +111,7 @@ void main() {
     final s = wc.settings;
     expect((s.salary, s.rent, s.loan, s.subs, s.impulse, s.coolHours), (250000, 60050, 25000, 4599, 8000, 48));
     expect(s.rentCashThreshold, 40000);
-    await edit(t);
+    await edit(t, 'Latest payday');
     expect(fieldText(t, 'Latest payday'), '28', reason: 'the field shows what was saved');
     await t.tap(inPlan(find.byKey(const ValueKey('planCancel'))));
     await t.pumpAndSettle();
@@ -118,18 +132,17 @@ void main() {
 
     // A wait below zero is refused like the other numbers; nothing is saved.
     await goTab(t, 'Budget');
-    await fill(t, {'Wait (hours)': '-3', 'Bills & subs': '50'});
+    await fill(t, {'Wait (hours)': '-3'});
     await save(t);
     expect(find.text("Wait (hours) can't be negative."), findsOneWidget);
     expect(inPlan(find.text("Can't be negative")), findsOneWidget);
     expect((wc.settings.coolHours, wc.settings.subs), (48, 4599));
-    await fill(t, {'Wait (hours)': '48', 'Bills & subs': '45.99'});
+    await fill(t, {'Wait (hours)': '48'});
     await save(t);
-    expect(find.text('Nothing to save'), findsOneWidget, reason: 'the fields are back to the saved numbers');
+    expect(find.text('Nothing to save'), findsOneWidget, reason: 'the field is back to the saved number');
     expect(inPlan(find.text("Can't be negative")), findsNothing);
 
     // Currency.
-    await edit(t);
     // The wallet currency is chosen in the one currency picker; the switch sheet that follows writes it at once (not Save).
     await scrollTo(t, inPlan(find.byKey(const ValueKey('planCurrency'))), BudgetScreen);
     await tapVisible(t, inPlan(find.byKey(const ValueKey('planCurrency'))));
@@ -141,8 +154,6 @@ void main() {
     await tapVisible(t, find.byKey(const ValueKey('currencyOfferYes')));
     await t.pumpAndSettle();
     expect(wc.settings.currency, 'USD');
-    await save(t);
-    expect(wc.settings.currency, 'USD');
     await goTab(t, 'Today');
     expect(find.textContaining(r'$'), findsWidgets);
     expect(find.textContaining('€'), findsNothing);
@@ -151,7 +162,7 @@ void main() {
     wc.updateSettings({'rent': 70000});
     await t.pumpAndSettle();
     await goTab(t, 'Budget');
-    await edit(t);
+    await edit(t, 'Rent');
     await scrollTo(t, inPlan(field('Rent')), BudgetScreen);
     expect(fieldText(t, 'Rent'), '700', reason: 'Plan fields follow changes made elsewhere');
     await save(t);
@@ -163,12 +174,21 @@ void main() {
     wc.updateSettings({'subs': 5000});
     await t.pumpAndSettle();
     expect(fieldText(t, 'Loan'), '300');
-    expect(fieldText(t, 'Bills & subs'), '50');
+    expect(wc.settings.subs, 5000);
     wc.updateSettings({'salary': 260000});
     await t.pumpAndSettle();
     await save(t);
     expect(find.text('Plan saved'), findsOneWidget);
     expect((wc.settings.loan, wc.settings.subs, wc.settings.salary, wc.settings.rent), (30000, 5000, 260000, 70000));
+    // The Plan page: values as tappable rows, one of them open as its field.
+    await scrollTo(t, find.byKey(const ValueKey('planTile')), BudgetScreen, delta: -600);
+    await Harness.shot(t, 'plan-page');
+    await edit(t, 'Rent');
+    await Harness.shot(t, 'plan-page-editing');
+    await scrollTo(t, inPlan(find.byKey(const ValueKey('planOther'))), BudgetScreen);
+    await Harness.shot(t, 'plan-page-other');
+    await scrollTo(t, inPlan(find.byKey(const ValueKey('budgetsPanel'))), BudgetScreen);
+    await Harness.shot(t, 'plan-page-budgets');
     await Harness.checkLog();
   });
 

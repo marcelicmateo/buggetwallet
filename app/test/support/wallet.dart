@@ -98,18 +98,27 @@ Future<void> pumpApp(WidgetTester tester, Widget child, {Size size = const Size(
   await tester.pump();
 }
 
-/// Budget › Plan › Payday plan: taps Edit so the number fields show (the section lists the lines until then).
-Future<void> openPlanEdit(WidgetTester tester) async {
-  final edit = find.byKey(const ValueKey('planEdit'));
+/// Budget › Plan: the row of the plan value [key] (a settings key such as 'rent', or 'planLine_id'); a tap opens its field.
+Finder planRow(String key) => find.byWidgetPredicate((w) {
+      final k = w.key;
+      return k is ValueKey<String> &&
+          (k.value == 'planRow_$key' ||
+              (key == 'loan' && k.value == 'ledgerLoanLeft') ||
+              (key.startsWith('planLine_') && k.value == 'ledgerPlanLine_${key.substring(9)}'));
+    });
+
+/// Budget › Plan: taps the value [key] so its field shows with Save and Cancel (one field at a time).
+Future<void> openPlanEdit(WidgetTester tester, [String key = 'salary']) async {
+  final row = planRow(key);
   // On the Budget tab the plan sits behind the Spending | Plan switch: choose Plan first.
   final plan = find.byKey(const ValueKey('budgetPlan'));
-  if (edit.evaluate().isEmpty && plan.evaluate().isNotEmpty) {
+  if (row.evaluate().isEmpty && plan.evaluate().isNotEmpty) {
     await tester.tap(plan);
     await tester.pump(const Duration(milliseconds: 300));
   }
-  await Scrollable.ensureVisible(tester.element(edit), alignment: 0.5);
+  await Scrollable.ensureVisible(tester.element(row), alignment: 0.5);
   await tester.pump();
-  await tester.tap(edit);
+  await tester.tap(row);
   await tester.pump();
 }
 

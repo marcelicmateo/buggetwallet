@@ -3,6 +3,11 @@ import 'package:flutter/material.dart';
 import '../controller.dart';
 import '../layout.dart';
 import '../logging.dart';
+import '../tabs.dart' show JumpRequest;
+import '../widgets/jump_when_built.dart';
+import '../widgets/scroll_to.dart';
+import 'budgets.dart';
+import 'habits_panels.dart' show ExpectedIncomePanel;
 import 'payday_plan.dart';
 import 'spending.dart';
 import 'tags_window.dart';
@@ -21,7 +26,10 @@ class BudgetScreen extends StatefulWidget {
 
   /// Keeps the payday plan's State when the shell rebuilds the page.
   final Key? planKey;
-  const BudgetScreen({super.key, required this.wc, this.searchRequest, this.openTab, this.openBills, this.planKey});
+
+  /// Today's income tile: scrolls Plan to Expected income.
+  final JumpRequest<bool>? incomeRequest;
+  const BudgetScreen({super.key, required this.wc, this.searchRequest, this.openTab, this.openBills, this.planKey, this.incomeRequest});
   @override
   State<BudgetScreen> createState() => _BudgetScreenState();
 }
@@ -29,12 +37,20 @@ class BudgetScreen extends StatefulWidget {
 class _BudgetScreenState extends State<BudgetScreen> {
   /// The page last built, so a controller change that is not the switch does not rebuild this level.
   String _shown = '';
+  final _planScroll = ScrollController();
+  final _incomeKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
     widget.wc.addListener(_changed);
     widget.searchRequest?.addListener(_search);
+    widget.incomeRequest?.addListener(_jumpIncome);
+    jumpWhenBuilt(widget.incomeRequest, () => mounted, _jumpIncome);
+  }
+
+  void _jumpIncome() {
+    if (mounted) scrollToKey(_planScroll, _incomeKey, alive: () => mounted);
   }
 
   @override
@@ -54,6 +70,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
   void dispose() {
     widget.wc.removeListener(_changed);
     widget.searchRequest?.removeListener(_search);
+    widget.incomeRequest?.removeListener(_jumpIncome);
+    _planScroll.dispose();
     super.dispose();
   }
 
@@ -77,8 +95,14 @@ class _BudgetScreenState extends State<BudgetScreen> {
       SpendingScreen(wc: wc, searchRequest: widget.searchRequest, openTab: widget.openTab, openBills: widget.openBills, switcher: switcher),
       MarginLine(
         child: ListView(
+            controller: _planScroll,
             padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, pageBottomPad),
-            children: gapped([switcher, PaydayPlan(key: widget.planKey, wc: wc)])),
+            children: gapped([
+              switcher,
+              PaydayPlan(key: widget.planKey, wc: wc),
+              ExpectedIncomePanel(key: _incomeKey, wc: wc),
+              BudgetsPanel(key: const ValueKey('budgetsPanel'), wc: wc),
+            ])),
       ),
       // Built only while shown: three long lists need not be laid out behind the other pages.
       view == 'tags' ? TagsWindow(wc: wc, switcher: switcher) : const SizedBox.shrink(),

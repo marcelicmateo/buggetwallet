@@ -92,7 +92,7 @@ void main() {
       await t.tap(_key('budgetPlan'));
       await t.pump(const Duration(milliseconds: 300));
       expect(_key('planHeading'), findsOneWidget);
-      expect(_key('planEdit'), findsOneWidget);
+      expect(_key('planRow_rent'), findsOneWidget);
       expect(_key('outTile'), findsNothing);
       expect(t.takeException(), isNull);
     });
@@ -374,10 +374,10 @@ void main() {
     tw('a link to a Settings place selects the Settings tab', (t) async {
       final wc = _wallet();
       await pumpFull(t, wc, 1.0, size: const Size(400, 900));
-      wc.openSettings(SettingsSection.income);
+      wc.openSettings(SettingsSection.calendars);
       await t.pumpAndSettle();
       expect(find.byType(SettingsScreen), findsOneWidget);
-      expect(_key('expectedIncomePanel'), findsOneWidget);
+      expect(_key('calendarsPanel'), findsOneWidget);
     });
   });
 
@@ -390,11 +390,6 @@ void main() {
       // The first widget of each section, in page order, found by scrolling down the one page.
       final marks = <Finder>[
         _key('accountAdd'),
-        _key('categoriesPanel'),
-        _key('tagsPanel'),
-        _key('rulesPanel'),
-        _key('budgetsPanel'),
-        _key('expectedIncomePanel'),
         _key('planImport'),
         _key('relayAddress'),
         find.text('Back up now'),
@@ -475,15 +470,15 @@ void main() {
     tw('a deep link selects its section; Currencies is inside Accounts', (t) async {
       final wc = _wallet();
       await pumpFull(t, wc, 1.0, size: wide);
-      wc.openSettings(SettingsSection.income);
+      wc.openSettings(SettingsSection.calendars);
       await t.pumpAndSettle();
       expect(find.byType(SettingsScreen), findsOneWidget);
-      expect(_key('expectedIncomePanel'), findsOneWidget);
+      expect(_key('calendarsPanel'), findsOneWidget);
       expect(_key('accountAdd'), findsNothing);
       wc.openSettings(SettingsSection.currencies);
       await t.pumpAndSettle();
       expect(_key('accountAdd'), findsOneWidget);
-      expect(_key('expectedIncomePanel'), findsNothing);
+      expect(_key('calendarsPanel'), findsNothing);
     });
 
     tw('the chosen section is marked with more than colour', (t) async {

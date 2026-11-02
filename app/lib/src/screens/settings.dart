@@ -12,9 +12,7 @@ import '../widgets/rebuild_when_shown.dart';
 import '../widgets/scroll_to.dart';
 import 'accounts_panel.dart';
 import 'backup_panel.dart';
-import 'budgets.dart';
 import 'calendars_panel.dart';
-import 'categories_panel.dart';
 import 'csv_layouts_panel.dart';
 import 'currencies_panel.dart';
 import 'diagnostics.dart';
@@ -22,11 +20,9 @@ import 'export_panel.dart';
 import 'habits_panels.dart';
 import 'key_backup.dart';
 import 'look_panel.dart';
-import 'rules_panel.dart';
 import 'settings_panels.dart';
 import 'setup_wizard.dart';
 import 'sync_panel.dart';
-import 'tags_panel.dart';
 import 'today_tiles_panel.dart';
 
 /// The panels of [section], unchanged from the Plan tab. The first one carries the section's key from [keys] (the one page scrolls to it).
@@ -38,13 +34,6 @@ List<Widget> settingsPanels(BuildContext context, WalletController wc, SettingsS
         keyed(AccountsPanel(wc: wc)),
         KeyedSubtree(key: keys?[SettingsSection.currencies], child: CurrenciesPanel(wc: wc)),
       ],
-    SettingsSection.tags => [
-        keyed(CategoriesPanel(key: const ValueKey('categoriesPanel'), wc: wc)),
-        TagsPanel(key: const ValueKey('tagsPanel'), wc: wc),
-      ],
-    SettingsSection.rules => [keyed(RulesPanel(key: const ValueKey('rulesPanel'), wc: wc))],
-    SettingsSection.budgets => [keyed(BudgetsPanel(key: const ValueKey('budgetsPanel'), wc: wc))],
-    SettingsSection.income => [keyed(ExpectedIncomePanel(wc: wc))],
     SettingsSection.import => [keyed(ImportPanel(wc: wc, chooser: chooser)), CsvLayoutsPanel(wc: wc, chooser: chooser)],
     SettingsSection.sync => [
         keyed(SyncPanel(wc: wc, onShowKey: () => showWalletKey(context, wc))),
