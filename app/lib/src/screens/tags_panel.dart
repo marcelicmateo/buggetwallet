@@ -1,5 +1,5 @@
-// Plan › Tags (T1): the owner's extra tags, with how many payments each has. Add / rename / hide / move / delete with Undo. A tag only
-// tracks: the main tag (Plan › Main tags) decides the money. The name rules (1-40 characters, unique, not a main tag's name, at most
+// Budget › Tags (tags) (T1): the owner's extra tags, with how many payments each has. Add / rename / hide / move / delete with Undo. A tag only
+// tracks: the main tag (the Main tags section) decides the money. The name rules (1-40 characters, unique, not a main tag's name, at most
 // 500) are core's; its `ArgumentError` text is shown under the field or in a toast.
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -33,12 +33,7 @@ class TagsPanel extends StatelessWidget {
         if (t.duplicateOf(id) != null) id
     ];
     return Panel(children: [
-      SectionHead('Tags',
-          trailing: TextButton.icon(
-              key: const ValueKey('tagsAdd'),
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Add'),
-              onPressed: () => openAddTag(context, wc))),
+      const SectionHead('Tags'),
       Explainer(
           wc,
           'tags',
@@ -47,7 +42,7 @@ class TagsPanel extends StatelessWidget {
       if (ids.isEmpty && dups.isEmpty)
         const Padding(
             padding: EdgeInsets.only(top: 6),
-            child: EmptyNote('No tags yet. Add one here, or tag a payment from its sheet.', key: ValueKey('tagsEmpty')))
+            child: EmptyNote('No tags yet. Tap Add above, or tag a payment from its sheet.', key: ValueKey('tagsEmpty')))
       else
         Rows(children: [
           for (var i = 0; i < ids.length; i++) _TagRow(wc: wc, id: ids[i], count: counts[ids[i]] ?? 0, pos: i, last: ids.length - 1),

@@ -292,6 +292,13 @@ Future<void> goTab(WidgetTester t, String label) async {
   await t.pumpAndSettle();
 }
 
+/// Opens Budget › Tags (main tags, tags, rules); scroll it with `scrollTo(t, f, TagsWindow)`.
+Future<void> goTags(WidgetTester t) async {
+  await goTab(t, 'Budget');
+  await tapVisible(t, find.byKey(const ValueKey('budgetTags')));
+  await t.pumpAndSettle();
+}
+
 /// Opens the Settings tab on [s]: from two panes wide it taps the section in the list; one page has nothing to tap (the test scrolls).
 Future<void> goSettings(WidgetTester t, SettingsSection s) async {
   await goTab(t, 'Settings');

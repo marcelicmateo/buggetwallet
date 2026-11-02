@@ -17,14 +17,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import 'support/detail.dart';
+import 'support/tags_window.dart';
 import 'support/wallet.dart';
 
 const _timeout = Timeout(Duration(seconds: 90));
 
 Future<void> settle(WidgetTester t) => t.pump(const Duration(seconds: 4)); // the controller's 3 s sync debounce and the toast
 
-Widget panel(WalletController wc) =>
-    ListenableBuilder(listenable: wc, builder: (_, __) => Scaffold(body: SingleChildScrollView(child: CategoriesPanel(wc: wc))));
+Widget panel(WalletController wc) => panelWithAdd(wc, () => CategoriesPanel(wc: wc));
 
 Future<void> tapKey(WidgetTester t, String key) async {
   final f = find.byKey(ValueKey(key));
@@ -179,7 +179,7 @@ void main() {
     testWidgets('add a category: name and kind; a taken name shows core\'s message under the field', (t) async {
       final wc = budgetWallet(budgets: false);
       await pumpApp(t, panel(wc), size: const Size(400, 5000));
-      await tapKey(t, 'categoryAdd');
+      await tapAdd(t, 'main');
       await typeName(t, ' groceries ');
       await tapKey(t, 'categorySave');
       expect(find.text('There is already a category with this name.'), findsOneWidget);
@@ -364,7 +364,7 @@ void main() {
         expect(t.takeException(), isNull);
         await t.tapAt(const Offset(2, 2));
         await t.pump(const Duration(milliseconds: 400));
-        await tapKey(t, 'categoryAdd');
+        await tapAdd(t, 'main');
         expect(t.takeException(), isNull);
         await settle(t);
         wc.dispose();
