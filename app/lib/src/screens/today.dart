@@ -114,9 +114,6 @@ class TodayScreen extends StatelessWidget {
       'held': held.isEmpty ? null : _HeldTile(held, f.cur, openAccounts ?? toPlan),
       'income': p.expectedIncome.isEmpty ? null : _IncomeDueTile(f, openIncome),
       'reviewed': f.reviewTile ? _ReviewTile(f, review) : null,
-      'foreign': p.foreignByCurrency.isEmpty
-          ? null
-          : DashItem(span: 2, child: ForeignNote(p.foreignByCurrency, key: const ValueKey('foreignNote'), onSetRate: view.openCurrencies)),
       // On four columns both take the whole row: a two-cell button beside a tall list left the cells under it empty (RX8).
       'add': DashItem(span: wide ? 4 : 2, child: _AddExpenseButton(view, addExpense)),
       'recent': DashItem(span: wide ? 4 : 2, child: _RecentTile(view, recent, f.cur, openSearch)),
@@ -145,6 +142,10 @@ class TodayScreen extends StatelessWidget {
             if (review.due) DashItem(span: 2, child: _ReviewCard(view, review, toSpending, chooser)),
             if (f.s.savedFor != p.start && view.goals.isNotEmpty) DashItem(span: 2, child: _PaydayChecklist(f)),
             if (f.deliveryHour) DashItem(span: 2, child: _DeliveryHourPanel(f)),
+            // Not hideable: without it the owner would not know some spending is left out.
+            if (p.foreignByCurrency.isNotEmpty)
+              DashItem(
+                  span: 2, child: ForeignNote(p.foreignByCurrency, key: const ValueKey('foreignNote'), onSetRate: view.openCurrencies)),
             // The numbers: the owner's choice and order (Settings > Look); a tile still shows only when it has something to say.
             for (final id in order)
               if (!hidden.contains(id) && numberTiles[id] != null) numberTiles[id]!,

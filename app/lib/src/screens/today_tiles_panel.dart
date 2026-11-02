@@ -18,7 +18,6 @@ class TodayTilesPanel extends StatelessWidget {
     'held': 'Held',
     'income': 'Income due',
     'reviewed': 'Reviewed',
-    'foreign': 'Other currencies',
     'add': 'Add expense',
     'recent': 'Recent payments',
   };

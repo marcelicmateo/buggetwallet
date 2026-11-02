@@ -259,7 +259,7 @@ class _SearchResults extends StatelessWidget {
 Future<void> _openRule(BuildContext context, WalletController wc, RuleView rule) async {
   if (rule.kind == RuleKind.builtIn || !rule.editable) {
     wc.setBudgetView('tags');
-    wc.openTab(Tabs.budget);
+    wc.openTab(Tabs.budget, via: 'search');
     return;
   }
   await openRuleForm(context, wc, edit: rule);

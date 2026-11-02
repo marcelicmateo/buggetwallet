@@ -137,7 +137,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
                   done: pace.isEmpty || _paceSeen,
                   children: [
                     if (budget.budgetedCount == 0)
-                      const Muted('No budgets yet. Set some in Settings to see your pace.')
+                      const Muted('No budgets yet. Set some in Budget › Plan to see your pace.')
                     else
                       BudgetSummary(budget, cur),
                     if (pace.isNotEmpty)

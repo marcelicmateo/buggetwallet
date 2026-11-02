@@ -49,6 +49,19 @@ Future<void> _scrollInto(WidgetTester t, Finder f, Type screen) async {
 }
 
 void main() {
+  group('Today tiles (UX-B B4)', () {
+    tw('a tile hidden in Settings › Look leaves the shell\'s Today at once (no data change needed)', (t) async {
+      final wc = _wallet();
+      await pumpFull(t, wc, 1.0, size: const Size(400, 900));
+      await _settle(t);
+      expect(_key('addExpense'), findsOneWidget);
+      final (:order, hidden: _) = wc.todayTiles;
+      wc.setTodayTiles(order, {'add'});
+      await _settle(t);
+      expect(_key('addExpense'), findsNothing);
+    });
+  });
+
   group('the bar', () {
     tw('five destinations in order, with their keys, labels and icons', (t) async {
       await pumpFull(t, _wallet(), 1.0, size: const Size(400, 900));

@@ -252,7 +252,7 @@ class InsightPanel extends StatelessWidget {
   List<Widget> _budget(BuildContext context, DateRange r, String cur) {
     final c = context.c;
     if (wc.categoryBudgets.values.every((v) => v <= 0)) {
-      return const [EmptyNote('No budgets set. Add them in Settings.')];
+      return const [EmptyNote('No budgets set. Add them in Budget › Plan.')];
     }
     return [
       _graph<BudgetBar>(

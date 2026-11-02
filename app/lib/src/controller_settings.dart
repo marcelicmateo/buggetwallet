@@ -103,7 +103,7 @@ extension DeviceSettings on WalletController {
   }
 
   /// The Today number tiles, in their default order (UX-B B4). The tiles that need action are not here: they always come first.
-  static const todayTileIds = ['left', 'payday', 'before', 'budget', 'held', 'income', 'reviewed', 'foreign', 'add', 'recent'];
+  static const todayTileIds = ['left', 'payday', 'before', 'budget', 'held', 'income', 'reviewed', 'add', 'recent'];
 
   /// The order of the Today number tiles (every id once) and the hidden ones. Device-local, never synced. Stored as
   /// `order|hidden` (ids, comma separated); an unknown id is ignored, a tile missing from the list is appended.

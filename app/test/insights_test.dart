@@ -257,7 +257,7 @@ void main() {
       final wc = insightsWallet(budgets: false);
       await pump(tester, InsightsScreen(wc: wc));
       expect(find.byKey(const ValueKey('insightBars_budget')), findsNothing);
-      expect(find.text('No budgets set. Add them in Settings.'), findsOneWidget);
+      expect(find.text('No budgets set. Add them in Budget › Plan.'), findsOneWidget);
     });
 
     testWidgets('biggest payments: the largest first', (tester) async {

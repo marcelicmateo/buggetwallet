@@ -143,7 +143,7 @@ class _CategoryBudgetPanelState extends State<CategoryBudgetPanel> {
     }
     return [
       if (budget == null)
-        const Muted('No budget set for this main tag. Add one in Settings.', key: ValueKey('catBudgetNone'))
+        const Muted('No budget set for this main tag. Add one in Budget › Plan.', key: ValueKey('catBudgetNone'))
       else
         Muted('Budget ${moneyExact(budget, cur)} a month.', key: const ValueKey('catBudgetValue')),
       Rows(children: [
