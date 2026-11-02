@@ -81,6 +81,14 @@ List<(String, String, Map<String, Object?>)> _settingChanges(Map<String, Object?
   for (final k in changes.keys) {
     if (_perKeySetting(k)) throw ArgumentError.value(k, 'changes', 'a per-key setting; use setCategoryBudget or setMerchantPattern');
   }
+  final hours = changes['workHoursPerWeek'];
+  if (changes.containsKey('workHoursPerWeek') && (hours is! int || hours < 1 || hours > WalletSettings.maxWorkHours)) {
+    throw ArgumentError.value(hours, 'workHoursPerWeek', 'must be 1..${WalletSettings.maxWorkHours}');
+  }
+  final dismissed = changes['dismissedFindings'];
+  if (changes.containsKey('dismissedFindings') && (dismissed is! List || dismissed.any((x) => x is! String))) {
+    throw ArgumentError.value('list', 'dismissedFindings', 'must be a list of finding ids');
+  }
   return [
     for (final MapEntry(:key, :value) in changes.entries)
       (
@@ -97,6 +105,27 @@ List<(String, String, Map<String, Object?>)> _settingChanges(Map<String, Object?
 /// The per-key writes of schema 8 (one row per category budget and per merchant pattern; the row shapes are on
 /// [WalletSettings.budgetPrefix]) and their migration.
 extension WalletRepoSettings on WalletRepo {
+  /// Hides finding [id] (ENG §6.2, [WalletSettings.dismissedFindings]): appended as the newest, the oldest dropped past
+  /// [WalletSettings.maxDismissedFindings]. Writes nothing when it is already hidden.
+  Future<void> dismissFinding(String id) async {
+    final ids = _readSettings(db).dismissedFindings;
+    if (ids.contains(id)) return;
+    final next = [...ids, id];
+    updateSettings({'dismissedFindings': next.sublist(max(0, next.length - WalletSettings.maxDismissedFindings))});
+  }
+
+  /// Shows finding [id] again (the Undo of [dismissFinding]). Writes nothing when it is not hidden.
+  Future<void> undismissFinding(String id) async {
+    final ids = _readSettings(db).dismissedFindings;
+    if (!ids.contains(id)) return;
+    updateSettings({
+      'dismissedFindings': [
+        for (final x in ids)
+          if (x != id) x
+      ]
+    });
+  }
+
   /// Sets [category]'s monthly budget to [cents], or removes it when null. Throws [ArgumentError] for a category that
   /// is not a live top-level spending one ([CategoryTable.isSpending]; budgets are set on top-level categories only,
   /// children roll up into them) or cents outside 0..[WalletSettings.maxBudget]. Writes nothing when the budget is

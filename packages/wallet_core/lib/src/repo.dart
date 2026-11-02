@@ -24,6 +24,7 @@ import 'recurring.dart';
 import 'rules.dart';
 import 'schema.dart';
 import 'search.dart' show foldText;
+import 'series.dart' show SavedView, ViewCols;
 import 'splits.dart';
 import 'sqlite_io.dart' if (dart.library.js_interop) 'sqlite_web.dart' as sqlite;
 import 'sync_conflicts.dart';
@@ -35,6 +36,7 @@ part 'repo_bills.dart';
 part 'repo_fx.dart';
 part 'repo_categories.dart';
 part 'repo_changes.dart';
+part 'repo_views.dart';
 part 'repo_blobs.dart';
 part 'repo_import.dart';
 part 'repo_iou.dart';
@@ -201,10 +203,11 @@ class WalletRepo {
   /// fiat currency, as always; BTC satoshis, new in 20). Also in 20 (UX-ACC, UX-FX; SCHEMA21_SPEC.md, folded in):
   /// `tx` gains `account` (the app account of a bank row), `accounts` gains `match_key` (keyed fingerprint of the
   /// export account), the synced entity `fx_day` (table `fx_days`, ECB rates the wallet needs) and the device-local,
-  /// never-synced cache table `ecb_rates`; no data migration. Version 21 (ENG E6): `goals` gains the big-purchase
-  /// fields `price`, `deposit_permille`, `costs_permille`, `loan_rate_bp`, `loan_months`, `compare_line_id`, `bought_at`,
-  /// `loan_id` (`goalPlan`) and the entities `loan`, `loanrate`, `loancheck`; no data migration (the old `loan` setting
-  /// keeps counting until the owner moves it, `convertLegacyLoan`). Older builds ignore all of it.
+  /// never-synced cache table `ecb_rates`; no data migration. Version 21 (ENG): the synced entity `view` (table `views`,
+  /// saved Explore queries); `goals` gains the big-purchase fields `price`, `deposit_permille`, `costs_permille`,
+  /// `loan_rate_bp`, `loan_months`, `compare_line_id`, `bought_at`, `loan_id` (`goalPlan`) and the entities `loan`,
+  /// `loanrate`, `loancheck` (ENG E6); no data migration (the old `loan` setting keeps counting until the owner moves
+  /// it, `convertLegacyLoan`). Older builds ignore all of it.
   static const schemaVersion = 21;
 
   /// Device-local, set once by the schema-15 migration ([_migrateBlobTables]): the next sync runs PUT every cached file

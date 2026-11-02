@@ -1,8 +1,8 @@
 part of 'repo.dart';
 
 /// Loans and the "I bought it" step of a goal (ENG E6, schema 21; `loans.dart` for the entities and the maths). Edits of
-/// a loan, a rate row or a check go through `patch` (generic path: the row must exist and be live). Logs carry counts
-/// only, never names or amounts.
+/// a loan go through `patch` except `closed_at` ([closeLoan]), `goal_id` (`buyGoal`) and `deleted`; rate rows and checks
+/// are append-only. Logs carry counts only, never names or amounts.
 extension WalletRepoLoans on WalletRepo {
   /// The loans, open and closed (deleted ones only with [includeDeleted]), by id.
   List<Loan> loans({bool includeDeleted = false}) =>
@@ -54,6 +54,16 @@ extension WalletRepoLoans on WalletRepo {
     _write([
       ('loan', id, {'deleted': deleted ? 1 : 0})
     ]);
+  }
+
+  /// Closes loan [id] as paid off on [date] (its plan line ends), or reopens it with null. Unknown or deleted id, or a
+  /// date after today: [ArgumentError].
+  void closeLoan(String id, String? date) {
+    _liveLoan(id);
+    _write([
+      ('loan', id, _patchFields(<Col, Object?>{LoanCols.closedAt: date}))
+    ]);
+    logEvent(_log, Level.INFO, 'loan.close', {'closed': date != null});
   }
 
   String _liveLoan(String loanId) {
@@ -209,7 +219,7 @@ extension WalletRepoLoans on WalletRepo {
     final g = goals().where((g) => g.id == goalId).firstOrNull;
     if (g == null) throw ArgumentError('No such goal.');
     if (g.boughtAt == null) throw ArgumentError('This goal is not bought.');
-    final outs = db.select("SELECT id FROM goal_contrib WHERE goal_id = ? AND id LIKE ? AND deleted = 0", [goalId, _buyOutId(goalId, '%')]);
+    final outs = db.select('SELECT id FROM goal_contrib WHERE goal_id = ? AND id LIKE ? AND deleted = 0', [goalId, _buyOutId(goalId, '%')]);
     _write([
       ('goal', goalId, {'bought_at': null, 'loan_id': null}),
       if (g.loanId case final l?) ('loan', l, {'deleted': 1}),

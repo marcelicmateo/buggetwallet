@@ -166,7 +166,9 @@ void main() {
       repo.addLoanRate(a, from: '2026-10-01', rateBp: 500, payment: 21000);
       repo.addLoanRate(a, from: '2027-01-01', rateBp: 600, payment: 25000); // not in force yet
       expect(repo.settings().loanPlan, 5000 + 31000);
-      repo.patch(LoanCols.entity, b, <Col, Object?>{LoanCols.closedAt: '2026-11-01'});
+      expect(() => repo.patch(LoanCols.entity, b, <Col, Object?>{LoanCols.closedAt: '2026-11-01'}), throwsArgumentError,
+          reason: 'closed by its own action');
+      repo.closeLoan(b, '2026-11-01');
       expect(repo.settings().loanPlan, 5000 + 21000, reason: 'a paid-off loan leaves the plan');
       repo.deleteLoan(a);
       expect(repo.settings().loanPlan, 5000);
@@ -183,7 +185,13 @@ void main() {
       expect(() => repo.addLoan(const Loan(id: '', payment: -5)), throwsArgumentError);
       expect(() => repo.addLoanRate('nope', from: '2026-01-01', rateBp: 1), throwsArgumentError);
       expect(() => repo.addLoanCheck('nope', date: '2026-01-01', balance: 1), throwsArgumentError);
-      expect(repo.db.select('SELECT COUNT(*) AS n FROM outbox').first['n'], before);
+      final id = repo.addLoan(_l);
+      final rate = repo.addLoanRate(id, from: '2026-07-01', rateBp: 700);
+      expect(() => repo.patch(LoanRateCols.entity, rate, <Col, Object?>{LoanRateCols.rateBp: 1}), throwsArgumentError,
+          reason: 'rate rows and checks are append-only');
+      expect(() => repo.patch(LoanCols.entity, id, <Col, Object?>{LoanCols.goalId: 'g'}), throwsArgumentError);
+      expect(() => repo.closeLoan(id, '2099-01-01'), throwsArgumentError);
+      expect(repo.db.select('SELECT COUNT(*) AS n FROM outbox').first['n'], (before as int) + 2, reason: 'only the loan and its rate');
     });
 
     test('rates and checks feed the schedule', () {

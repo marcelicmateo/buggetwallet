@@ -459,7 +459,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   never revives or undoes a per-key change; new patterns get orders after the largest live one; a clock-less legacy row
   goes through `_write`; the map rows are left in place for older builds; `repo.migrate` logs `perKeySettings` (count);
   9 = the `account` entity, no data migration; 10 = the `category` entity (P1), no data migration; 11 = tags (T1); 12 = P4
-  recurring columns, no data migration; 13 = splits; 14 = recurring income; 15 = P14 local blob tables, no synced change; 16 = `bills.attached_tx` (P16b), no data migration; 17 = the `iou` and `iou_part` entities (Q8), no data migration; 18 = the `review` entity (V3), no data migration; 19 = `tx.match_off` (D2 Unlink), `planned.auto_off` (KL-A auto-Paid Undo) and the `payee_alias` entity (KL-A slip payee aliases), no data migration; 20 = UX-A/UX-ACC/UX-FX (see the doc comment); 21 = `goals` big-purchase fields (ENG E6: `price`, `deposit_permille`, `costs_permille`, `loan_rate_bp`, `loan_months`, `compare_line_id`, `bought_at`, `loan_id`; the `loan`, `loanrate`, `loancheck` entities; no data migration). Opening an existing database with an older version
+  recurring columns, no data migration; 13 = splits; 14 = recurring income; 15 = P14 local blob tables, no synced change; 16 = `bills.attached_tx` (P16b), no data migration; 17 = the `iou` and `iou_part` entities (Q8), no data migration; 18 = the `review` entity (V3), no data migration; 19 = `tx.match_off` (D2 Unlink), `planned.auto_off` (KL-A auto-Paid Undo) and the `payee_alias` entity (KL-A slip payee aliases), no data migration; 20 = UX-A/UX-ACC/UX-FX (see the doc comment); 21 = the `view` entity (ENG Explore) and the `goals` big-purchase fields (ENG E6: `price`, `deposit_permille`, `costs_permille`, `loan_rate_bp`, `loan_months`, `compare_line_id`, `bought_at`, `loan_id`; the `loan`, `loanrate`, `loancheck` entities; no data migration). Opening an existing database with an older version
   clears the sync cursors (`sync_cursor`) once, so the next sync starts over like a new device (the latest snapshot if
   written by this schema or newer, else every file still on the relay) and applies ops (or fields) the older build skipped.
 - `local_db.dart` — encrypted local database (§4.9, SQLite3MultipleCiphers, web-safe): `localDbKey(VaultKey)` = HKDF
@@ -697,12 +697,29 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   shared with `insights.dart`) built on first use and cached; `first`/`last` = days holding a counted row. `bucketFor`
   (day ≤ 35 days, week ≤ 155, month ≤ 4 years, else quarter; coarser while > `maxBars`), `bucketsOf` (aligned: Monday
   weeks, calendar months/quarters, clipped at the window), `spendingSeries`/`incomeSeries`/`budgetSeries` read the index
-  only (≈0.1 ms per 40-bar window on 20k rows); windows of 5 years or more → `ArgumentError`. `partial` = holds today or
+  only (≈0.1 ms per 40-bar window on 20k rows); windows of 5 years or more → `ArgumentError` for day/week/month
+  buckets only (ENG: `Bucket.year`; quarter and year have no limit, `bucketFor` goes on to year past `maxBars`). `partial` = holds today or
   clipped. `budgetSeries`: each category's month budget split over its days by largest remainder (earlier days get the
   extra cent), a bar's `budgeted` = Σ of its days' shares, `over` = Σ per category max(0, actual − share), `prorated` =
   not whole calendar months; a `category:` without a `budgets` entry counts nowhere (0/0/0), a 0 budget is real (spending =
   over). Whole months equal `spendingByMonth`/`tagTrend`/`merchantTrend`/`incomeVsSpending`/
   `budgetVsActualSeries`. Tests: `test/series_test.dart` (incl. perf), spec tests `test/zc_series_spec_test.dart`.
+- `explore.dart` (`part of` series.dart) + `repo_views.dart` — Explore (ENG §6.3). `SeriesQuery {measure, keys, bucket,
+  window}` (`toJson`/`fromJson`, which throws on anything else), `Measure` spent | cameIn (income + extra, as
+  `monthSummary`) | kept (cameIn − spent) | count (spending rows with amount < 0), `SeriesKey(SeriesKind mainTag |
+  tag | payee (`merchantGroupKey`) | account, id)`; account = `RowAccounts` when `DayIndex(accounts:)` is given, else the
+  stored `tx.account`; an account series is money in/out by the measures, not a balance (transfers and opening dates left out). `runQuery(ix, q,
+  today:)` → `QueryRow {bucket, partial, cents per key, together}` (together = rows matching any key, once); one key's
+  spending is `_spentPrefix` itself, so it equals `spendingSeries`/`tagTrend`/`merchantTrend`; other prefixes are
+  cached on the `DayIndex` (which now keeps the income/extra rows). `heatmap(ix, key, today:, measure:)` → `HeatCell
+  {year, month, cents, level}` from January of the first indexed year to today's month; level 0 for ≤ 0, else 1 +
+  4·(cells above zero below it) ÷ their count. `moveTogether(ix, a, b, window)` (window widened to whole months) → `MoveTogether {strength permille,
+  months, from, to}` over the calendar months where both spent, null when flat (`pearsonPermille` in findings.dart,
+  shared with movesTogether; exact BigInt, one rounding). Synced entity `view` (schema 21, `ViewCols`, table `views`,
+  id `v` + 12 hex: name 1..60, query JSON checked by `seriesQueryProblem` (parses and its window fits its bucket), pinned, sort, deleted): `addView`,
+  `patchView` (or `patch`), `deleteView`/`undeleteView`, `views()` (`SavedView`, `parsed` = null for a query this
+  build cannot read). Tests: `test/eng_explore_test.dart` (incl. two devices, backup, schema 20 replay, perf),
+  `test/eng_explore_spec_test.dart`.
 - `reports.dart` — reports (P8, spec `docs/context/P8_SPEC.md`), pure and web-safe, nothing written. `periodReports(txs, st, today,
   table:, count:)` → `PeriodReport {start, end, running, income, fixed, flex}` (+ `out`, `net`) on the periods of
   `periodSummaries` (same income/out/net; `fixed` = Σ `byCategory` of tags whose `table.kindOf` is fixed, `flex` = out −
@@ -728,6 +745,23 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   by cents from Σ of the rounded per-category values); `changePermille(now, before)` = (now − before)·1000/|before| half away
   from zero, null when before is 0; `reviewsIn(reviewDates, start, end)` (reports.dart) = valid dates in [start, end),
   ascending, once each. Tests: `test/rxc_dashboard_numbers_test.dart`.
+- `findings.dart` + `hours.dart` — ENG §6.1–6.2 (`docs/context/ENG_UI_SPEC.md`), pure and web-safe, ints/BigInt only.
+  `hoursTenths(cents, st)` = |cents| × `workHoursPerWeek` × 520 ÷ (12 × `salary`) in tenths of an hour, rounded once
+  half away from zero, capped at 2^53 − 1; null when salary ≤ 0 (display only). Settings `workHoursPerWeek` (default 40,
+  1..100; `updateSettings` refuses others) and `dismissedFindings` (one row, JSON list of ids, newest 500 kept; repo
+  `dismissFinding`/`undismissFinding`, async, no write when unchanged; two devices dismissing offline at once: the later
+  list wins, see Known limits). `findings(expanded, st, table, today, {reviewDates, bills})` → `Finding {id, kind,
+  subjectKey, otherKey?, from, to, n, strengthPermille?, ratioPermille?, series, otherSeries}`, `FindingKind`
+  aboveUsual | weeklyRhythm | movesTogether | slowCreep | seasonality | milestone. Every threshold and window is in the
+  file comment (lead-approved 2026-11-02): spending by `countsAsSpending` per main tag; W12 = 12 months before this one,
+  tracked from the first counted row; aboveUsual 4·now ≥ 5·median and +2000 (≥ 6 months, median > 0); weeklyRhythm
+  5·max ≥ 8·min weekday means, min > 0; movesTogether top 8 tags, last 24 months, ≥ 12 shared nonzero months, 4·Sxy² ≥ Sxx·Syy;
+  slowCreep confirmed bills' payee rows per month, 4·median(last 3 full months) ≥ 5·median(first 3 months
+  ≥ 12 months before); seasonality ≥ 3 full years;
+  milestone levels (days 100/365/+365, payments 100/500/1000/+1000, streak 4/12/26/52/+52) with the month reached as
+  window end. id `<kind>:<subject>[:<other>]:<window end YYYY-MM>` (weeklyRhythm and movesTogether: no month, so a
+  dismissal holds for good); merchant keys cached per description; logs counts per kind. Tests `test/eng_findings_test.dart`,
+  `test/eng_hours_test.dart` (+ `eng_*_spec_test.dart`).
 - `search.dart` — `searchAll(query, txs:, goals:, wishlist:, bills:, planned:)` → `SearchResult` (`txs` newest first capped at
   `searchTxLimit` 200, `goals`, `wishlist`, `bills`, `planned`, `billsDb` (stored bills: payee, description, item
   names, exact total), `isEmpty`; blank query → `SearchResult.empty`). Text: `foldText`
@@ -781,6 +815,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   paths or file names. Noisy per-render logs at FINER. `test/logs_impl_test.dart` checks core logs stay clean.
 
 ## Known limits (for the sync redesign)
+- Dismissed findings (ENG, one `dismissedFindings` row, lead 2026-11-02): two devices dismissing different findings
+  while offline keep only the later list, so the other finding comes back and the owner dismisses it again.
 - Schema 20 (UX-A) amounts: every fiat currency is stored in hundredths as before; a currency with 3 ISO decimals (KWD,
   BHD, JOD, OMR, TND, LYD, IQD) has no third decimal: typed input allows 2. Every importer (PBZ, Revolut, mapped CSV,
   e-invoice) refuses an amount, fee or balance with non-zero digits past the storage scale, per row with a reason

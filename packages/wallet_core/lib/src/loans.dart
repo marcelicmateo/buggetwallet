@@ -24,7 +24,7 @@ abstract final class LoanCols {
       TextCol(entity, 'reference', label: 'Reference', nullable: true, minLength: loanReferenceMinLength, maxLength: 60);
   static const goalId = RefCol(entity, 'goal_id', label: 'Goal', target: 'goal', nullable: true);
   static const tagId = RefCol(entity, 'tag_id', label: 'Project tag', target: 'tag', nullable: true);
-  static const closedAt = DateCol(entity, 'closed_at', label: 'Closed on', nullable: true);
+  static const closedAt = DateCol(entity, 'closed_at', label: 'Closed on', nullable: true, notAfterToday: true);
   static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
 
   static const all = <Col>[

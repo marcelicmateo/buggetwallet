@@ -189,11 +189,13 @@ export 'src/export.dart'
         transactionsCsv,
         transactionsCsvHeader,
         transactionsCsvTagsHeader;
+export 'src/findings.dart' show Finding, FindingKind, findings;
 export 'src/forecast.dart'
     show BalanceWarning, BalanceWarningKind, balanceWarnings, ForecastPoint, forecastAfterAllowance, forecastToPayday;
 export 'src/fx.dart' show convertMinor, FxUsed, fxUsed, homeAmount, inHomeCurrency;
 export 'src/goal_plan.dart' show annuityPayment, GoalLever, GoalLeverKind, goalLevers, GoalPlan, goalPlan;
 export 'src/hlc.dart' show ClockBehindException, Hlc, HlcClock, maxClockDrift;
+export 'src/hours.dart' show hoursTenths;
 export 'src/ics.dart' show CalendarEvent, calendarEventRef, calendarRef, IcsParseResult, legacyCalendarEventRef, parseIcs, plannedIcs;
 export 'src/import_preview.dart' show ImportPreview, PreviewRow, PreviewStatus;
 export 'src/insights.dart'
@@ -340,7 +342,8 @@ export 'src/repo.dart'
         WalletRepoSplits,
         WalletRepoSyncApply,
         WalletRepoTags,
-        WalletRepoTx;
+        WalletRepoTx,
+        WalletRepoViews;
 export 'src/reports.dart'
     show CategoryPeriod, categoryByPeriod, PeriodReport, periodReports, reviewsIn, SavedByWaiting, savedByWaiting, savedByWaitingAll;
 export 'src/rules.dart' show PayeeCount, RuleSuggestion, ruleSuggestionFor, ruleSuggestions, uncategorisedPayees;
@@ -357,10 +360,23 @@ export 'src/series.dart'
         BudgetBar,
         budgetSeries,
         DayIndex,
-        IncomeSpendingBar,
+        HeatCell,
+        heatmap,
         incomeSeries,
+        IncomeSpendingBar,
+        Measure,
+        MoveTogether,
+        moveTogether,
+        QueryRow,
+        runQuery,
+        SavedView,
         SeriesBar,
-        spendingSeries;
+        SeriesKey,
+        SeriesKind,
+        SeriesQuery,
+        seriesQueryProblem,
+        spendingSeries,
+        ViewCols;
 export 'src/splits.dart' show decodeSplitParts, encodeSplitParts, SplitCols, SplitPart, splitFits;
 export 'src/suggest.dart' show PlanSuggestion, planProposals, SettingProposal, Suggested, suggestPlan;
 export 'src/sync_conflicts.dart' show SyncConflict;

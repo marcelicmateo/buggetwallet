@@ -334,8 +334,8 @@ void main() {
         expect(c, throwsArgumentError);
       }
       // From a leap day: 5 years on is 1 Mar 2033 (no 29 Feb then).
-      expect(bucketsOf(dr('2028-02-29', '2033-02-28'), Bucket.quarter), isNotEmpty);
-      expect(() => bucketsOf(dr('2028-02-29', '2033-03-01'), Bucket.quarter), throwsArgumentError);
+      expect(bucketsOf(dr('2028-02-29', '2033-02-28'), Bucket.month), isNotEmpty);
+      expect(() => bucketsOf(dr('2028-02-29', '2033-03-01'), Bucket.month), throwsArgumentError); // quarters and years: no limit (ENG)
     });
 
     test('a bad today is refused', () {

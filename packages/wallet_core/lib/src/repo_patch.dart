@@ -95,11 +95,15 @@ extension WalletRepoPatch on WalletRepo {
     'wish': {'added', 'status', 'decided', 'deleted'},
     'category': {'kind', 'deleted'},
     'tag': {'deleted'},
+    'view': {'deleted'},
+    'loan': {'closed_at', 'goal_id', 'deleted'}, // closeLoan, buyGoal, deleteLoan (ENG E6)
   };
 
   /// Entities changed by their own actions only (their writes keep rules a field edit would skip: matching, totals,
-  /// links, repayments).
-  static const _actionEntities = {'tx', 'iou_part', 'goal_contrib', 'rule', 'txtag', 'ruletag', 'split', 'review', 'payee_alias'};
+  /// links, repayments). Loan rate rows and balance checks are append-only (`addLoanRate`, `addLoanCheck`).
+  static const _actionEntities = {
+    'tx', 'iou_part', 'goal_contrib', 'rule', 'txtag', 'ruletag', 'split', 'review', 'payee_alias', 'loanrate', 'loancheck', //
+  };
 
   int _patchBill(String id, Map<Col, Object?> values) {
     final fields = _patchFields(values);

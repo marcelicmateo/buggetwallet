@@ -107,6 +107,7 @@ const entityTables = {
   ),
   'loanrate': ('loan_rates', ['loan_id', 'from_date', 'rate_bp', 'payment', 'deleted']),
   'loancheck': ('loan_checks', ['loan_id', 'date', 'balance', 'deleted']),
+  'view': ('views', ['name', 'query', 'pinned', 'sort', 'deleted']),
 };
 
 const dataTables = [
@@ -133,6 +134,7 @@ const dataTables = [
   'loans',
   'loan_rates',
   'loan_checks',
+  'views',
 ];
 
 /// Every row of the data tables (and the field clocks), in a stable order, as plain maps.

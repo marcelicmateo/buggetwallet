@@ -1,5 +1,5 @@
 import 'dart:convert' show jsonDecode;
-import 'dart:math' show min;
+import 'dart:math' show max, min;
 
 import 'package:wallet_importer/wallet_importer.dart' show CsvMapping, TxKind;
 
@@ -1295,6 +1295,13 @@ class WalletSettings {
   /// `WalletRepoLoans.convertLegacyLoan`) plus Σ [loanLines].
   int get loanPlan => loanLines.values.fold(loan, (s, v) => s + v);
 
+  /// ENG §6.1: hours worked a week, for showing amounts as hours of work (`hoursTenths`). 1..[maxWorkHours].
+  final int workHoursPerWeek;
+
+  /// ENG §6.2: ids of the findings the owner marked "Not interesting" (`Finding.id`), oldest first; the newest
+  /// [maxDismissedFindings] are kept. One synced row (`dismissedFindings`, a JSON list).
+  final List<String> dismissedFindings;
+
   const WalletSettings({
     this.salary = 0,
     this.rent = 0,
@@ -1328,7 +1335,12 @@ class WalletSettings {
     this.builtInRuleOverrides = const {},
     this.ecb = EcbRates.none,
     this.loanLines = const {},
+    this.workHoursPerWeek = defaultWorkHours,
+    this.dismissedFindings = const [],
   });
+
+  /// [workHoursPerWeek] default (owner, 2026-11-02) and range; [dismissedFindings] kept.
+  static const defaultWorkHours = 40, maxWorkHours = 100, maxDismissedFindings = 500;
 
   /// Largest accepted amount (minor units) and wait (hours: a year) in a stored or synced value.
   static const maxAmount = 100000000000, maxCoolHours = 24 * 365;
@@ -1413,6 +1425,7 @@ class WalletSettings {
     }
 
     final patterns = m['merchantPatterns'];
+    final dismissed = m['dismissedFindings'];
     final confirmed = m['salaryConfirmed'];
     final budgets = m['categoryBudgets'];
     // Per-key rows (schema 8): `budget:<category>` and `pattern:<id>`.
@@ -1518,6 +1531,13 @@ class WalletSettings {
               }),
             _ => const <String, int>{},
           },
+      workHoursPerWeek: i('workHoursPerWeek', defaultWorkHours, min: 1, max: maxWorkHours),
+      dismissedFindings: switch (dismissed) {
+        null => const [],
+        final List<Object?> l when l.every((x) => x is String) =>
+          List.unmodifiable(l.skip(max(0, l.length - maxDismissedFindings)).cast<String>()),
+        _ => bad('dismissedFindings', const <String>[]),
+      },
     );
   }
 
@@ -1666,6 +1686,8 @@ class WalletSettings {
         'headsUpDays': headsUpDays,
         'returnReminderDays': returnReminderDays,
         'warrantyReminderDays': warrantyReminderDays,
+        'workHoursPerWeek': workHoursPerWeek,
+        'dismissedFindings': dismissedFindings,
         // UX-FX: the wallet's ECB rates (`fx_day` rows, read by the repo), so fromMap(toMap()) keeps them.
         if (!ecb.isEmpty) ecbKey: ecb.toJson(),
         if (loanLines.isNotEmpty) loanLinesKey: loanLines,
