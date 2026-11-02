@@ -106,17 +106,17 @@ class _IconBox extends StatelessWidget {
 /// The € | hours of work switch: a track with two buttons, the chosen one filled. Device-local.
 class HoursSwitch extends StatelessWidget {
   final bool hours;
-  final String symbol;
+  final String symbol, currencyName;
   final ValueChanged<bool> onChanged;
-  const HoursSwitch({super.key, required this.hours, required this.symbol, required this.onChanged});
+  const HoursSwitch({super.key, required this.hours, required this.symbol, required this.currencyName, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
     final c = context.c;
-    Widget seg(Key key, String text, bool on, bool toHours) => Semantics(
+    Widget seg(Key key, String text, String spoken, bool on, bool toHours) => Semantics(
           button: true,
           selected: on,
-          label: text,
+          label: spoken,
           excludeSemantics: true,
           onTap: () => onChanged(toHours),
           child: InkWell(
@@ -136,15 +136,18 @@ class HoursSwitch extends StatelessWidget {
             ),
           ),
         );
-    return Container(
-      key: const ValueKey('hoursSwitch'),
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(color: c.bg, borderRadius: BorderRadius.circular(10), border: Border.all(color: c.line)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Flexible(child: seg(const ValueKey('amountsMoney'), symbol, !hours, false)),
-        Flexible(child: seg(const ValueKey('amountsHours'), 'hours of work', hours, true)),
-      ]),
-    );
+    return Semantics(
+        container: true,
+        label: 'Show amounts as',
+        child: Container(
+          key: const ValueKey('hoursSwitch'),
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(color: c.bg, borderRadius: BorderRadius.circular(10), border: Border.all(color: c.line)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Flexible(child: seg(const ValueKey('amountsMoney'), symbol, currencyName, !hours, false)),
+            Flexible(child: seg(const ValueKey('amountsHours'), 'hours of work', 'hours of work', hours, true)),
+          ]),
+        ));
   }
 }
 

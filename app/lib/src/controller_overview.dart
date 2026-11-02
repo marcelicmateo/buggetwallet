@@ -34,15 +34,22 @@ class PinData {
 extension OverviewData on WalletController {
   // ---------- € | hours of work ----------
 
-  /// Is there a salary and a work week, so an amount can be shown as hours? Without it the switch is hidden.
-  bool get hoursAvailable => hoursTenths(1, settings) != null;
+  /// Is there a salary and a work week, so an amount can be shown as hours? Without it the switch is hidden. Worked out once per settings object.
+  bool get hoursAvailable {
+    if (!identical(_hoursFor, settings)) {
+      _hoursFor = settings;
+      _hoursOk = hoursTenths(1, settings) != null;
+    }
+    return _hoursOk;
+  }
 
-  /// Amounts shown as hours of work on the Overview (device-local, `amountsAs`). Never true without [hoursAvailable].
-  bool get showHours => hoursAvailable && repo.localValue('amountsAs') == 'hours';
+  /// Amounts shown as hours of work on the Overview ([hoursMode], device-local `amountsAs`). Never true without [hoursAvailable].
+  bool get showHours => hoursMode.value && hoursAvailable;
 
   void setShowHours(bool on) {
-    if (on == (repo.localValue('amountsAs') == 'hours')) return;
+    if (on == hoursMode.value) return;
     repo.setLocalValue('amountsAs', on ? 'hours' : null);
+    hoursMode.value = on;
     logEvent(_ovLog, Level.INFO, 'overview.hours', {'on': on});
     notifyListeners();
   }
@@ -74,7 +81,7 @@ extension OverviewData on WalletController {
   }
 
   /// [foundList] with its words, memoized (the sentences read tag and bill names).
-  List<FindingCard> foundCards() => _cached(const MemoKey('findingCards'), () => [for (final f in foundList()) _card(f)]);
+  List<FindingCard> foundCards() => _cached(MemoKey('findingCards', showHours), () => [for (final f in foundList()) _card(f)]);
 
   /// Hides these findings (one card hides one id, the milestones card up to three) in one write burst.
   void dismissFindings(List<String> ids) {
@@ -97,7 +104,11 @@ extension OverviewData on WalletController {
 
   FindingCard _card(Finding f) {
     String tag(String id) => categoryTable.label(id);
-    String ratio(int permille) => '${permille ~/ 1000}${numberStyle.decimal}${(permille % 1000 + 50) ~/ 100 % 10}';
+    String ratio(int permille) {
+      final tenths = (permille + 50) ~/ 100; // one decimal, half up
+      return '${tenths ~/ 10}${numberStyle.decimal}${tenths % 10}';
+    }
+
     final last = f.series.isEmpty ? 0 : f.series.last.$2;
     switch (f.kind) {
       case FindingKind.aboveUsual:
@@ -114,13 +125,14 @@ extension OverviewData on WalletController {
       case FindingKind.movesTogether:
         final r = f.strengthPermille!, a = r.abs();
         final word = a >= 700 ? 'strong' : 'fairly strong';
-        final strength = '0${numberStyle.decimal}${a ~/ 10}';
+        final hundredths = ((a + 5) ~/ 10).clamp(0, 100); // permille half up to 2 decimals, at most 1.00
+        final strength = '${hundredths ~/ 100}${numberStyle.decimal}${(hundredths % 100).toString().padLeft(2, '0')}';
         return FindingCard(
             f,
             'Moves together',
             r > 0
                 ? '${tag(f.subjectKey)} and ${tag(f.otherKey!)} move together'
-                : 'When ${tag(f.subjectKey)} goes up, ${tag(f.otherKey!)} goes down',
+                : '${tag(f.subjectKey)} and ${tag(f.otherKey!)} move in opposite directions',
             '${f.n} months, link strength $strength of 1: $word.',
             subjectName: tag(f.subjectKey),
             otherName: tag(f.otherKey!));
@@ -165,12 +177,19 @@ extension OverviewData on WalletController {
   PinData? pinData(SavedView v) => _cached(MemoKey('ov.pin', (v.id, v.query)), () {
         final q = v.parsed;
         if (q == null) return null;
-        final rows = runQuery(queryIndex, q, today: today());
+        final all = runQuery(queryIndex, q, today: today());
+        // The running bucket is partial: it is never the "now" of the value or the delta (and not drawn). Only a series with no
+        // completed bucket yet shows what it has.
+        final done = [
+          for (final r in all)
+            if (!r.partial) r
+        ];
+        final rows = done.isEmpty ? all : done;
         if (rows.isEmpty) return null;
         final vals = [for (final r in rows) r.together];
         final end = vals.length - 1;
-        final prev = end > 0 ? vals[end - 1] : 0;
-        // Percent change of the last bucket on the one before, rounded half away from zero in integers.
+        final prev = end > 0 && !rows[end].partial ? vals[end - 1] : 0;
+        // Percent change of the last completed bucket on the one before, rounded half away from zero in integers.
         final int? delta = prev <= 0 ? null : ((vals[end] - prev) * 100 + (vals[end] >= prev ? prev ~/ 2 : -(prev ~/ 2))) ~/ prev;
         final unit = switch (q.bucket) {
           Bucket.day => 'days',

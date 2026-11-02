@@ -116,7 +116,7 @@ void main() {
 
     testWidgets('with data: found cards and the pinned tile show; "All N" opens Findings', (t) async {
       final wc = _foundWallet();
-      await pumpFull(t, wc, 1.0, size: const Size(400, 1600));
+      await pumpFull(t, wc, 1.0, size: const Size(400, 3000));
       expect(_key('foundSection'), findsOneWidget);
       expect(_key('pinnedSection'), findsOneWidget);
       await t.tap(_key('foundAll'));
@@ -159,6 +159,48 @@ void main() {
         });
         await t.pump(const Duration(seconds: 4));
       }
+    });
+  });
+
+  group('cards follow the hours switch, pins use completed buckets', () {
+    /// A payment a month for 12 months (5,000 cents), two big ones this month: "above your usual month" fires.
+    WalletController aboveUsualWallet() {
+      final wc = demoWallet(clock: pinnedNoon);
+      final today = wc.today();
+      wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [
+        for (var m = 1; m <= 13; m++) syntheticTx(addDays(today, -30 * m), -5000, 'POS plaćanje', 'PBZ POS PBZ7LIDL HRVATSKA ZAGREB'),
+        syntheticTx(addDays(today, -20), -10000, 'POS plaćanje', 'PBZ POS PBZ7LIDL HRVATSKA ZAGREB'),
+        syntheticTx(today, -10001, 'POS plaćanje', 'PBZ POS PBZ7LIDL HRVATSKA ZAGREB'),
+      ]));
+      wc.reload();
+      return wc;
+    }
+
+    test('the above-usual basis switches unit with the toggle (memo keyed on the switch)', () {
+      final wc = aboveUsualWallet();
+      addTearDown(wc.dispose);
+      FindingCard card() => wc.foundCards().firstWhere((k) => k.finding.kind == FindingKind.aboveUsual);
+      expect(card().basis, contains('€'));
+      wc.setShowHours(true);
+      expect(card().basis, matches(RegExp(r'\d\u00A0h this month$')));
+      expect(card().basis, isNot(contains('€')));
+      wc.setShowHours(false);
+      expect(card().basis, contains('€'));
+    });
+
+    test('a pin shows its last completed bucket, never the running one', () {
+      final wc = _foundWallet();
+      addTearDown(wc.dispose);
+      final v = wc.pinnedViews().single;
+      final rows = runQuery(wc.queryIndex, v.parsed!, today: wc.today());
+      final done = [
+        for (final r in rows)
+          if (!r.partial) r
+      ];
+      expect(rows.last.partial, isTrue, reason: 'this month is running');
+      final pin = wc.pinData(v)!;
+      expect(pin.last, done.last.together);
+      expect(pin.values, hasLength(done.length));
     });
   });
 

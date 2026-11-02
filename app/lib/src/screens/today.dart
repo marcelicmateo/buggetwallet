@@ -74,7 +74,10 @@ class TodayScreen extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      ValueListenableBuilder<bool>(valueListenable: view.hoursMode, builder: (context, _, __) => _content(context));
+
+  Widget _content(BuildContext context) {
     final f = _TodayFigures(view, clock?.call() ?? view.now);
     final p = f.p;
     final review = view.reviewState();
@@ -196,10 +199,10 @@ class TodayScreen extends StatelessWidget {
         Expanded(child: stack(right)),
       ]);
     } else {
+      // One grid for the attention tiles and the number tiles (an odd attention tile pairs with the first number tile).
       body = stack([
-        DashGrid(fillRows: wide && right.isEmpty, children: heroItems),
+        DashGrid(fillRows: wide, children: [...heroItems, ...numbers]),
         ...right,
-        if (numbers.isNotEmpty) DashGrid(fillRows: wide, children: numbers),
       ]);
     }
 
@@ -329,8 +332,13 @@ class _Hero extends StatelessWidget {
       label: f.heroLabel,
       value: f.view.amount(f.hero, cur),
       valueColor: f.over && !f.ended ? c.bad : null,
-      trailing:
-          f.view.hoursAvailable ? HoursSwitch(hours: f.view.showHours, symbol: currencySymbol(cur), onChanged: f.view.setShowHours) : null,
+      trailing: f.view.hoursAvailable
+          ? HoursSwitch(
+              hours: f.view.showHours,
+              symbol: currencySymbol(cur),
+              currencyName: currencyInfo(cur)?.name ?? cur,
+              onChanged: f.view.setShowHours)
+          : null,
       sub: sub,
       chip: _chip(),
       dots: days.isEmpty ? null : DayDots(days: days),

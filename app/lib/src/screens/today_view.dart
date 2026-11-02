@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:wallet_core/wallet_core.dart';
 
@@ -74,6 +75,8 @@ class TodayView implements Listenable {
   bool setupCollapsedFor(List<String> steps) => _wc.setupCollapsedFor(steps);
 
   // ---------- Overview (E2) ----------
+  /// The € | hours switch: Overview listens to it, so a toggle rebuilds Overview only.
+  ValueListenable<bool> get hoursMode => _wc.hoursMode;
   bool get hoursAvailable => _wc.hoursAvailable;
   bool get showHours => _wc.showHours;
   void setShowHours(bool on) => _wc.setShowHours(on);

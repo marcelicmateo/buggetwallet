@@ -342,6 +342,14 @@ class WalletController extends ChangeNotifier {
   /// Counts [reload]s: the derived values below are cached per version (and per day) and recomputed only after the data changed.
   int dataVersion = 0;
 
+  /// Overview's € | hours switch (device-local `amountsAs`), read once on load and on every [reload], then kept here: Overview listens to
+  /// it, so a toggle rebuilds Overview only, and no amount reads the database. See `controller_overview.dart`.
+  final ValueNotifier<bool> hoursMode = ValueNotifier(false);
+
+  /// [WalletSettings] the cached [hoursAvailable] was worked out for (settings are replaced, never edited).
+  WalletSettings? _hoursFor;
+  bool _hoursOk = false;
+
   /// The [dataVersion] [pendingAutoPaid] last looked at, and what it found.
   int _autoPaidSeen = -1;
   List<AutoPaid> _autoPaidPending = const [];
@@ -864,6 +872,7 @@ class WalletController extends ChangeNotifier {
     final t = PerfTimer('wc.reload');
     _applyNumberStyle(); // the repo may have been switched
     settings = repo.settings();
+    hoursMode.value = repo.localValue('amountsAs') == 'hours';
     walletCurrencyCode = settings.currency; // before the first frame parses a field
     categorizer = repo.categorizer();
     final raw = repo.transactions(); // logs repo.transactions
@@ -1387,6 +1396,7 @@ class WalletController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    hoursMode.dispose();
     warmUp.cancel();
     logEvent(_log, Level.FINE, 'wc.dispose');
     _syncTimer?.cancel();

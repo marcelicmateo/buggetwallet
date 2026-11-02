@@ -32,50 +32,54 @@ class _WeekBarsState extends State<WeekBars> {
   Widget build(BuildContext context) {
     final c = context.c;
     final hi = widget.values.fold<int>(1, (a, b) => b > a ? b : a);
+    final n = widget.values.length;
+    // One tap area for the whole chart (at 320 dp a single bar is under 48 dp wide): the nearest bar is chosen by where the finger is.
+    // One spoken label lists the seven exact values.
+    final spoken = [for (var i = 0; i < n; i++) '${WeekBars.days[i]} ${widget.texts[i]}'].join(', ');
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      SizedBox(
-        height: 130,
-        child: DecoratedBox(
-          decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.lineStrong))),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            for (var i = 0; i < widget.values.length; i++)
-              Expanded(
-                child: Semantics(
-                  button: true,
-                  selected: i == _sel,
-                  label: '${WeekBars.days[i]}, ${widget.texts[i]}',
-                  excludeSemantics: true,
-                  onTap: () => setState(() => _sel = i),
-                  child: GestureDetector(
-                    key: ValueKey('weekBar:$i'),
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => setState(() => _sel = i),
-                    child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
-                      if (i == _sel)
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                            decoration: BoxDecoration(color: c.ink, borderRadius: BorderRadius.circular(6)),
-                            child: Text(widget.texts[i],
-                                key: const ValueKey('weekBarValue'), style: numStyle.copyWith(fontSize: 11, color: c.bg)),
+      LayoutBuilder(
+        builder: (context, box) => Semantics(
+          container: true,
+          label: 'Average spend per day of the week: $spoken. Selected: ${WeekBars.days[_sel]}',
+          excludeSemantics: true,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapUp: (d) => setState(() => _sel = (d.localPosition.dx / box.maxWidth * n).floor().clamp(0, n - 1)),
+            child: SizedBox(
+              height: 130,
+              child: DecoratedBox(
+                decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.lineStrong))),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  for (var i = 0; i < n; i++)
+                    Expanded(
+                      child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
+                        if (i == _sel)
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                              decoration: BoxDecoration(color: c.ink, borderRadius: BorderRadius.circular(6)),
+                              child: Text(widget.texts[i],
+                                  key: const ValueKey('weekBarValue'), style: numStyle.copyWith(fontSize: 11, color: c.bg)),
+                            ),
+                          ),
+                        const SizedBox(height: 4),
+                        Container(
+                          key: ValueKey('weekBar:$i'),
+                          width: 26,
+                          height: 12 + 84 * widget.values[i] / hi,
+                          decoration: BoxDecoration(
+                            color: c.s1,
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                            border: i == _sel ? Border.all(color: c.ink, width: 2) : null,
                           ),
                         ),
-                      const SizedBox(height: 4),
-                      Container(
-                        width: 26,
-                        height: 12 + 84 * widget.values[i] / hi,
-                        decoration: BoxDecoration(
-                          color: c.s1,
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-                          border: i == _sel ? Border.all(color: c.ink, width: 2) : null,
-                        ),
-                      ),
-                    ]),
-                  ),
-                ),
+                      ]),
+                    ),
+                ]),
               ),
-          ]),
+            ),
+          ),
         ),
       ),
       const SizedBox(height: 6),
