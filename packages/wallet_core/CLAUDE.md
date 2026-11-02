@@ -495,8 +495,10 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   while a loan has no length; `afterPerPeriod` or `shortBy`). `goalLevers(expanded, st, table, today, plan:, incomes:)`
   → `GoalLever`s (main tags whose mean of the last 3 of the 12 completed months beats their 12-month median, cut floored
   to euros; confirmed side incomes (category kind not income: salary is the plan's) at `recurringCycleCost`'s monthly;
-  a lever saving no month is dropped). No read defaults: the app fills 6 %/360 (property) or 0 %/60 at creation. Goal
-  fields via `patch(GoalCols.entity, …)`. Tests: `test/eng_goal_plan_test.dart` (+ two devices, schema-20 replay),
+  a lever saving no month is dropped). `goalPlan(applied:)` adds the switched-on levers' cuts to the monthly. No read
+  defaults: the app fills 6 %/360 (property) or 0 %/60 at creation. A big-purchase goal: `saveGoal(..., purchase: {GoalCols.price: …})`
+  (one op, checked like `patch`); with a price the target is derived on read: `goalTarget(g)` (deposit + costs), used by
+  `monthsToGoal`, `goalTotals` and search; never read `Goal.target` directly. Tests: `test/eng_goal_plan_test.dart` (+ two devices, schema-20 replay),
   spec `eng_home_spec_test.dart`.
 - `loans.dart` + `repo_loans.dart` — ENG E6 loans (schema 21). Entities `loan` (`LoanCols`, table `loans`: name,
   principal, rate_bp, months, first_due, payment, account_id, payee_key, reference (≥ 4 chars), goal_id, tag_id,
@@ -507,7 +509,12 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   (a payment pays the month whose window [due − 15, next due − 15) holds it; not seen = due + 3 passed), `loanWhatIf`,
   `loanPaymentOn(l, rates, checks, date)` (the schedule's payment of that window; without a schedule the latest rate
   row's payment, else `payment`), `loanPayments(l, rates, checks, rows, currency:)` (payee key or reference, never
-  amount; `amountChanged` against `loanPaymentOn`, never for the exact-rest last month). Repo: `loans`, `loanRates`,
+  amount; `amountChanged` against `loanPaymentOn`, never for the exact-rest last month). E6d helpers (the app does no
+  loan maths): `loanBalanceOn(schedule, date)` (after the last month due ≤ date, `LoanMonth.opening` before the first;
+  a check only from its own date, `LoanMonth.checkDate`/`startCheckDate`),
+  `loanYears` (`LoanYear` per due-date year, `adjust` = check drops, so Σ principal + adjust = borrowed − end), `loanCheckView(l, rates, checks, date:, shownBalance:)` (diff = shown −
+  expected; nulls without a schedule), `loanRegularPayment`, `loanReferenceUsable`, `loanEndedProposals(loans, st,
+  today)` (closed 0..60 days ago, line gone, id `loanEnded:<loanId>` hidden via `dismissFinding`). Repo: `loans`, `loanRates`,
   `loanChecks`, `addLoan(Loan)`, `addLoanRate`, `addLoanCheck`, `deleteLoan`/`undeleteLoan`, edits via `patch`.
   `buyGoal(goalId, date:, purchaseTxIds:, loan:)` (one write: goal `bought_at` + `loan_id`; rows must be live payments
   out in the wallet currency; one `out:buy:<goal>` contribution = min(saved, Σ the rows that are flexible spending, as
@@ -768,7 +775,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `dismissFinding`/`undismissFinding`, async, no write when unchanged; two devices dismissing offline at once: the later
   list wins, see Known limits). `findings(expanded, st, table, today, {reviewDates, bills})` → `Finding {id, kind,
   subjectKey, otherKey?, from, to, n, strengthPermille?, ratioPermille?, series, otherSeries}`, `FindingKind`
-  aboveUsual | weeklyRhythm | movesTogether | slowCreep | seasonality | milestone. Every threshold and window is in the
+  aboveUsual | weeklyRhythm | movesTogether | slowCreep | seasonality | milestone | loanEnding (`loans:` = (loan,
+  schedule) pairs; payoff month 0..6 months ahead). Every threshold and window is in the
   file comment (lead-approved 2026-11-02): spending by `countsAsSpending` per main tag; W12 = 12 months before this one,
   tracked from the first counted row; aboveUsual 4·now ≥ 5·median and +2000 (≥ 6 months, median > 0); weeklyRhythm
   5·max ≥ 8·min weekday means, min > 0; movesTogether top 8 tags, last 24 months, ≥ 12 shared nonzero months, 4·Sxy² ≥ Sxx·Syy;
@@ -1010,6 +1018,10 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   that still have no row (with the map's clock); its edits to entries that have one are lost. Upgraded devices'
   per-key edits never reach an older build (it keeps showing its own map).
 
+- Project "Skip" (ENG E6d, an `off` link written even on a row without the tag): it wins over the tag of a hand-added
+  entry matched to that bank row later (matching never copies a tag the row already has a link for), so the owner
+  tags that row again if he wants it in the project; a Skip and a match made offline on two devices settle by the later
+  clock (accepted, lead 2026-11-02).
 - Loans (ENG E6): an open loan keeps its payment in the fixed plan until it is closed (`closeLoan`: the last payment
   matched or the owner confirms a 0 balance), also after its schedule's last month (the safe side: money stays set
   aside). A build without loan rows that sets the old `loan` setting again after `convertLegacyLoan` counts on top of

@@ -425,7 +425,7 @@ void main() {
       }
     }, timeout: _quick);
 
-    testWidgets('Today: at 1280 the hero is one short row across all four columns, two columns at 800, one at 320 with text 2.0',
+    testWidgets('Today: at 1200 the hero is one short row across all four columns, two columns at 800, one at 320 with text 2.0',
         (tester) async {
       Future<List<Rect>> boxes(Size size, double scale) async {
         await pumpFull(tester, _demo(), scale, size: size);
@@ -433,8 +433,8 @@ void main() {
         return _boxes(tester);
       }
 
-      final wide = await boxes(const Size(1280, 800), 1.0);
-      final gridW = tester.getSize(find.byType(DashGrid)).width;
+      final wide = await boxes(const Size(1200, 800), 1.0);
+      final gridW = tester.getSize(find.byType(DashGrid).first).width;
       expect(wide.first.width, closeTo(gridW, 1), reason: 'the hero spans the whole row');
       expect(wide.first.height, lessThan(wide.first.width / 3), reason: 'one short row: no block of empty paper under the figure');
       expect(wide[1].top, greaterThanOrEqualTo(wide.first.bottom), reason: 'the next tile flows below the hero');

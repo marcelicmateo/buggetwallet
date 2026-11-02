@@ -12,6 +12,7 @@ import '../theme.dart';
 import '../widgets/charts.dart';
 import '../widgets/common.dart';
 import '../widgets/dash.dart';
+import 'overview.dart';
 import 'review.dart' show reviewSummary, streakText;
 import 'today_view.dart';
 
@@ -73,7 +74,10 @@ class TodayScreen extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      ValueListenableBuilder<bool>(valueListenable: view.hoursMode, builder: (context, _, __) => _content(context));
+
+  Widget _content(BuildContext context) {
     final f = _TodayFigures(view, clock?.call() ?? view.now);
     final p = f.p;
     final review = view.reviewState();
@@ -93,7 +97,11 @@ class TodayScreen extends StatelessWidget {
             view.showBudgetView('spending');
             openSpending!();
           };
-    final wide = sizeFor(MediaQuery.sizeOf(context).width) == LayoutSize.expanded;
+    final width = MediaQuery.sizeOf(context).width;
+    final hasFound = view.foundCards().isNotEmpty, hasPins = view.pins().isNotEmpty, hasGoal = view.nearestGoal() != null;
+    // From 1280 dp, with something to put in it, two columns (safe to spend and held | found and pinned); the Needs-you pane comes with E7.
+    final twoCol = width >= 1280 && (hasFound || hasPins || hasGoal);
+    final wide = sizeFor(width) == LayoutSize.expanded && !twoCol;
     final recent = view.wholeTxs.where((t) => t.kind != BudgetKind.transfer || t.iou).take(wide ? 8 : 3).toList();
     final today = view.today();
     final overdue = {
@@ -110,8 +118,8 @@ class TodayScreen extends StatelessWidget {
           : suggestions > 0
               ? _CalendarCheckTile(suggestions, () => _openUpcoming(context, view))
               : null,
-      'budget': tight == null ? null : _BudgetTile(tight, view.categoryTable.label(tight.category), f.cur, toSpending),
-      'held': held.isEmpty ? null : _HeldTile(held, f.cur, openAccounts ?? toPlan),
+      'budget': tight == null ? null : _BudgetTile(tight, view.categoryTable.label(tight.category), f.cur, toSpending, view.amount),
+      'held': held.isEmpty ? null : _HeldTile(held, f.cur, openAccounts ?? toPlan, view.amount),
       'income': p.expectedIncome.isEmpty ? null : _IncomeDueTile(f, openIncome),
       'reviewed': f.reviewTile ? _ReviewTile(f, review) : null,
       // On four columns both take the whole row: a two-cell button beside a tall list left the cells under it empty (RX8).
@@ -120,36 +128,90 @@ class TodayScreen extends StatelessWidget {
     };
     final (:order, :hidden) = view.tiles;
 
+    final needs =
+        toReview + view.plannedNeedingCategory().length + view.balanceWarnings().length + (overdue > 0 ? 1 : 0) + (review.due ? 1 : 0);
+    final VoidCallback explore = toSpending ?? openSearch ?? () {};
+    final header = OverviewHeader(
+      eyebrow: overviewEyebrow(today, p),
+      needsYou: needs,
+      onPeriod: () => view.showPeriodReport(context),
+      onNeedsYou: () {
+        if (toReview > 0) {
+          (openBillsReview ?? toPlan)();
+        } else if (review.due) {
+          view.showReview(context, openSpending: toSpending, chooser: chooser);
+        } else if (overdue > 0 && openBills != null) {
+          openBills!();
+        } else {
+          toast(context, 'Nothing needs you now');
+        }
+      },
+    );
+    void openFound() => view.showFindings(context, openExplore: explore);
+    final found = FoundSection(view: view, onOpen: openFound);
+    final pinned = PinnedSection(view: view, onExplore: explore);
+    final goal = GoalBar(
+        view: view,
+        onOpen: () {
+          view.showSaving();
+          openPlan();
+        });
+    final heroItems = <Widget>[
+      // A wide window: the hero is one short row across the whole grid (a 2x2 hero left a block of empty paper, UX-A).
+      DashItem(span: wide ? 4 : 2, rowSpan: 1, child: _Hero(f, wide: wide)),
+      // What needs the owner first.
+      if (f.ended && f.newPayday == null) DashItem(span: 2, child: _PeriodEndedTile(f)),
+      if (f.setupSteps.isNotEmpty)
+        DashItem(span: 2, child: _SetupTile(view: view, steps: f.setupSteps, openPlan: toPlan, newPayday: f.newPayday, chooser: chooser)),
+      if (view.deviceStop != null) _DeviceStopTile(view.deviceStop!, view.deviceCode, openSync ?? toPlan),
+      for (final w in view.balanceWarnings()) _BalanceWarnTile(view, w),
+      for (final n in view.plannedNeedingCategory()) _NeedsCategoryTile(f, n),
+      if (toReview > 0) _BillsToReviewTile(toReview, openBillsReview ?? toPlan),
+      if (overdue > 0) _OverdueTile(overdue, openBills),
+      for (final h in view.headsUpLines()) _HeadsUpTile(f, h),
+      if (review.due) DashItem(span: 2, child: _ReviewCard(view, review, toSpending, chooser)),
+      if (f.deliveryHour) DashItem(span: 2, child: _DeliveryHourPanel(f)),
+      // Not hideable: without it the owner would not know some spending is left out.
+      if (p.foreignByCurrency.isNotEmpty)
+        DashItem(span: 2, child: ForeignNote(p.foreignByCurrency, key: const ValueKey('foreignNote'), onSetRate: view.openCurrencies)),
+    ];
+    // The numbers: the owner's choice and order (Settings > Look); a tile still shows only when it has something to say.
+    final numbers = <Widget>[
+      for (final id in order)
+        if (!hidden.contains(id) && numberTiles[id] != null) numberTiles[id]!,
+    ];
+    const gap = SizedBox(height: 14);
+    final right = <Widget>[
+      if (hasFound) found,
+      if (hasPins) pinned,
+      if (hasGoal) goal,
+    ];
+    Widget stack(List<Widget> parts) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: gapped(parts, gap: 14));
+
+    final Widget body;
+    if (twoCol) {
+      body = Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Expanded(
+            child: stack([
+          DashGrid(children: [...heroItems, ...numbers])
+        ])),
+        const SizedBox(width: 20),
+        Expanded(child: stack(right)),
+      ]);
+    } else {
+      // Spec §5.1 order: hero and attention tiles, found, pinned, goal, then the number tiles (two grids: an odd attention tile leaves a gap).
+      body = stack([
+        DashGrid(fillRows: wide && right.isEmpty, children: heroItems),
+        ...right,
+        if (numbers.isNotEmpty) DashGrid(fillRows: wide, children: numbers),
+      ]);
+    }
+
     return ColoredBox(
       color: context.c.desk,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(pagePad, 12, pagePad, pageBottomPad),
-        children: [
-          DashGrid(fillRows: wide, children: [
-            // A wide window: the hero is one short row across the whole grid (a 2x2 hero left a block of empty paper, UX-A).
-            DashItem(span: wide ? 4 : 2, rowSpan: wide ? 1 : 2, child: _Hero(f, wide: wide)),
-            // What needs the owner first.
-            if (f.ended && f.newPayday == null) DashItem(span: 2, child: _PeriodEndedTile(f)),
-            if (f.setupSteps.isNotEmpty)
-              DashItem(
-                  span: 2, child: _SetupTile(view: view, steps: f.setupSteps, openPlan: toPlan, newPayday: f.newPayday, chooser: chooser)),
-            if (view.deviceStop != null) _DeviceStopTile(view.deviceStop!, view.deviceCode, openSync ?? toPlan),
-            for (final w in view.balanceWarnings()) _BalanceWarnTile(view, w),
-            for (final n in view.plannedNeedingCategory()) _NeedsCategoryTile(f, n),
-            if (toReview > 0) _BillsToReviewTile(toReview, openBillsReview ?? toPlan),
-            if (overdue > 0) _OverdueTile(overdue, openBills),
-            for (final h in view.headsUpLines()) _HeadsUpTile(f, h),
-            if (review.due) DashItem(span: 2, child: _ReviewCard(view, review, toSpending, chooser)),
-            if (f.deliveryHour) DashItem(span: 2, child: _DeliveryHourPanel(f)),
-            // Not hideable: without it the owner would not know some spending is left out.
-            if (p.foreignByCurrency.isNotEmpty)
-              DashItem(
-                  span: 2, child: ForeignNote(p.foreignByCurrency, key: const ValueKey('foreignNote'), onSetRate: view.openCurrencies)),
-            // The numbers: the owner's choice and order (Settings > Look); a tile still shows only when it has something to say.
-            for (final id in order)
-              if (!hidden.contains(id) && numberTiles[id] != null) numberTiles[id]!,
-          ]),
-        ],
+        children: [header, gap, body],
       ),
     );
   }
@@ -236,7 +298,7 @@ class _Hero extends StatelessWidget {
     if (f.overPeriod) {
       return _KeyedChip(
           key: const ValueKey('overBudget'),
-          chip: _KeyedChip(key: const ValueKey('overSentence'), chip: StateChip.over(text: '${moneyExact(p.overBy, cur)} over plan')));
+          chip: _KeyedChip(key: const ValueKey('overSentence'), chip: StateChip.over(text: '${f.view.amount(p.overBy, cur)} over plan')));
     }
     if (f.over) return const _KeyedChip(key: ValueKey('overSentence'), chip: StateChip.over(text: 'Nothing more today'));
     if (p.overBudget) return const _KeyedChip(key: ValueKey('overBudget'), chip: StateChip.over(text: 'No money in plan'));
@@ -251,12 +313,17 @@ class _Hero extends StatelessWidget {
     final pace = !f.ended && p.planDaily > 0;
     final tomorrow = p.allowanceTomorrow;
     final String? sub = f.ended
-        ? (p.overBy > 0 ? '${moneyExact(p.overBy, cur)} over plan' : null)
+        ? (p.overBy > 0 ? '${f.view.amount(p.overBy, cur)} over plan' : null)
         : f.over
             // Over the whole plan there is nothing to promise for tomorrow.
-            ? (f.overPeriod ? null : (tomorrow != null ? 'Tomorrow ${moneyExact(tomorrow, cur)}' : 'New period tomorrow'))
+            ? (f.overPeriod ? null : (tomorrow != null ? 'Tomorrow ${f.view.amount(tomorrow, cur)}' : 'New period tomorrow'))
             : pace
-                ? '${moneyExact(p.spent, cur)} of ${moneyExact(p.flexBudget > 0 ? p.flexBudget : 0, cur)}'
+                // Spent of the flexible budget, then "Tomorrow X · pace ▲ N ahead" (spec §5.1) while on plan; over plan the chip's
+                // "X over plan" is the only word (never both).
+                ? '${f.view.amount(p.spent, cur)} of ${f.view.amount(p.flexBudget > 0 ? p.flexBudget : 0, cur)}${f.overPeriod || p.overBudget ? '' : '\n${[
+                    if (tomorrow != null) 'Tomorrow ${f.view.amount(tomorrow, cur)}',
+                    'pace ${f.ahead >= 0 ? '▲ ${f.view.amount(f.ahead, cur)} ahead' : '▼ ${f.view.amount(-f.ahead, cur)} behind'}',
+                  ].join(' · ')}'}'
                 : null;
     final ahead = f.ahead;
     return HeroTile(
@@ -264,8 +331,15 @@ class _Hero extends StatelessWidget {
       wide: wide,
       valueKey: const ValueKey('safeToSpend'),
       label: f.heroLabel,
-      value: moneyExact(f.hero, cur),
+      value: f.view.amount(f.hero, cur),
       valueColor: f.over && !f.ended ? c.bad : null,
+      trailing: f.view.hoursAvailable
+          ? HoursSwitch(
+              hours: f.view.showHours,
+              symbol: currencySymbol(cur),
+              currencyName: currencyInfo(cur)?.name ?? cur,
+              onChanged: f.view.setShowHours)
+          : null,
       sub: sub,
       chip: _chip(),
       dots: days.isEmpty ? null : DayDots(days: days),
@@ -276,7 +350,7 @@ class _Hero extends StatelessWidget {
       paceUsed: pace ? f.used : null,
       paceExpected: pace ? p.elapsed : null,
       paceOver: pace && (ahead < 0 || p.overBy > 0),
-      paceSpoken: pace ? (ahead >= 0 ? '${moneyExact(ahead, cur)} ahead of pace' : '${moneyExact(-ahead, cur)} behind pace') : null,
+      paceSpoken: pace ? (ahead >= 0 ? '${f.view.amount(ahead, cur)} ahead of pace' : '${f.view.amount(-ahead, cur)} behind pace') : null,
     );
   }
 }
@@ -309,8 +383,8 @@ class _LeftTile extends StatelessWidget {
     return StatTile(
         key: const ValueKey('leftTile'),
         label: 'Left',
-        value: moneyExact(p.remaining > 0 ? p.remaining : 0, f.cur),
-        sub: p.planDaily > 0 && !f.ended ? '${moneyExact(p.planDaily, f.cur)} a day' : null);
+        value: f.view.amount(p.remaining > 0 ? p.remaining : 0, f.cur),
+        sub: p.planDaily > 0 && !f.ended ? '${f.view.amount(p.planDaily, f.cur)} a day' : null);
   }
 }
 
@@ -343,7 +417,7 @@ class _BeforePaydayTile extends StatelessWidget {
     return StatTile(
         key: const ValueKey('comingUpLine'),
         label: 'Before payday',
-        value: moneyExact(f.p.beforePayday, f.cur),
+        value: f.view.amount(f.p.beforePayday, f.cur),
         sub: n > 0 ? '$n ${n == 1 ? 'cost' : 'costs'}' : null,
         onTap: onTap);
   }
@@ -368,7 +442,8 @@ class _BudgetTile extends StatelessWidget {
   final CategoryBudgetLine line;
   final String name, currency;
   final VoidCallback? onTap;
-  const _BudgetTile(this.line, this.name, this.currency, this.onTap);
+  final String Function(int, String) amt;
+  const _BudgetTile(this.line, this.name, this.currency, this.onTap, this.amt);
   @override
   Widget build(BuildContext context) {
     final c = context.c;
@@ -383,7 +458,7 @@ class _BudgetTile extends StatelessWidget {
         progress: used,
         color: over ? c.bad : null,
         center: '',
-        value: moneyExact(over ? -left : left, currency),
+        value: amt(over ? -left : left, currency),
         sub: over ? null : 'left',
         chip: over ? const StateChip.over(text: 'Over budget') : null,
         onTap: onTap);
@@ -392,7 +467,8 @@ class _BudgetTile extends StatelessWidget {
 
 /// Money in accounts (per currency; the wallet's own first); a tap opens Settings › Accounts.
 class _HeldTile extends StatelessWidget {
-  const _HeldTile(this.held, this.cur, this.open);
+  final String Function(int, String) amt;
+  const _HeldTile(this.held, this.cur, this.open, this.amt);
   final Map<String, int> held;
   final String cur;
   final VoidCallback open;
@@ -403,8 +479,8 @@ class _HeldTile extends StatelessWidget {
     return StatTile(
         key: const ValueKey('heldLine'),
         label: 'Held',
-        value: moneyExact(held[first]!, first),
-        sub: codes.length > 1 ? codes.skip(1).map((k) => moneyExact(held[k]!, k)).join(' · ') : null,
+        value: amt(held[first]!, first),
+        sub: codes.length > 1 ? codes.skip(1).map((k) => amt(held[k]!, k)).join(' · ') : null,
         onTap: () {
           logNav('accounts.heldOpen');
           open();
@@ -423,7 +499,7 @@ class _IncomeDueTile extends StatelessWidget {
     return StatTile(
         key: const ValueKey('expectedIncomeLine'),
         label: 'Income due',
-        value: moneyExact(p.expectedIncome.fold<int>(0, (a, x) => a + x.amount), f.cur),
+        value: f.view.amount(p.expectedIncome.fold<int>(0, (a, x) => a + x.amount), f.cur),
         chip: StateChip.date(shortDateOrRaw(p.expectedIncome.last.due)),
         onTap: onTap);
   }
@@ -453,7 +529,7 @@ class _NeedsCategoryTile extends StatelessWidget {
       key: ValueKey('needsCategory:${n.id}'),
       attention: true,
       label: n.title.isEmpty ? 'Bill' : n.title,
-      value: moneyExact(n.amount!, f.cur),
+      value: f.view.amount(n.amount!, f.cur),
       chip: const StateChip.over(text: 'Needs a category'),
       onTap: () {
         logNav('bill.needsCategory');
@@ -477,7 +553,7 @@ class _BalanceWarnTile extends StatelessWidget {
           key: key,
           attention: true,
           label: name,
-          value: moneyExact(w.cents ?? 0, cur),
+          value: view.amount(w.cents ?? 0, cur),
           valueColor: context.c.bad,
           chip: const StateChip.over(text: 'Below zero')),
       BalanceWarningKind.goesBelow => StatTile(
@@ -565,7 +641,7 @@ class _HeadsUpTile extends StatelessWidget {
   Widget build(BuildContext context) => StatTile(
       key: ValueKey('headsUp:${h.item.key}'),
       label: h.item.title,
-      value: moneyExact(h.item.amount!, f.cur),
+      value: f.view.amount(h.item.amount!, f.cur),
       sub: (h.item.planned?.needsCategory ?? false) ? 'Needs a category' : null,
       chip: StateChip.date(h.daysLeft == 0
           ? 'Today'
@@ -646,8 +722,8 @@ class _DeliveryHourPanel extends StatelessWidget {
       ]),
       const SizedBox(height: 6),
       Text(
-        'This month: $deliveryCount ${deliveryCount == 1 ? 'order' : 'orders'}, ${moneyExact(deliverySum, cur)}. '
-        '${f.ended ? 'The pay period has ended; start the new one to get a daily budget.' : p.allowanceToday > 0 ? 'A typical ${moneyExact(typicalOrderCents, cur)} order is ${(typicalOrderCents / p.allowanceToday * 100).round()}% of today\'s money.' : 'Today\'s money is used up.'}',
+        'This month: $deliveryCount ${deliveryCount == 1 ? 'order' : 'orders'}, ${f.view.amount(deliverySum, cur)}. '
+        '${f.ended ? 'The pay period has ended; start the new one to get a daily budget.' : p.allowanceToday > 0 ? 'A typical ${f.view.amount(typicalOrderCents, cur)} order is ${(typicalOrderCents / p.allowanceToday * 100).round()}% of today\'s money.' : 'Today\'s money is used up.'}',
         style: const TextStyle(fontSize: BwType.bodySize),
       ),
     ]));
@@ -689,6 +765,7 @@ class _RecentTile extends StatelessWidget {
                   tagTable: view.tagTable,
                   t: view.shown(t),
                   currency: cur,
+                  amountOf: view.showHours ? view.amount : null,
                   fxRates: view.settings.fxRates,
                   hasBill: view.billForTx(t.tx.id) != null,
                   matched: view.isMatchedBank(t.tx.id),
@@ -791,7 +868,7 @@ class _SetupTile extends StatelessWidget {
                 Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: gapped([
-                      Text('Planning on ${moneyExact(s.salary, cur)} a month', style: bold),
+                      Text('Planning on ${view.amount(s.salary, cur)} a month', style: bold),
                       Text(
                           s.salary > 0
                               ? 'Check this matches a normal month of pay. Fix it in Plan if not.'

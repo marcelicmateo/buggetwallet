@@ -262,6 +262,9 @@ class _RenderDash extends RenderBox
 class Tile extends StatelessWidget {
   final Widget child;
   final VoidCallback? onTap;
+
+  /// A long press or a right click (Overview's pins: Unpin).
+  final VoidCallback? onLongPress;
   final EdgeInsetsGeometry padding;
   final String? semanticLabel;
   final bool attention;
@@ -272,6 +275,7 @@ class Tile extends StatelessWidget {
       {super.key,
       required this.child,
       this.onTap,
+      this.onLongPress,
       this.padding = const EdgeInsets.all(12),
       this.semanticLabel,
       this.attention = false,
@@ -290,7 +294,7 @@ class Tile extends StatelessWidget {
         borderRadius: BorderRadius.circular(radius),
         side: attention ? BorderSide(color: c.accent, width: 2) : BorderSide(color: c.line),
       ),
-      child: InkWell(onTap: onTap, child: Padding(padding: padding, child: child)),
+      child: InkWell(onTap: onTap, onLongPress: onLongPress, onSecondaryTap: onLongPress, child: Padding(padding: padding, child: child)),
     );
     if (semanticLabel == null) return body;
     return Semantics(
@@ -550,6 +554,9 @@ class HeroTile extends StatelessWidget {
   final VoidCallback? onTap;
   final Color? valueColor;
 
+  /// Something on the label row's right (Overview's € | hours switch). Its buttons stay in the semantics tree.
+  final Widget? trailing;
+
   /// The tile spans a whole wide row: the figure, its note and the pace meter on the left, the [dots] on the right (no measuring).
   final bool wide;
 
@@ -574,12 +581,14 @@ class HeroTile extends StatelessWidget {
     this.paceSpoken,
     this.onTap,
     this.valueColor,
+    this.trailing,
   })  : assert(dots == null || dotsWidth > 0, 'dots needs dotsWidth so the tile can decide beside or under'),
         assert(dotsCompact == null || dotsCompactWidth > 0, 'dotsCompact needs dotsCompactWidth');
 
   @override
   Widget build(BuildContext context) {
     final c = context.c;
+    final labelRow = trailing == null ? TileLabel(label) : HeadingRow(TileLabel(label), trailing!);
     final hasPace = paceUsed != null && paceExpected != null;
     final style = dashNumStyle(size: 44, color: valueColor ?? c.ink);
     final number = FittedBox(
@@ -606,9 +615,10 @@ class HeroTile extends StatelessWidget {
     if (wide && dots != null) {
       return Tile(
         onTap: onTap,
+        exposeChildren: trailing != null,
         semanticLabel: _spokenJoin([label, value, sub, chip?.spoken, dotsSpoken, paceSpoken]),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-          TileLabel(label),
+          labelRow,
           const SizedBox(height: 6),
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Expanded(
@@ -648,9 +658,10 @@ class HeroTile extends StatelessWidget {
 
     return Tile(
       onTap: onTap,
+      exposeChildren: trailing != null,
       semanticLabel: _spokenJoin([label, value, sub, chip?.spoken, dotsSpoken, paceSpoken]),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-        TileLabel(label),
+        labelRow,
         const SizedBox(height: 6),
         body,
         if (pace != null) pace,

@@ -251,8 +251,10 @@ void main() {
       expect(repo.pendingOps().length, ops);
       await repo.setTxTag(cafe1.id, work, false);
       await repo.setTxTag(market.id, trip, true);
-      await repo.setTxTag(market.id, work, false); // neither link nor rule: no-op
-      expect(repo.db.select('SELECT state FROM tx_tags WHERE id = ?', ['${market.id}|$work']), isEmpty);
+      await repo.setTxTag(market.id, work, false); // neither link nor rule: an off link all the same (E6d, Project "Skip")
+      expect(repo.db.select('SELECT state FROM tx_tags WHERE id = ?', ['${market.id}|$work']), [
+        {'state': 'off'}
+      ]);
       expect(tags(), {
         cafe1.id: <String>[],
         cafe2.id: [work],

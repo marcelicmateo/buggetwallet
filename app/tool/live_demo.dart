@@ -31,6 +31,7 @@ Future<void> main() async {
       seedDemoSplit(wc.repo);
       await seedDemoAccounts(wc.repo, wc.today());
       seedDemoIous(wc.repo, wc.today());
+      seedDemoPin(wc.repo, wc.today());
       await wc.importIcsFile('demo.ics', Uint8List.fromList(utf8.encode(demoIcs(wc.today()))));
     }
     final sinceRunApp = Stopwatch()..start();

@@ -3,6 +3,7 @@ library;
 
 import 'bills.dart';
 import 'categories.dart' show CategoryTable;
+import 'goal_plan.dart' show goalTarget;
 import 'models.dart';
 import 'rules.dart' show RuleKind, RuleView;
 import 'schema.dart';
@@ -350,7 +351,7 @@ SearchResult searchAll(
     matchedPart: parts,
     goals: [
       for (final g in goals)
-        if (text(g.name) || amount(g.target) || amount(g.saved)) g
+        if (text(g.name) || amount(goalTarget(g)) || amount(g.saved)) g
     ],
     wishlist: [
       for (final w in wishlist)

@@ -193,7 +193,7 @@ export 'src/findings.dart' show Finding, FindingKind, findings;
 export 'src/forecast.dart'
     show BalanceWarning, BalanceWarningKind, balanceWarnings, ForecastPoint, forecastAfterAllowance, forecastToPayday;
 export 'src/fx.dart' show convertMinor, FxUsed, fxUsed, homeAmount, inHomeCurrency;
-export 'src/goal_plan.dart' show annuityPayment, GoalLever, GoalLeverKind, goalLevers, GoalPlan, goalPlan;
+export 'src/goal_plan.dart' show addMonths, annuityPayment, GoalLever, GoalLeverKind, goalLevers, GoalPlan, goalPlan, goalTarget;
 export 'src/hlc.dart' show ClockBehindException, Hlc, HlcClock, maxClockDrift;
 export 'src/hours.dart' show hoursTenths;
 export 'src/ics.dart' show CalendarEvent, calendarEventRef, calendarRef, IcsParseResult, legacyCalendarEventRef, parseIcs, plannedIcs;
@@ -228,6 +228,16 @@ export 'src/loans.dart'
         Loan,
         LoanCheck,
         LoanCheckCols,
+        LoanCheckView,
+        loanCheckView,
+        loanBalanceOn,
+        LoanEnded,
+        loanEndedProposals,
+        loanReferenceMinLength,
+        loanReferenceUsable,
+        loanRegularPayment,
+        LoanYear,
+        loanYears,
         LoanCols,
         LoanDecisions,
         loanPaymentDecisions,

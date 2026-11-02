@@ -182,7 +182,7 @@ extension WalletRepoLoans on WalletRepo {
   _LoanCache _computeLoanState() {
     final ls = [
       for (final l in loans())
-        if ((l.payeeKey ?? '').isNotEmpty || foldText(l.reference?.trim() ?? '').runes.length >= loanReferenceMinLength) l
+        if ((l.payeeKey ?? '').isNotEmpty || loanReferenceUsable(l.reference)) l
     ];
     if (ls.isEmpty) return _LoanCache.none;
     final t = PerfTimer('repo.loanPayments');

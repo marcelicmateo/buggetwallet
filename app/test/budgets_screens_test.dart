@@ -212,7 +212,7 @@ void main() {
       await pumpApp(tester, Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => budgetToday)),
           size: const Size(360, 3000));
       expect(find.byKey(const ValueKey('budgetLine')), findsNothing);
-      expect(find.textContaining('this month'), findsNothing);
+      expect(find.text('Over budget'), findsNothing);
     });
 
     testWidgets('tapping the line calls openSpending', (tester) async {
@@ -227,7 +227,7 @@ void main() {
 
     testWidgets('in the app, the tap moves to the Spending tab', (tester) async {
       final wc = budgetWallet()..snoozeKeyBackup(); // the key row would push the budget line off the 800 dp screen
-      await pumpApp(tester, HomeShell(wc: wc), size: const Size(360, 800));
+      await pumpApp(tester, HomeShell(wc: wc), size: const Size(360, 1600));
       expect(find.byType(SpendingScreen), findsNothing);
       await tester.tap(find.byKey(const ValueKey('budgetLine')));
       await tester.pump();
