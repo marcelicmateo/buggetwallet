@@ -298,6 +298,7 @@ export 'src/planned.dart'
         UpcomingKind;
 export 'src/planned.dart' show isSafeCents, legacyRowCapCents;
 export 'src/planned.dart' show AutoPaid, planAutoPaid;
+export 'src/projects.dart' show ProjectStats, projectEndedDays, projectStats;
 export 'src/ranges.dart' show DateRange, RangeKind, rangeFor, rangeLabel, shiftRange;
 export 'src/recurring.dart' show recurringCost;
 export 'src/recurring.dart' show detectRecurring, medianCents, partsDays, partsThreshold, planRecurringPayments, RecurringPayments;
