@@ -1212,6 +1212,8 @@ class PeriodDay {
 /// [DayMark.today], later days [DayMark.toCome]. Without a saved `periodStart` the period starts today, so no day is
 /// judged. One pass over [txs]: the parts that do not depend on the day (bill cycles, fixed plan, goals) are computed
 /// once, the rest from per-day sums; only the planned costs are re-checked per day ([duePlanned] depends on it).
+/// PS: [goalTakenOutByDate] (`WalletRepo.goalTakenOutByDate`) instead of `computePeriod`'s total: each day counts the
+/// take-outs dated on or before it, so a day judged before a take-out keeps its verdict.
 List<PeriodDay> periodDays(List<CategorizedTx> txs, WalletSettings st, List<Goal> goals, String today,
     {List<RecurringBill> bills = const [],
     List<PlannedCost> planned = const [],
@@ -1219,7 +1221,7 @@ List<PeriodDay> periodDays(List<CategorizedTx> txs, WalletSettings st, List<Goal
     List<CategorizedTx>? matchRows,
     Map<String, String> payeeAliases = const {},
     Map<String, int>? goalAmounts,
-    int goalTakenOut = 0}) {
+    Map<String, int> goalTakenOutByDate = const {}}) {
   final start = st.periodStart ?? today;
   final end = nextPayday(start, st.paydayDay);
   final dates = <String>[];
@@ -1274,10 +1276,13 @@ List<PeriodDay> periodDays(List<CategorizedTx> txs, WalletSettings st, List<Goal
     final reservedBills = cycles.fold<int>(0, (s, c) => _ok(s + (c.coveredIn(table) ? 0 : c.reserve)));
     final counted = {for (final c in cycles) occurrenceKey(c.bill.id, c.due)};
     var receivedSoFar = 0, flexBefore = 0, landedSoFar = 0;
+    // PS: money taken out of goals counts from its own day on (an entry dated before the start from the first day).
+    var takenSoFar = goalTakenOutByDate.entries.fold<int>(0, (s, e) => e.key.compareTo(start) < 0 ? _ok(s + e.value) : s);
     for (var i = 0; i < judged; i++) {
       final d = dates[i];
       receivedSoFar = _ok(receivedSoFar + received[i]);
       landedSoFar += landed[i];
+      takenSoFar = _ok(takenSoFar + (goalTakenOutByDate[d] ?? 0));
       // i = daysBetween(start, d), and d < end: the period still runs on d.
       final partsArriving = i < samePaydayDays;
       final income = st.incomeMode == 'received' && receivedSoFar > 0
@@ -1288,7 +1293,7 @@ List<PeriodDay> periodDays(List<CategorizedTx> txs, WalletSettings st, List<Goal
           if (plannedReserves(p, outBills, counted, table: table, payeeAliases: payeeAliases)) p
       ].fold<int>(0, (s, p) => _ok(s + p.amount!));
       final flexBudget =
-          income - fixedPlan - goalMonthly - reservedBills - reservedPlanned + (landedSoFar < 0 ? 0 : landedSoFar) + goalTakenOut;
+          income - fixedPlan - goalMonthly - reservedBills - reservedPlanned + (landedSoFar < 0 ? 0 : landedSoFar) + takenSoFar;
       final spentToday = -flex[i];
       final leftForToday = flexBudget + flexBefore; // flexBudget − (spent − spentToday)
       final allowance = leftForToday <= 0 ? 0 : (leftForToday / daysBetween(d, end)).round();

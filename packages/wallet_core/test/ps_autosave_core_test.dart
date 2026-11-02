@@ -7,6 +7,7 @@ import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import 'support/sim.dart';
+import 'support/synthetic.dart';
 
 const _start = '2026-01-15', _today = '2026-01-20';
 
@@ -144,8 +145,9 @@ void main() {
       r.setGoalPeriodAmount(a, _start, 1000);
       r.takeOutOfGoal(a, 2000, date: _start);
       final amounts = r.goalPeriodAmounts(_start), out = r.goalTakenOutBetween(_start, '2026-02-15');
-      final days =
-          periodDays(const [], r.settings(), r.goals(), _today, table: CategoryTable.builtIn, goalAmounts: amounts, goalTakenOut: out);
+      expect(r.goalTakenOutByDate(_start, '2026-02-15'), {_start: 2000});
+      final days = periodDays(const [], r.settings(), r.goals(), _today,
+          table: CategoryTable.builtIn, goalAmounts: amounts, goalTakenOutByDate: r.goalTakenOutByDate(_start, '2026-02-15'));
       for (final d in days.where((d) => d.date.compareTo(_today) < 0)) {
         final p =
             computePeriod(const [], r.settings(), r.goals(), d.date, table: CategoryTable.builtIn, goalAmounts: amounts, goalTakenOut: out);
@@ -176,6 +178,60 @@ void main() {
         expect(text, isNot(contains(s)), reason: s);
       }
     });
+  });
+
+  group('PS review fixes: a period start that moves within one period', () {
+    late WalletRepo r;
+    late String a;
+    setUp(() {
+      r = WalletRepo.inMemory();
+      a = r.saveGoal(name: 'A', target: 100000, saved: 1000, monthly: 5000, sort: 1);
+    });
+
+    for (final (first, second) in [('2026-11-12', '2026-11-10'), ('2026-11-10', '2026-11-12')]) {
+      test('salary parts in either order: start $first then $second pays once', () {
+        r.payGoals(period: first);
+        r.payGoals(period: second);
+        expect(_saved(r, a), 6000);
+        expect(r.goalPeriodAmounts(second), {a: 5000});
+        expect(r.goalPeriodAmounts(first), {a: 5000});
+      });
+    }
+
+    for (final moved in ['2026-01-14', '2026-01-16']) {
+      test('startNewMonth one day off ($moved): paid once; a skip set before the shift keeps working', () {
+        r.payGoals(period: _start);
+        r.setGoalPeriodAmount(a, _start, 0);
+        r.payGoals(period: moved);
+        expect(_saved(r, a), 1000);
+        expect(r.goalPeriodAmounts(moved), {a: 0});
+        r.setGoalPeriodAmount(a, moved, 2000); // lands on the same adj row: last wins
+        expect(_saved(r, a), 3000);
+        expect(r.goalPeriodAmounts(moved), {a: 2000});
+        expect(r.goalContributions(a).map((c) => c.id), containsAll(['pay:$a:$_start', 'adj:$a:$_start']));
+        expect(r.goalContributions(a).length, 2);
+      });
+    }
+
+    test('the next period (a month on) is paid again', () {
+      r.payGoals(period: _start);
+      r.payGoals(period: '2026-02-15');
+      expect(_saved(r, a), 11000);
+      expect(r.goalPeriodAmounts('2026-02-15'), {a: 5000});
+    });
+  });
+
+  test('PS review fix: periodDays adds a take-out only from its date on (an over day before it stays over)', () {
+    const st = WalletSettings(salary: 310000, periodStart: _start, paydayDay: 15);
+    final txs = [ct(_start, -11000, 'Groceries')];
+    const out = {'2026-01-18': 50000};
+    final days = periodDays(txs, st, const [], _today, table: CategoryTable.builtIn, goalTakenOutByDate: out);
+    expect(days.first.mark, DayMark.over, reason: '10000 a day, 11000 spent');
+    for (final d in days.where((d) => d.date.compareTo(_today) < 0)) {
+      final p = computePeriod(txs, st, const [], d.date,
+          table: CategoryTable.builtIn, goalTakenOut: d.date.compareTo('2026-01-18') >= 0 ? 50000 : 0);
+      expect(d.allowance, p.allowanceToday, reason: d.date);
+    }
   });
 
   group('PS core, two devices', () {

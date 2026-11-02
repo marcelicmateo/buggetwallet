@@ -437,7 +437,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   rows (one per goal and period, only when missing, `monthly > 0`). **PS auto-save** (`docs/context/PS_SPEC.md`):
   `setGoalPeriodAmount` (`adj:<goal>:<period>` = amount − pay row, last wins), `goalPeriodAmounts(period)`,
   `takeOutOfGoal` (`out:…` = spending money of the period holding its date; `mv:…` + `mv:…:in` = move), `goalTakenOutBetween`;
-  `computePeriod`/`periodDays(goalAmounts:, goalTakenOut:)` (`PeriodBudget.goalTakenOut` is added to `flexBudget` and
+  `computePeriod(goalAmounts:, goalTakenOut:)`, `periodDays(goalAmounts:, goalTakenOutByDate:)` (repo `goalTakenOutByDate`: each day counts take-outs dated up to it); a pay row within `salaryGroupDays` of the period counts as paid (start moved) (`PeriodBudget.goalTakenOut` is added to `flexBudget` and
   `planSplit.inTotal`). Forecasts, `monthlyFlex`, `monthsToGoal` keep `monthly`. Tests: `test/ps_autosave_core_test.dart`. Rows of a deleted or missing goal are hidden. Mixed versions: an older build writes
   `saved` as a full value of what it sees (the base only), so a later remote `saved` is simply the new base and
   contributions add on top. `addGoalContribution` writes nothing (returns null) for 0 or a goal deleted here (a sync
