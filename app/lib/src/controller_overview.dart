@@ -154,6 +154,13 @@ extension OverviewData on WalletController {
           _ => 'best streak, weeks',
         };
         return FindingCard(f, 'Milestone', '${groupInt(last)} $what', 'Since ${shortDate(f.from)}.');
+      case FindingKind.loanEnding:
+        final loan = repo.loans().where((l) => l.id == f.subjectKey).firstOrNull;
+        return FindingCard(
+            f,
+            'Loan ending',
+            '${loan?.name ?? 'A loan'} ends in ${f.n} months: ${amountText(last, currency)} a month frees up',
+            'Last payment ${shortDate(f.to)}.');
     }
   }
 
