@@ -506,8 +506,8 @@ void main() {
       expect(t.getTopLeft(k('tag:$holiday')).dy, lessThan(t.getTopLeft(k('tag:$kids')).dy));
       // Edges: the menu entries are disabled and nothing is written.
       final v = wc.dataVersion;
-      await wc.moveTag(work, -1);
-      await wc.moveTag(kids, 1);
+      wc.moveTag(work, -1);
+      wc.moveTag(kids, 1);
       expect(wc.dataVersion, v);
       await tapKey(t, 'tagMenu:$work');
       expect(t.widget<PopupMenuItem<dynamic>>(k('tagUp:$work')).enabled, isFalse);
@@ -699,7 +699,7 @@ void main() {
       await wc.setPaymentTag(konzum[1].tx.id, holiday, true);
       expect(wc.search('holiday').txs.map((x) => x.tx.id).toSet(), {konzum[0].tx.id, konzum[1].tx.id});
       expect(wc.search('kids').txs.map((x) => x.tx.id), [konzum[0].tx.id]);
-      await wc.renameTag(holiday, 'Trips');
+      wc.renameTag(holiday, 'Trips');
       expect(wc.search('holiday').txs, isEmpty);
       expect(wc.search('trips').txs, hasLength(2));
       final csv = utf8.decode(wc.exportTransactions(ExportRange.all).bytes.sublist(3)).trim().split('\n');

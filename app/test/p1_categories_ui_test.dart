@@ -119,7 +119,7 @@ void main() {
 
     test('the summary CSV header uses the labels and each main tag counts on its own', () async {
       final (:wc, :bakery) = await withBakery();
-      await wc.renameCategory('Groceries', 'Food');
+      wc.renameCategory('Groceries', 'Food');
       await wc.addOwnCategory(name: 'Pets', kind: BudgetKind.flex);
       final lines = utf8.decode(wc.exportSummary().bytes.sublist(3)).trim().split('\n');
       expect(lines.first.split(','), contains('Food'));
@@ -140,9 +140,9 @@ void main() {
       final id = await wc.addOwnCategory(name: 'Pets', kind: BudgetKind.flex);
       wc.addExpense(amount: 500, category: id, note: 'x', date: '2026-10-19');
       expect(wc.lastExpenseCategory, id);
-      await wc.setCategoryHidden(id, true);
+      wc.setCategoryHidden(id, true);
       expect(wc.lastExpenseCategory, isNull, reason: 'hidden: not offered');
-      await wc.setCategoryHidden(id, false);
+      wc.setCategoryHidden(id, false);
       expect(wc.lastExpenseCategory, id);
       await wc.deleteOwnCategory(id);
       expect(wc.lastExpenseCategory, isNull, reason: 'deleted: not live');
@@ -289,11 +289,11 @@ void main() {
       expect(wc.categorySiblings('Rent'), fixedBefore);
       // The first row cannot go up; the last cannot go down: nothing is written.
       final v = wc.dataVersion;
-      await wc.moveCategory(before.first, -1);
-      await wc.moveCategory(before.last, 1);
+      wc.moveCategory(before.first, -1);
+      wc.moveCategory(before.last, 1);
       expect(wc.dataVersion, v);
       // The built-in first of its group moves too (an override with a position), and its label is untouched.
-      await wc.moveCategory('Groceries', 1);
+      wc.moveCategory('Groceries', 1);
       expect(flex().indexOf('Groceries'), 1);
       expect(wc.categoryTable.label('Groceries'), 'Groceries');
       await settle(t);
@@ -344,7 +344,7 @@ void main() {
     ]) {
       testWidgets('the panel fits at $name (hidden, duplicate, long name)', (t) async {
         final (:wc, :bakery) = await withBakery();
-        await wc.setCategoryHidden('Cash', true);
+        wc.setCategoryHidden('Cash', true);
         await wc.addOwnCategory(name: 'A very long category name for a screen', kind: BudgetKind.fixed);
         remoteCategory(wc, 'kaaaaaaaaaaaa', 'Pets');
         remoteCategory(wc, 'kbbbbbbbbbbbb', 'Pets');
@@ -375,12 +375,12 @@ void main() {
   group('pickers', () {
     test('pickable is flat and leaves hidden ones out unless one is the current value', () async {
       final (:wc, :bakery) = await withBakery();
-      await wc.setCategoryHidden('Cash', true);
+      wc.setCategoryHidden('Cash', true);
       final ids = pickerIds(wc.categoryTable, kinds: const {BudgetKind.flex});
       expect(ids, contains(bakery));
       expect(ids, isNot(contains('Cash')));
       expect(ids, isNot(contains('Rent')), reason: 'fixed is not in the flex list');
-      await wc.setCategoryHidden(bakery, true);
+      wc.setCategoryHidden(bakery, true);
       expect(pickerIds(wc.categoryTable, kinds: const {BudgetKind.flex}), isNot(contains(bakery)));
       expect(pickerIds(wc.categoryTable, kinds: const {BudgetKind.flex}, current: bakery), contains(bakery));
       expect(pickerLabel(wc.categoryTable, bakery), 'Bakery (hidden)');
@@ -389,7 +389,7 @@ void main() {
 
     testWidgets('the transaction sheet\'s menu lists an own main tag, no hidden one, and a change can go to any kind', (t) async {
       final (:wc, :bakery) = await withBakery();
-      await wc.setCategoryHidden('Cash', true);
+      wc.setCategoryHidden('Cash', true);
       final row = wc.txs.firstWhere((x) => x.category == 'Groceries');
       await pumpApp(t, Scaffold(body: SingleChildScrollView(child: TxSheet(wc: wc, t: row))), size: const Size(400, 900));
       await tapKey(t, 'txCategory');
@@ -406,7 +406,7 @@ void main() {
 
     testWidgets('the add-expense chips list an own main tag and hide hidden ones', (t) async {
       final (:wc, :bakery) = await withBakery();
-      await wc.setCategoryHidden('Cash', true);
+      wc.setCategoryHidden('Cash', true);
       await pumpApp(t, Scaffold(body: SingleChildScrollView(child: AddExpenseSheet(wc: wc, skipImpulse: true))),
           size: const Size(400, 1600));
       expect(find.byKey(const ValueKey('cat:Groceries')), findsOneWidget);
@@ -439,7 +439,7 @@ void main() {
 
     testWidgets('a renamed category is shown by its label', (t) async {
       final wc = budgetWallet(budgets: false);
-      await wc.renameCategory('Eating out', 'Dining');
+      wc.renameCategory('Eating out', 'Dining');
       await pumpApp(t, Scaffold(body: SpendingScreen(wc: wc)), size: const Size(400, 3000));
       expect(find.descendant(of: find.byKey(const ValueKey('whereTile')), matching: find.text('Dining')), findsOneWidget);
       expect(find.descendant(of: find.byKey(const ValueKey('whereTile')), matching: find.text('Eating out')), findsNothing);

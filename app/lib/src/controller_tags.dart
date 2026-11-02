@@ -72,13 +72,13 @@ extension TagsDb on WalletController {
     return id;
   }
 
-  Future<void> renameTag(String id, String name) async {
+  void renameTag(String id, String name) {
     repo.patch(TagCols.entity, id, {TagCols.name: name});
     logEvent(_tagLog, Level.INFO, 'tags.rename');
     _changed();
   }
 
-  Future<void> setTagHidden(String id, bool hidden) async {
+  void setTagHidden(String id, bool hidden) {
     repo.patch(TagCols.entity, id, {TagCols.hidden: hidden});
     logEvent(_tagLog, Level.INFO, 'tags.hide', {'hidden': hidden});
     _changed();
@@ -86,7 +86,7 @@ extension TagsDb on WalletController {
 
   /// Moves [id] one place up ([delta] -1) or down (+1) in the tag list. The order is handed out again as 0, 1, 2… (only the
   /// positions that change are written), so ties never leave a move without effect.
-  Future<void> moveTag(String id, int delta) async {
+  void moveTag(String id, int delta) {
     final t = tagTable;
     final order = [...t.ids];
     final i = order.indexOf(id), j = i + delta;

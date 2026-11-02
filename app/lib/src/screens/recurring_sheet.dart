@@ -180,11 +180,12 @@ class _RecurringFormSheetState extends State<RecurringFormSheet> {
     Navigator.pop(context, 'saved');
   }
 
-  Widget _field(Col c, String id, {String? label, String? hint, bool first = false, bool large = false}) => FieldEditor(c,
+  Widget _field(Col c, String id, {String? label, String? hint, bool first = false, bool large = false, int? maxLength}) => FieldEditor(c,
           key: ValueKey(c),
           id: id,
           label: label,
           hint: hint,
+          maxLength: maxLength,
           autofocus: first,
           value: _draft[c],
           today: widget.wc.today(),
@@ -208,7 +209,8 @@ class _RecurringFormSheetState extends State<RecurringFormSheet> {
     return Column(key: ValueKey(income ? 'incomeSheet' : 'recurringSheet'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Heading(income ? (editing ? 'Change income' : 'Add income') : (editing ? 'Change bill' : 'Add bill')),
       const SizedBox(height: 12),
-      _field(RecurringCols.label, 'recurringName', label: 'Name', hint: income ? 'Side job' : 'Car insurance', first: !editing),
+      _field(RecurringCols.label, 'recurringName',
+          label: 'Name', hint: income ? 'Side job' : 'Car insurance', first: !editing, maxLength: WalletRepoRecurring.maxLabel),
       const SizedBox(height: 12),
       DropdownButtonFormField<String?>(
         key: const ValueKey('recurringCategory'),

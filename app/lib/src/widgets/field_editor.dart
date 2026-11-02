@@ -57,6 +57,7 @@ class FieldEditor extends StatefulWidget {
     this.clearable,
     this.helper,
     this.hint,
+    this.maxLength,
     this.autofocus = false,
     this.errorText,
     this.capitalize,
@@ -111,6 +112,9 @@ class FieldEditor extends StatefulWidget {
 
   /// Grey example text in an empty text field; [autofocus] puts the cursor there when the form opens.
   final String? hint;
+
+  /// Text: stop typing at this many characters (the counter is hidden); core still refuses a longer value.
+  final int? maxLength;
   final bool autofocus;
 
   /// A refusal the sheet worked out itself (core's text after its own Save); shown instead of the inline one.
@@ -276,7 +280,13 @@ class _FieldEditorState extends State<FieldEditor> {
     final v = widget.value is String ? widget.value as String : null, set = v != null;
     final clearable = (widget.clearable ?? _col.nullable) && set;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      DateField(label: _label, value: v, helper: widget.helper, onPick: _pickDate, onClear: clearable ? () => _setDate(null) : null),
+      DateField(
+          key: ValueKey(_id),
+          label: _label,
+          value: v,
+          helper: widget.helper,
+          onPick: _pickDate,
+          onClear: clearable ? () => _setDate(null) : null),
       if (widget.lengths && (!set || _lengths)) ...[const SizedBox(height: 6), _lengthRow()],
       if (_lengthError != null) StatusLabel(key: ValueKey('$_id:lengthError'), good: false, text: _lengthError!),
       if (_shownError != null) ...[
@@ -403,6 +413,7 @@ class _FieldEditorState extends State<FieldEditor> {
         helperMaxLines: 2,
         hintText: widget.hint ?? (money ? amountHintFor(_currency) : null),
         suffixText: money ? currencySymbol(_currency) : suffix,
+        counterText: widget.maxLength == null ? null : '',
         errorText: _shownError,
         errorMaxLines: 3);
     final style = money ? (widget.large ? numStyle.copyWith(fontSize: BwType.displaySize, fontWeight: FontWeight.w500) : numStyle) : null;
@@ -412,6 +423,7 @@ class _FieldEditorState extends State<FieldEditor> {
             key: ValueKey(_id),
             controller: _text,
             autofocus: widget.autofocus,
+            maxLength: widget.maxLength,
             keyboardType: keyboard,
             inputFormatters: keyboard == null ? null : [FilteringTextInputFormatter.allow(RegExp(r'[0-9-]'))],
             textCapitalization: widget.capitalize ?? TextCapitalization.none,

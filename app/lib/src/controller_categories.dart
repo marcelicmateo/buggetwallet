@@ -19,13 +19,13 @@ extension CategoriesDb on WalletController {
     return id;
   }
 
-  Future<void> renameCategory(String id, String name) async {
+  void renameCategory(String id, String name) {
     repo.patch(CategoryCols.entity, id, {CategoryCols.name: name});
     logEvent(_catLog, Level.INFO, 'categories.rename', {'builtIn': categories.containsKey(id)});
     _changed();
   }
 
-  Future<void> setCategoryHidden(String id, bool hidden) async {
+  void setCategoryHidden(String id, bool hidden) {
     repo.patch(CategoryCols.entity, id, {CategoryCols.hidden: hidden});
     logEvent(_catLog, Level.INFO, 'categories.hide', {'hidden': hidden, 'builtIn': categories.containsKey(id)});
     _changed();
@@ -43,7 +43,7 @@ extension CategoriesDb on WalletController {
 
   /// Moves [id] one place up ([delta] -1) or down (+1) among [categorySiblings]. The positions of the group are handed out again
   /// in the new order (only the ones that change are written), so ties never leave a move without effect.
-  Future<void> moveCategory(String id, int delta) async {
+  void moveCategory(String id, int delta) {
     final t = categoryTable;
     final g = categorySiblings(id);
     final i = g.indexOf(id), j = i + delta;

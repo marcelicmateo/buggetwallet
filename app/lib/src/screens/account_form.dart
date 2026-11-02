@@ -387,7 +387,6 @@ class _AccountFormSheetState extends State<AccountFormSheet> {
         ),
         BelowZeroBox(value: _negative, onChanged: (v) => setState(() => _negative = v)),
         FieldEditor(AccountCols.openingDate,
-            key: const ValueKey('accountDate'),
             id: 'accountDate',
             label: 'Balance on',
             value: _date,
