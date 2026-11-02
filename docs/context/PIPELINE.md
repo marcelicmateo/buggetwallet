@@ -106,7 +106,7 @@ entry points). Agents: scout → devops (sonnet/high for the rewrite) + test-wri
 Done: UX-B (Plan in place, Budget › Tags, Settings = setup, Today tiles) and PS payday auto-save (`PS_SPEC.md`), both reviewed and pushed; phone pages SafeArea fix; reviewer now also runs ponytail-review. Watcher briefs: a step failed when `dist/logs/last-failed.txt` is non-empty (`cmd || cat …` always exits 0).
 **Next, in order:**
 1. Install the latest APK on the owner's phone when it is plugged in (`adb install -r dist/BudgetWallet-android.apk`; rebuild with `tools/build.sh -q apk` first if v2 moved).
-2. Owner answer pending: two offline devices can take out the same goal money (goal shows Below zero): OK, or block Take out without a recent sync?
+2. ~~Owner answer pending~~ answered 2026-11-02: two offline devices taking out the same goal money is allowed (goal shows Below zero after sync, owner fixes by hand); no block, no warning.
 3. F2, then UX-C2, then CI speed + M6 (as below). Frequent-word tag suggestions only if the owner asks.
 
 ## Resume here (end of day 2026-11-02) — v2 pushed at the commit after 8d1793b
