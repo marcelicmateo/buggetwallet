@@ -200,9 +200,9 @@ void main() {
   });
 
   group('DDL unchanged (no schema bump)', () {
-    test('schemaSql equals fixtures/schema/v20.sql and the version stays 20', () {
-      expect(WalletRepo.schemaVersion, 20);
-      expect(_norm(schemaSql), _norm(File('test/fixtures/schema/v20.sql').readAsStringSync()));
+    test('schemaSql equals fixtures/schema/v21.sql and the version stays 21', () {
+      expect(WalletRepo.schemaVersion, 21);
+      expect(_norm(schemaSql), _norm(File('test/fixtures/schema/v21.sql').readAsStringSync()));
     });
 
     test('bill and account columns keep their names and order', () {

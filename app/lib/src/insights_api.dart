@@ -234,10 +234,10 @@ extension WalletInsights on WalletController {
 
   List<IncomeSpendingBar> incomeSeriesFor(DateRange w, Bucket b) => incomeSeries(dayIndex, w, b, today: today());
 
-  /// Budget and actual per bar. Month and quarter bars use whole calendar months (owner 2026-10-20): the window grows to them.
+  /// Budget and actual per bar. Month, quarter and year bars use whole calendar months (owner 2026-10-20): the window grows to them.
   List<BudgetBar> budgetSeriesFor(DateRange w, Bucket b) {
     var win = w;
-    if (b == Bucket.month || b == Bucket.quarter) {
+    if (b.index >= Bucket.month.index) {
       try {
         win = DateRange(start: '${monthOf(w.start)}-01', end: monthRange(monthOf(w.end)).end);
       } on ArgumentError {

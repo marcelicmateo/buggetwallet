@@ -23,6 +23,7 @@ import 'recurring.dart';
 import 'rules.dart';
 import 'schema.dart';
 import 'search.dart' show foldText;
+import 'series.dart' show SavedView, ViewCols;
 import 'splits.dart';
 import 'sqlite_io.dart' if (dart.library.js_interop) 'sqlite_web.dart' as sqlite;
 import 'sync_conflicts.dart';
@@ -34,6 +35,7 @@ part 'repo_bills.dart';
 part 'repo_fx.dart';
 part 'repo_categories.dart';
 part 'repo_changes.dart';
+part 'repo_views.dart';
 part 'repo_blobs.dart';
 part 'repo_import.dart';
 part 'repo_iou.dart';
@@ -199,8 +201,9 @@ class WalletRepo {
   /// fiat currency, as always; BTC satoshis, new in 20). Also in 20 (UX-ACC, UX-FX; SCHEMA21_SPEC.md, folded in):
   /// `tx` gains `account` (the app account of a bank row), `accounts` gains `match_key` (keyed fingerprint of the
   /// export account), the synced entity `fx_day` (table `fx_days`, ECB rates the wallet needs) and the device-local,
-  /// never-synced cache table `ecb_rates`; no data migration.
-  static const schemaVersion = 20;
+  /// never-synced cache table `ecb_rates`; no data migration. Version 21 (ENG): the synced entity `view` (table `views`,
+  /// saved Explore queries); no data migration.
+  static const schemaVersion = 21;
 
   /// Device-local, set once by the schema-15 migration ([_migrateBlobTables]): the next sync runs PUT every cached file
   /// a live bill points to again (api-3 builds deleted files on the relay), cleared once all of them were stored.
