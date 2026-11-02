@@ -207,19 +207,43 @@ void main() {
       expect(_tag(repo, probe), 'Loan', reason: 'once the plan has its line');
     });
 
-    test('no hidden payments: the last payment in the period the loan closes counts as spending', () {
-      repo.updateSettings({'salary': 300000, 'paydayDay': 15, 'periodStart': '2026-10-15'});
-      final probe = _import(repo, '2026-08-15', -20000, _payee);
-      final id = repo.addLoan(Loan(id: '', name: 'Car', payment: 20000, payeeKey: _keyOf(repo, probe)));
-      final oct = _import(repo, '2026-10-20', -20000, _payee);
-      repo.confirmLoanPayment(id, oct);
-      PeriodBudget period() => computePeriod(repo.categorizer().expandAll(repo.transactions()), repo.settings(), repo.goals(), _today,
-          table: repo.categoryTable());
-      expect([period().spent, period().flexBudget], [0, 280000]);
-      repo.closeLoan(id, '2026-11-01');
-      final p = period();
-      expect([p.flexBudget, p.spent, p.remaining], [300000, 20000, 280000], reason: 'the plan line ended: the payment is spending');
-      expect([_tag(repo, oct), repo.loanMatchedDates(id).last], ['Bills & one-offs', '2026-10-20'], reason: 'still matched for loanState');
+    test('closing a loan leaves history as it was: its past payments stay Loan in their months', () {
+      final id = loanByKey();
+      final aug = repo.transactions().single.id;
+      final sep = _import(repo, '2026-09-15', -20000, _payee), oct = _import(repo, '2026-10-15', -20000, _payee);
+      repo.confirmLoanPayment(id, aug);
+      Map<String, int> month(String m) => monthSummary(repo.categorizer().expandAll(repo.transactions()), m, currency: 'EUR').byCategory;
+      final before = [
+        for (final m in ['2026-08', '2026-09', '2026-10']) month(m)
+      ];
+      expect([for (final b in before) b['Loan']], [20000, 20000, 20000]);
+      repo.closeLoan(id, '2026-10-15'); // closed on the day of its last payment
+      expect([
+        for (final m in ['2026-08', '2026-09', '2026-10']) month(m)
+      ], before);
+      expect([_tag(repo, sep), _tag(repo, oct), repo.settings().loanPlan], ['Loan', 'Loan', 0]);
+      final nov = _import(repo, '2026-11-01', -20000, _payee);
+      expect([_tag(repo, nov), _pending(repo)], ['Bills & one-offs', isEmpty], reason: 'after the closing date: not the loan\'s');
+    });
+
+    test('a synced row whose other fields arrive before its creation op is matched once its date lands', () {
+      final id = loanByKey();
+      repo.confirmLoanPayment(id, repo.transactions().single.id);
+      String hlc(int ms) => Hlc(_clock() - 60000 + ms, 0, 'peer').toString();
+      repo.applyRemote([
+        Op('tx', 'synthpeer1', {'deleted': 0}, hlc(1))
+      ]);
+      expect(repo.loanMatchedDates(id), ['2026-08-15'], reason: 'no date yet: nothing to match');
+      repo.applyRemote([
+        Op('tx', 'synthpeer1', {'source': 'pbz', 'date': '2026-09-15', 'amount': -20000, 'currency': 'EUR', 'description': _payee}, hlc(2))
+      ]);
+      expect([
+        repo.loanMatchedDates(id),
+        _tag(repo, 'synthpeer1')
+      ], [
+        ['2026-08-15', '2026-09-15'],
+        'Loan'
+      ]);
     });
 
     test('the owner\'s main tag wins: an extra repayment tagged Savings stays Savings until the owner answers yes', () async {

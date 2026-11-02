@@ -528,8 +528,9 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   its evidence (`LoanPaymentMatch.byKey`/`byRef`); else asked once naming every such loan. Repo
   `pendingLoanPayments()` → `({payment, loans})`, `confirmLoanPayment` (a candidate only; also answers no for a loan
   it was on for; Undo of an unlink), `unlinkLoanPayment`, `loanMatchedPayments`, `loanMatchedDates` (for
-  `loanState`), `loanLinkedTx()` → `Categorizer(loanTx:)` = matched rows of an open loan whose `loanPaymentOn` the
-  row's date is > 0 (no plan line: the row keeps its tag and counts as spending, still matched): main tag "Loan"
+  `loanState`), `loanLinkedTx()` → `Categorizer(loanTx:)` = matched rows of a loan open on the row's date (closed on or after it)
+  whose `loanPaymentOn` that date is > 0 (else the row keeps its tag and counts as spending, still matched; closing a
+  loan never changes past months): main tag "Loan"
   before any rule (fixed, `fixedPaid['Loan']`), counted whole (a split shows `splitBroken`; `setSplit` refuses).
   Cached per `dataVersion` (never inside a write); bank outflow descriptions → payee keys kept across versions and
   scanned by rowid (`_loanDescriptions`): ≈5 ms per data change on 20k rows, ≈110 ms the first time. A deleted row

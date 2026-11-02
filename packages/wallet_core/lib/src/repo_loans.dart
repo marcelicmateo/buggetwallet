@@ -213,13 +213,14 @@ extension WalletRepoLoans on WalletRepo {
           if ((r.category != null && table.isLive(r.category!)) || split.containsKey(r.id)) r.id
       },
     );
-    // A matched row is "Loan" (fixed) only while its loan has a plan line on the row's date (open, payment known and
-    // above 0): otherwise neither the plan nor spending would count it.
+    // A matched row is "Loan" (fixed) only when its loan had a plan line on the row's date (open then: not closed
+    // before it; payment known and above 0): otherwise neither the plan nor spending would count it. Closing a loan
+    // later leaves its past payments as they were.
     final loanTx = <String>{};
     for (final MapEntry(key: id, value: list) in d.matched.entries) {
       final l = byId[id]!;
-      if (!l.open) continue;
       for (final p in list) {
+        if (l.closedAt != null && l.closedAt!.compareTo(p.date) < 0) continue;
         if ((loanPaymentOn(l, schedules[id]!.$1, schedules[id]!.$2, p.date) ?? 0) > 0) loanTx.add(p.txId);
       }
     }
@@ -259,8 +260,8 @@ extension WalletRepoLoans on WalletRepo {
     return out;
   }
 
-  /// The bank rows that count as a loan payment (`Categorizer.loanTx`: main tag "Loan", fixed): matched rows of an open
-  /// loan with a plan line above 0 on the row's date.
+  /// The bank rows that count as a loan payment (`Categorizer.loanTx`: main tag "Loan", fixed): matched rows of a loan
+  /// that was open on the row's date (closed on or after it) with a payment above 0 then.
   Set<String> loanLinkedTx() => _loanState().loanTx;
 
   /// The "Loan payment?" asks (§5.5 step 4), oldest first, each row once with every loan that may take it: rows a
