@@ -297,7 +297,8 @@ void main() {
       sw.stop();
       // ignore: avoid_print
       print('findings on ${rows.length} rows: ${sw.elapsedMilliseconds} ms');
-      expect(sw.elapsedMilliseconds, lessThan(1000)); // loose: a shared laptop
+      // regression catcher only, about 5x the warm time under a loaded shared laptop; `make perf` holds the real frame budget.
+      expect(sw.elapsedMilliseconds, lessThan(1000)); // 82 ms under load
     });
   });
 

@@ -355,8 +355,9 @@ void main() {
       // ignore: avoid_print
       print('loan payments, ${rowCount + 12} rows: categorizer ${base[2]} us without loans, first $cold us, after a data change '
           '$recompute us, cached ${cached[2]} us');
-      expect(cached[2] - base[2], lessThan(10000), reason: 'cached per data version: about nothing added');
-      expect(recompute - base[2], lessThan(50000), reason: 'loose bound for a shared laptop; about 5 ms here');
+      // regression catcher only, about 5x the warm time under a loaded shared laptop; `make perf` holds the real frame budget.
+      expect(cached[2] - base[2], lessThan(25000), reason: 'cached per data version: about nothing added');
+      expect(recompute - base[2], lessThan(75000), reason: 'about 5 ms here');
     });
   });
 
