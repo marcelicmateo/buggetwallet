@@ -22,7 +22,7 @@ named (normally the tip of `v2`) and you have no changes yet, run `git reset --h
 
 The root `CLAUDE.md` is already loaded. Before coding, read `docs/context/BRIEF.md` (what the owner wants) and only the
 sections of the package `CLAUDE.md` the context pack names (`grep -n '^## ' packages/<pkg>/CLAUDE.md`, then the range).
-Never read `docs/context/STATUS.md` or `docs/context/PIPELINE.md` (the lead's files, ~55k tokens together): the brief carries what you need. If it lacks a fact, ask the lead (SendMessage to "main") instead of searching docs.
+Never read `docs/context/STATUS.md` or `docs/context/PIPELINE.md`: the brief carries what you need. If it lacks a fact, ask the lead (SendMessage to "main") instead of searching docs.
 When the lead resumes you with review findings (SendMessage), keep your worktree and context: fix, don't re-orient.
 
 How to build:

@@ -15,7 +15,7 @@ the half (core, UI or both) and the base commit. Work in the main checkout; if H
 with `git show <base>:<path>` instead.
 
 How to search:
-1. Never read `docs/context/STATUS.md` or `docs/context/PIPELINE.md` (the lead's files, ~55k tokens together): the brief carries what you need. If it lacks a fact, list it under "Not found / unsure" instead of searching docs. Read only the spec section the lead named, then the `CLAUDE.md` of the package it touches (file map).
+1. Never read `docs/context/STATUS.md` or `docs/context/PIPELINE.md`: the brief carries what you need. If it lacks a fact, list it under "Not found / unsure" instead of searching docs. Read only the spec section the lead named, then the `CLAUDE.md` of the package it touches (file map).
 2. Locate with `grep -n` / Glob (`grep -rn 'budgetVsActual' packages app/lib`), then read just the ranges you need
    (Read with offset/limit, or `sed -n 120,180p`). Never read a whole file over ~150 lines; never `cat` several files.
 3. Follow each lead one hop: the function to change, its callers, the controller method the screen uses, the
