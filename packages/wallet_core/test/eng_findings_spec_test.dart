@@ -72,7 +72,9 @@ void main() {
     final fs = fin(usualThen(10000, 12500));
     expect(fs, isNotEmpty);
     for (final f in fs) {
-      final parts = [f.kind.name, f.subjectKey, if (f.otherKey != null) f.otherKey, '2026-10'];
+      // weeklyRhythm and movesTogether end in the last full month (pinned rule); the others here in this month.
+      final end = f.kind == FindingKind.weeklyRhythm || f.kind == FindingKind.movesTogether ? '2026-09' : '2026-10';
+      final parts = [f.kind.name, f.subjectKey, if (f.otherKey != null) f.otherKey, end];
       expect(f.id, parts.join(':'));
     }
   });
@@ -433,7 +435,7 @@ void main() {
     });
     test('order: kind enum order, then |strength| / ratio / n descending, then id', () {
       final fs = fin(rich());
-      int key(Finding f) => (f.strengthPermille?.abs() ?? f.ratioPermille ?? f.n);
+      int key(Finding f) => f.strengthPermille?.abs() ?? f.ratioPermille ?? f.n;
       for (var i = 1; i < fs.length; i++) {
         final p = fs[i - 1], q = fs[i];
         expect(p.kind.index, lessThanOrEqualTo(q.kind.index), reason: '${p.id} before ${q.id}');

@@ -696,6 +696,21 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   by cents from Σ of the rounded per-category values); `changePermille(now, before)` = (now − before)·1000/|before| half away
   from zero, null when before is 0; `reviewsIn(reviewDates, start, end)` (reports.dart) = valid dates in [start, end),
   ascending, once each. Tests: `test/rxc_dashboard_numbers_test.dart`.
+- `findings.dart` + `hours.dart` — ENG §6.1–6.2 (`docs/context/ENG_UI_SPEC.md`), pure and web-safe, ints/BigInt only.
+  `hoursTenths(cents, st)` = |cents| × `workHoursPerWeek` × 520 ÷ (12 × `salary`) in tenths of an hour, rounded once
+  half away from zero, capped at 2^53 − 1; null when salary ≤ 0 (display only). Settings `workHoursPerWeek` (default 40,
+  1..100; `updateSettings` refuses others) and `dismissedFindings` (one row, JSON list of ids, newest 500 kept; repo
+  `dismissFinding`/`undismissFinding`, async, no write when unchanged; two devices dismissing offline at once: the later
+  list wins, one id is lost). `findings(expanded, st, table, today, {reviewDates, bills})` → `Finding {id, kind,
+  subjectKey, otherKey?, from, to, n, strengthPermille?, ratioPermille?, series, otherSeries}`, `FindingKind`
+  aboveUsual | weeklyRhythm | movesTogether | slowCreep | seasonality | milestone. Every threshold and window is in the
+  file comment (lead-approved 2026-11-02): spending by `countsAsSpending` per main tag; W12 = 12 months before this one,
+  tracked from the first counted row; aboveUsual 4·now ≥ 5·median and +2000 (≥ 6 months, median > 0); weeklyRhythm
+  5·max ≥ 8·min weekday means; movesTogether top 8 tags, last 24 months, ≥ 12 shared nonzero months, 4·Sxy² ≥ Sxx·Syy;
+  slowCreep confirmed bills' payee rows per month, 4·latest ≥ 5·earliest ≥ 12 months apart; seasonality ≥ 3 full years;
+  milestone levels (days 100/365/+365, payments 100/500/1000/+1000, streak 4/12/26/52/+52) with the month reached as
+  window end. id `<kind>:<subject>[:<other>]:<window end YYYY-MM>`; logs counts per kind. Tests `test/eng_findings_test.dart`,
+  `test/eng_hours_test.dart` (+ `eng_*_spec_test.dart`).
 - `search.dart` — `searchAll(query, txs:, goals:, wishlist:, bills:, planned:)` → `SearchResult` (`txs` newest first capped at
   `searchTxLimit` 200, `goals`, `wishlist`, `bills`, `planned`, `billsDb` (stored bills: payee, description, item
   names, exact total), `isEmpty`; blank query → `SearchResult.empty`). Text: `foldText`
