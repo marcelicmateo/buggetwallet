@@ -244,23 +244,10 @@ void _moves(int now, int first, List<String> tags, int Function(String, int) v, 
       ];
       final n = shared.length;
       if (n < 12) continue;
-      var sx = BigInt.zero, sy = BigInt.zero, sxx = BigInt.zero, syy = BigInt.zero, sxy = BigInt.zero;
-      for (final m in shared) {
-        final x = BigInt.from(v(a, m)), y = BigInt.from(v(b, m));
-        sx += x;
-        sy += y;
-        sxx += x * x;
-        syy += y * y;
-        sxy += x * y;
-      }
-      final bn = BigInt.from(n);
-      final cxx = bn * sxx - sx * sx, cyy = bn * syy - sy * sy, cxy = bn * sxy - sx * sy;
-      if (cxx <= BigInt.zero || cyy <= BigInt.zero || BigInt.from(4) * cxy * cxy < cxx * cyy) continue;
-      final r = _sqrtRound(BigInt.from(1000000) * cxy * cxy, cxx * cyy);
+      final r = pearsonPermille([for (final m in shared) v(a, m)], [for (final m in shared) v(b, m)], minPermille: 500);
+      if (r == null) continue;
       add(FindingKind.movesTogether, a, b, null, _firstDay(shared.first), _lastDay(shared.last), n,
-          strength: cxy.isNegative ? -r : r,
-          series: [for (final m in shared) (_ym(m), v(a, m))],
-          otherSeries: [for (final m in shared) (_ym(m), v(b, m))]);
+          strength: r, series: [for (final m in shared) (_ym(m), v(a, m))], otherSeries: [for (final m in shared) (_ym(m), v(b, m))]);
     }
   }
 }
@@ -332,6 +319,27 @@ int? _level(int v, List<int> base, int step) {
 }
 
 int _div(BigInt n, BigInt d) => roundDiv(n, d).toInt();
+
+/// Pearson r of [xs] and [ys] (same length) as signed permille: exact integer sums, one rounding of |r| to the nearest
+/// permille. Null when either side is flat (fewer than 2 points included) or |r| < [minPermille] ÷ 1000, compared
+/// exactly before rounding. Shared by movesTogether and Explore's `moveTogether`.
+int? pearsonPermille(List<int> xs, List<int> ys, {int minPermille = 0}) {
+  var sx = BigInt.zero, sy = BigInt.zero, sxx = BigInt.zero, syy = BigInt.zero, sxy = BigInt.zero;
+  for (var i = 0; i < xs.length; i++) {
+    final x = BigInt.from(xs[i]), y = BigInt.from(ys[i]);
+    sx += x;
+    sy += y;
+    sxx += x * x;
+    syy += y * y;
+    sxy += x * y;
+  }
+  final n = BigInt.from(xs.length);
+  final cxx = n * sxx - sx * sx, cyy = n * syy - sy * sy, cxy = n * sxy - sx * sy;
+  if (cxx <= BigInt.zero || cyy <= BigInt.zero) return null;
+  if (BigInt.from(1000000) * cxy * cxy < BigInt.from(minPermille * minPermille) * cxx * cyy) return null;
+  final r = _sqrtRound(BigInt.from(1000000) * cxy * cxy, cxx * cyy);
+  return cxy.isNegative ? -r : r;
+}
 
 /// √(n ÷ d) rounded to the nearest integer (n ≥ 0, d > 0).
 int _sqrtRound(BigInt n, BigInt d) {

@@ -36,8 +36,7 @@ List<CategorizedTx> wallet() {
     final day = addDays('2026-03-01', d);
     for (var k = rnd.nextInt(4); k > 0; k--) {
       final c = cats[rnd.nextInt(3)], desc = chains[rnd.nextInt(3)], cents = 100 + rnd.nextInt(9000);
-      CategorizedTx r(int amt, {String cur = 'EUR', bool del = false}) =>
-          row(day, amt, c, desc: desc, currency: cur, deleted: del);
+      CategorizedTx r(int amt, {String cur = 'EUR', bool del = false}) => row(day, amt, c, desc: desc, currency: cur, deleted: del);
       switch (rnd.nextInt(12)) {
         case 0:
           out.add(r(cents)); // refund
@@ -104,7 +103,7 @@ void main() {
         row('2026-05-08', -4000, 'Groceries', deleted: true),
         row('2026-05-09', -3000, 'Groceries', currency: 'USD'),
       ];
-      final k = SeriesKey(SeriesKind.mainTag, 'Groceries');
+      const k = SeriesKey(SeriesKind.mainTag, 'Groceries');
       final res = runQuery(ix(rs), q(Measure.spent, [k], Bucket.month, dr('2026-05-01', '2026-05-31')), today: today);
       expect(res.single.cents[k], 3800);
     });
@@ -113,7 +112,7 @@ void main() {
   group('long windows', () {
     // One 1000-cent payment on 15 June every year 2015..2026.
     final rows = [for (var y = 2015; y <= 2026; y++) row('$y-06-15', -1000 - y, 'Groceries')];
-    final k = SeriesKey(SeriesKind.mainTag, 'Groceries');
+    const k = SeriesKey(SeriesKind.mainTag, 'Groceries');
 
     test('year buckets over 12 years: calendar-aligned, last year partial', () {
       final res = runQuery(ix(rows), q(Measure.spent, [k], Bucket.year, dr('2015-01-01', '2026-11-02')), today: today);
@@ -144,8 +143,8 @@ void main() {
 
     test('month, week and day buckets over 6 years are refused', () {
       for (final b in [Bucket.day, Bucket.week, Bucket.month]) {
-        expect(() => runQuery(ix(rows), q(Measure.spent, [k], b, dr('2020-01-01', '2026-06-30')), today: today),
-            throwsArgumentError, reason: b.name);
+        expect(() => runQuery(ix(rows), q(Measure.spent, [k], b, dr('2020-01-01', '2026-06-30')), today: today), throwsArgumentError,
+            reason: b.name);
         expect(() => bucketsOf(dr('2020-01-01', '2026-06-30'), b), throwsArgumentError, reason: b.name);
       }
     });
@@ -160,7 +159,7 @@ void main() {
 
   group('together', () {
     test('two overlapping tags: a row is counted once', () {
-      final a = SeriesKey(SeriesKind.tag, 'trip'), b = SeriesKey(SeriesKind.tag, 'gift');
+      const a = SeriesKey(SeriesKind.tag, 'trip'), b = SeriesKey(SeriesKind.tag, 'gift');
       final rs = [
         withTags(row('2026-05-04', -1000, 'Shopping'), ['trip', 'gift']),
         withTags(row('2026-05-05', -500, 'Shopping'), ['trip']),
@@ -175,7 +174,7 @@ void main() {
   });
 
   group('other measures and keys', () {
-    final acc1 = SeriesKey(SeriesKind.account, 'acc-1'), acc2 = SeriesKey(SeriesKind.account, 'acc-2');
+    const acc1 = SeriesKey(SeriesKind.account, 'acc-1'), acc2 = SeriesKey(SeriesKind.account, 'acc-2');
     final rs = [
       onAccount('2026-05-02', 150000, 'Salary', 'acc-1'),
       onAccount('2026-05-03', -4000, 'Groceries', 'acc-1'),
@@ -199,7 +198,7 @@ void main() {
     });
 
     test('count is the number of spending payments, transfers and deleted excluded', () {
-      final k = SeriesKey(SeriesKind.mainTag, 'Groceries');
+      const k = SeriesKey(SeriesKind.mainTag, 'Groceries');
       final more = [
         ...rs,
         row('2026-05-10', -100, 'Groceries'),
@@ -212,7 +211,7 @@ void main() {
   });
 
   group('query JSON', () {
-    final query = q(Measure.kept, [SeriesKey(SeriesKind.tag, 'trip'), SeriesKey(SeriesKind.payee, 'lidl')], Bucket.quarter,
+    final query = q(Measure.kept, [const SeriesKey(SeriesKind.tag, 'trip'), const SeriesKey(SeriesKind.payee, 'lidl')], Bucket.quarter,
         dr('2020-01-01', '2026-06-30'));
 
     test('round trip', () {
@@ -228,7 +227,7 @@ void main() {
     test('bad JSON is refused', () {
       for (final bad in <Map<String, dynamic>>[
         {},
-        {'measure': 'nope', 'keys': [], 'bucket': 'month', 'window': {}},
+        {'measure': 'nope', 'keys': <Object?>[], 'bucket': 'month', 'window': <String, Object?>{}},
         {...(query.toJson() as Map<String, dynamic>), 'bucket': 'decade'},
       ]) {
         expect(() => SeriesQuery.fromJson(bad), throwsA(anything), reason: '$bad');
@@ -241,7 +240,8 @@ void main() {
     setUp(() => r = WalletRepo.inMemory());
     tearDown(() => r.close());
 
-    final json = jsonEncode(q(Measure.spent, [SeriesKey(SeriesKind.mainTag, 'Groceries')], Bucket.month, dr('2026-01-01', '2026-06-30')).toJson());
+    final json = jsonEncode(
+        q(Measure.spent, [const SeriesKey(SeriesKind.mainTag, 'Groceries')], Bucket.month, dr('2026-01-01', '2026-06-30')).toJson());
 
     test('add, patch, delete, undelete', () {
       final id = r.addView(name: 'Food', query: json);
@@ -263,7 +263,7 @@ void main() {
   });
 
   group('heatmap', () {
-    final k = SeriesKey(SeriesKind.mainTag, 'Groceries');
+    const k = SeriesKey(SeriesKind.mainTag, 'Groceries');
     HeatCell cell(List<HeatCell> cs, int y, int m) => cs.firstWhere((c) => c.year == y && c.month == m);
 
     test('all zero: every cell level 0', () {
@@ -280,8 +280,7 @@ void main() {
 
     test('quantile edges: levels in 0..4, monotone in cents, top is 4, smallest nonzero is 1', () {
       final rs = [for (var m = 1; m <= 12; m++) row('2025-${m.toString().padLeft(2, '0')}-10', -m * 1000, 'Groceries')];
-      final cs = heatmap(ix(rs), k, today: today).where((c) => c.year == 2025).toList()
-        ..sort((a, b) => a.cents.compareTo(b.cents));
+      final cs = heatmap(ix(rs), k, today: today).where((c) => c.year == 2025).toList()..sort((a, b) => a.cents.compareTo(b.cents));
       expect(cs.every((c) => c.level >= 0 && c.level <= 4), isTrue);
       for (var i = 1; i < cs.length; i++) {
         expect(cs[i].level, greaterThanOrEqualTo(cs[i - 1].level));
@@ -301,7 +300,7 @@ void main() {
 
   test('determinism: same rows in any order, repeated runs, equal results', () {
     final rows = wallet();
-    final keys = [SeriesKey(SeriesKind.mainTag, 'Groceries'), SeriesKey(SeriesKind.tag, 'trip')];
+    final keys = [const SeriesKey(SeriesKind.mainTag, 'Groceries'), const SeriesKey(SeriesKind.tag, 'trip')];
     final w = dr('2026-03-01', '2026-10-16');
     String run(List<CategorizedTx> rs) => runQuery(ix(rs), q(Measure.spent, keys, Bucket.month, w), today: today)
         .map((r) => '${r.bucket.start}|${r.partial}|${keys.map((k) => r.cents[k]).join(',')}|${r.together}')
@@ -309,6 +308,6 @@ void main() {
     final a = run(rows);
     expect(run(rows), a);
     expect(run(rows.reversed.toList()), a);
-    expect(run((List.of(rows)..shuffle(Random(3)))), a);
+    expect(run(List.of(rows)..shuffle(Random(3))), a);
   });
 }

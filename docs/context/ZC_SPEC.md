@@ -15,6 +15,7 @@ range change shows the right entries." Status: **plan, owner answers in §6; que
   | up to ~5 months | week (Mon–Sun) | `6–12 Oct` |
   | up to ~4 years | month | `Oct 26` (as now) |
   | longer (max 5 years) | quarter | `Q4 26` |
+  | more bars than fit (ENG) | year | `2026` |
 
   At most ~40 bars on a phone; on a narrow screen the next coarser size is used before bars get thinner than 6 px.
 - The **dates line** (`May–Oct 2026`) always says what is on screen. The **chips stay** (This pay period, Month, 3/6/12
@@ -68,7 +69,7 @@ SPENDING PER MONTH
 
 ## 4. Core API (fixed for both halves)
 ```dart
-enum Bucket { day, week, month, quarter }
+enum Bucket { day, week, month, quarter, year } // year: ENG §6.3
 Bucket bucketFor(DateRange window, {int maxBars = 40, Bucket finest = Bucket.day});
 List<DateRange> bucketsOf(DateRange window, Bucket b);            // aligned, clipped at the window edges
 class DayIndex {                                                     // pure, web-safe
@@ -101,7 +102,10 @@ String bucketLabel(DateRange span, Bucket b);                        // "14", "6
 - A clipped budget bucket counts only its days: `budgeted` = their shares, `prorated = true` (it is not a whole month).
   Budget vs actual at month/quarter widens its window to whole months in the app (owner 2026-10-20: calendar months).
 - Week labels: `5–11 Oct`; across months `29 Sep – 5 Oct`; across years `29 Dec 25 – 4 Jan 26`; a one-day piece `12 Oct`.
-- `bucketsOf` and every series function throw `ArgumentError` for a window of 5 years or more (`to >= from + 5 years`).
+- `bucketsOf` and every series function throw `ArgumentError` for a window of 5 years or more (`to >= from + 5 years`)
+  with day, week or month buckets. **ENG §6.3 (2026-11-02):** quarter and year buckets have no length limit (Explore
+  "All" = the whole history); `bucketFor` still keeps `maxBars` by going on from quarter to year (a narrow screen's
+  smaller `maxBars` on a 5-year window may now get years where it got quarters).
 - `DayIndex.first/last` = the first/last date holding a counted row (live, home currency, spending/income/extra);
   deleted rows, transfers and other currencies don't move them; null when there is none.
 

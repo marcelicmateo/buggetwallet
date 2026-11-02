@@ -95,6 +95,7 @@ extension WalletRepoPatch on WalletRepo {
     'wish': {'added', 'status', 'decided', 'deleted'},
     'category': {'kind', 'deleted'},
     'tag': {'deleted'},
+    'view': {'deleted'},
   };
 
   /// Entities changed by their own actions only (their writes keep rules a field edit would skip: matching, totals,

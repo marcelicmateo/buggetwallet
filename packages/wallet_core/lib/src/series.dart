@@ -5,22 +5,29 @@
 // two binary searches. Per category / tag / merchant key the prefix sums are made on first use and kept. The series
 // functions cut a window into aligned buckets (days, Monday weeks, calendar months, calendar quarters) and read the
 // index only: a drag frame never walks the payments again.
+import 'dart:convert';
+
 import 'budget.dart' show countsAsSpending;
 import 'categories.dart' show BudgetKind, CategoryTable;
+import 'cols.dart';
 import 'dates.dart' show requireIsoDate;
+import 'findings.dart' show pearsonPermille;
 import 'insights.dart' show merchantGroupKey;
 import 'models.dart';
 import 'ranges.dart';
 
-/// The size of one bar.
-enum Bucket { day, week, month, quarter }
+part 'explore.dart';
 
-/// The longest window, in years: a window must end before its start + this many years (as `rangeFor`'s custom range).
+/// The size of one bar.
+enum Bucket { day, week, month, quarter, year }
+
+/// The longest window of day, week or month buckets, in years: it must end before its start + this many years (as
+/// `rangeFor`'s custom range). Quarter and year buckets have no limit (ENG §6.3: Explore "All" = the whole history).
 const _maxYears = 5;
 
 /// Bar size for [window]: the coarsest of [finest] and the size the span calls for (up to 35 days: day, up to 155 days:
 /// week, up to 4 years: month, longer: quarter; ZC_SPEC §1), made coarser while [window] would have more than
-/// [maxBars] bars (a narrow screen passes fewer). Quarter when nothing fits.
+/// [maxBars] bars (a narrow screen passes fewer), up to years. Year when nothing fits.
 Bucket bucketFor(DateRange window, {int maxBars = 40, Bucket finest = Bucket.day}) {
   final lo = _epoch(window.start), hi = _epoch(window.end);
   final days = hi - lo + 1;
@@ -32,17 +39,17 @@ Bucket bucketFor(DateRange window, {int maxBars = 40, Bucket finest = Bucket.day
               ? Bucket.month
               : Bucket.quarter;
   var b = bySpan.index < finest.index ? finest : bySpan;
-  while (b != Bucket.quarter && _count(lo, hi, b) > maxBars) {
+  while (b != Bucket.year && _count(lo, hi, b) > maxBars) {
     b = Bucket.values[b.index + 1];
   }
   return b;
 }
 
 /// The buckets of size [b] that [window] overlaps, oldest first, aligned (days, Monday–Sunday weeks, calendar months,
-/// calendar quarters starting Jan/Apr/Jul/Oct); the first and last are clipped at the window's edges. Throws
-/// [ArgumentError] for a window of 5 years or more (`to >= from + 5 years`, as a custom range).
+/// calendar quarters starting Jan/Apr/Jul/Oct, calendar years); the first and last are clipped at the window's edges.
+/// Throws [ArgumentError] for day, week or month buckets over 5 years or more (`to >= from + 5 years`, as a custom range).
 List<DateRange> bucketsOf(DateRange window, Bucket b) {
-  final (lo, hi) = _window(window);
+  final (lo, hi) = _window(window, b);
   final out = <DateRange>[];
   _spans(lo, hi, b, (s, e, fs, fe) => out.add(_range(s, e)));
   return out;
@@ -160,11 +167,20 @@ class DayIndex {
   final List<int> _rowDay;
   final Map<String, List<int>> _byCategory, _byTag;
   final List<String?> _merchant;
+
+  /// The income and extra rows and the index of their day in [_days] (for [runQuery]'s cameIn and kept).
+  final List<CategorizedTx> _money;
+  final List<int> _moneyDay;
+  final List<String?> _moneyMerchant;
   final Map<String, List<int>> _cache = {};
 
+  /// `merchantGroupKey` per description: a bank row's key depends on its description only.
+  final Map<String, String> _keyByDescription = {};
+
   DayIndex._(this.table, this._currency, this._days, this._spentP, this._incomeP, this._extraP, this._rows, this._rowDay, this._byCategory,
-      this._byTag)
-      : _merchant = List<String?>.filled(_rows.length, null);
+      this._byTag, this._money, this._moneyDay)
+      : _merchant = List<String?>.filled(_rows.length, null),
+        _moneyMerchant = List<String?>.filled(_money.length, null);
 
   factory DayIndex(List<CategorizedTx> expanded, {required String currency, CategoryTable? table}) {
     final epochOf = <String, int>{};
@@ -198,8 +214,10 @@ class DayIndex {
         (byTag[g] ??= []).add(i);
       }
     }
+    final moneyDay = List<int>.filled(money.length, 0);
     for (var i = 0; i < money.length; i++) {
       final t = money[i], d = slot[moneyE[i]]! + 1;
+      moneyDay[i] = d - 1;
       if (t.kind == BudgetKind.income) {
         income[d] += t.amount;
       } else {
@@ -211,7 +229,7 @@ class DayIndex {
       income[i] += income[i - 1];
       extra[i] += extra[i - 1];
     }
-    return DayIndex._(table, currency, days, spent, income, extra, rows, rowDay, byCategory, byTag);
+    return DayIndex._(table, currency, days, spent, income, extra, rows, rowDay, byCategory, byTag, money, moneyDay);
   }
 
   /// The wallet currency the sums are in.
@@ -252,6 +270,8 @@ class DayIndex {
     return a;
   }
 
+  String _keyOf(Tx t) => t.source == 'manual' ? merchantGroupKey(t) : _keyByDescription[t.description] ??= merchantGroupKey(t);
+
   List<int> _spentPrefix(String? category, String? tag, String? merchant) {
     if (category == null && tag == null && merchant == null) return _spentP;
     final key =
@@ -267,7 +287,7 @@ class DayIndex {
     for (final i in candidates) {
       final t = _rows[i];
       if (tag != null && category != null && !t.tags.contains(tag)) continue;
-      if (merchant != null && (_merchant[i] ??= merchantGroupKey(t.tx)) != merchant) continue;
+      if (merchant != null && (_merchant[i] ??= _keyOf(t.tx)) != merchant) continue;
       p[_rowDay[i] + 1] -= t.amount;
     }
     for (var i = 1; i < p.length; i++) {
@@ -281,7 +301,7 @@ class DayIndex {
 /// exactly `spendingByMonth` (with [tag]: `tagTrend`; [category] + [merchantKey]: `merchantTrend`).
 List<SeriesBar> spendingSeries(DayIndex ix, DateRange window, Bucket b,
     {required String today, String? category, String? tag, String? merchantKey}) {
-  final (lo, hi) = _window(window);
+  final (lo, hi) = _window(window, b);
   final t = _today(today);
   final p = ix._spentPrefix(category, tag, merchantKey);
   final out = <SeriesBar>[];
@@ -293,7 +313,7 @@ List<SeriesBar> spendingSeries(DayIndex ix, DateRange window, Bucket b,
 
 /// Income, extra income and spending per bucket of [window]; for whole calendar months exactly `incomeVsSpending`.
 List<IncomeSpendingBar> incomeSeries(DayIndex ix, DateRange window, Bucket b, {required String today}) {
-  final (lo, hi) = _window(window);
+  final (lo, hi) = _window(window, b);
   final t = _today(today);
   final out = <IncomeSpendingBar>[];
   _spans(lo, hi, b, (s, e, fs, fe) {
@@ -320,7 +340,7 @@ List<IncomeSpendingBar> incomeSeries(DayIndex ix, DateRange window, Bucket b, {r
 /// `prorated` = the bar is not whole calendar months (a day, a week, or a month/quarter the window clips).
 List<BudgetBar> budgetSeries(DayIndex ix, DateRange window, Bucket b, Map<String, int> budgets,
     {required String today, required CategoryTable table, String? category}) {
-  final (lo, hi) = _window(window);
+  final (lo, hi) = _window(window, b);
   final t = _today(today);
   // A [category] without an entry in [budgets] counts nowhere (budgetVsActualSeries sums budgeted lines only); a budget
   // set to 0 is a real budget, so its spending is over.
@@ -366,7 +386,7 @@ List<BudgetBar> budgetSeries(DayIndex ix, DateRange window, Bucket b, Map<String
 }
 
 /// A short label for one bar: day `14`, week `6–12 Oct` (`29 Sep – 5 Oct` across months, `29 Dec 25 – 4 Jan 26` across
-/// years, `12 Oct` for a one-day piece), month `Oct 26`, quarter `Q4 26`. A clipped span is labelled as it is.
+/// years, `12 Oct` for a one-day piece), month `Oct 26`, quarter `Q4 26`, year `2026`. A clipped span is labelled as it is.
 String bucketLabel(DateRange span, Bucket b) {
   final (sy, sm, sd) = _civil(_epoch(span.start));
   final yy = _p(sy % 100);
@@ -377,6 +397,8 @@ String bucketLabel(DateRange span, Bucket b) {
       return '${_monthNames[sm - 1]} $yy';
     case Bucket.quarter:
       return 'Q${(sm - 1) ~/ 3 + 1} $yy';
+    case Bucket.year:
+      return '$sy';
     case Bucket.week:
       if (span.start == span.end) return '$sd ${_monthNames[sm - 1]}';
       final (ey, em, ed) = _civil(_epoch(span.end));
@@ -390,9 +412,10 @@ const _monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Se
 
 String _p(int n) => n.toString().padLeft(2, '0');
 
-/// [window] as epoch days; refused when it spans 5 years or more.
-(int, int) _window(DateRange window) {
+/// [window] as epoch days; refused for buckets finer than quarters when it spans 5 years or more.
+(int, int) _window(DateRange window, Bucket b) {
   final lo = _epoch(window.start), hi = _epoch(window.end);
+  if (b.index >= Bucket.quarter.index) return (lo, hi);
   final (y, m, d) = _civil(lo);
   // The same day 5 years later (29 Feb → 1 Mar: the civil formula carries an impossible day over).
   if (hi >= _days(y + _maxYears, m, d)) throw ArgumentError('The range is longer than 5 years.');
@@ -421,11 +444,15 @@ int _count(int lo, int hi, Bucket b) {
       return hi - lo + 1;
     case Bucket.week:
       return ((hi - _weekday(hi)) - (lo - _weekday(lo))) ~/ 7 + 1;
-    case Bucket.month || Bucket.quarter:
+    case Bucket.month || Bucket.quarter || Bucket.year:
       final (ly, lm, _) = _civil(lo);
       final (hy, hm, _) = _civil(hi);
       final months = (hy - ly) * 12 + hm - lm;
-      return b == Bucket.month ? months + 1 : (hy * 12 + hm - 1) ~/ 3 - (ly * 12 + lm - 1) ~/ 3 + 1;
+      return switch (b) {
+        Bucket.month => months + 1,
+        Bucket.quarter => (hy * 12 + hm - 1) ~/ 3 - (ly * 12 + lm - 1) ~/ 3 + 1,
+        _ => hy - ly + 1,
+      };
   }
 }
 
@@ -445,6 +472,9 @@ int _count(int lo, int hi, Bucket b) {
       final (y, m, _) = _civil(e);
       final q = (m - 1) ~/ 3 * 3 + 1;
       return (_days(y, q, 1), (q == 10 ? _days(y + 1, 1, 1) : _days(y, q + 3, 1)) - 1);
+    case Bucket.year:
+      final (y, _, _) = _civil(e);
+      return (_days(y, 1, 1), _days(y + 1, 1, 1) - 1);
   }
 }
 

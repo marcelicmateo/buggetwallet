@@ -323,7 +323,8 @@ export 'src/repo.dart'
         WalletRepoSplits,
         WalletRepoSyncApply,
         WalletRepoTags,
-        WalletRepoTx;
+        WalletRepoTx,
+        WalletRepoViews;
 export 'src/reports.dart'
     show CategoryPeriod, categoryByPeriod, PeriodReport, periodReports, reviewsIn, SavedByWaiting, savedByWaiting, savedByWaitingAll;
 export 'src/rules.dart' show PayeeCount, RuleSuggestion, ruleSuggestionFor, ruleSuggestions, uncategorisedPayees;
@@ -340,10 +341,22 @@ export 'src/series.dart'
         BudgetBar,
         budgetSeries,
         DayIndex,
-        IncomeSpendingBar,
+        HeatCell,
+        heatmap,
         incomeSeries,
+        IncomeSpendingBar,
+        Measure,
+        MoveTogether,
+        moveTogether,
+        QueryRow,
+        runQuery,
+        SavedView,
         SeriesBar,
-        spendingSeries;
+        SeriesKey,
+        SeriesKind,
+        SeriesQuery,
+        spendingSeries,
+        ViewCols;
 export 'src/splits.dart' show decodeSplitParts, encodeSplitParts, SplitCols, SplitPart, splitFits;
 export 'src/suggest.dart' show PlanSuggestion, planProposals, SettingProposal, Suggested, suggestPlan;
 export 'src/sync_conflicts.dart' show SyncConflict;

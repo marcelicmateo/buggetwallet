@@ -107,6 +107,7 @@ String barAxisText(DateRange span, Bucket b, {bool firstOfAll = false}) {
   return switch (b) {
     Bucket.month => '${monthShort(m)}\n${m.substring(2, 4)}',
     Bucket.quarter => bucketLabel(span, b).replaceFirst(' ', '\n'),
+    Bucket.year => bucketLabel(span, b),
     Bucket.week => '$d\n${monthShort(m)}',
     Bucket.day => d == 1 || firstOfAll ? '$d\n${monthShort(m)}' : '$d',
   };
@@ -118,6 +119,7 @@ String barName(DateRange span, Bucket b, bool partial, String today) {
   final base = switch (b) {
     Bucket.month => monthLong(monthOf(span.start)),
     Bucket.quarter => 'Q${(int.parse(span.start.substring(5, 7)) - 1) ~/ 3 + 1} ${span.start.substring(0, 4)}',
+    Bucket.year => span.start.substring(0, 4),
     Bucket.week => bucketLabel(span, b),
     Bucket.day => shortDateOrRaw(span.start),
   };
@@ -128,6 +130,7 @@ String barName(DateRange span, Bucket b, bool partial, String today) {
     Bucket.week => 'not a whole week',
     Bucket.month => 'part of the month',
     Bucket.quarter => 'part of the quarter',
+    Bucket.year => 'part of the year',
   };
   return note == null ? base : '$base · $note';
 }
@@ -138,6 +141,7 @@ String barFadedText(Bucket b) => switch (b) {
       Bucket.week => 'Faded: not a whole week',
       Bucket.month => 'Faded: not a whole month',
       Bucket.quarter => 'Faded: not a whole quarter',
+      Bucket.year => 'Faded: not a whole year',
     };
 
 /// The key part of a bar's row: the month (`2026-10`) for a month bar, else the first day.

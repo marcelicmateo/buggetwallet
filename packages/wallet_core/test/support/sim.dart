@@ -69,6 +69,7 @@ const entityTables = {
   'review': ('reviews', ['done', 'deleted']),
   'payee_alias': ('payee_aliases', ['alias', 'payee', 'deleted']),
   'fx_day': ('fx_days', ['cur', 'date', 'per_eur', 'source', 'deleted']),
+  'view': ('views', ['name', 'query', 'pinned', 'sort', 'deleted']),
 };
 
 const dataTables = [
@@ -91,7 +92,8 @@ const dataTables = [
   'iou_parts',
   'reviews',
   'payee_aliases',
-  'fx_days'
+  'fx_days',
+  'views'
 ];
 
 /// Every row of the data tables (and the field clocks), in a stable order, as plain maps.

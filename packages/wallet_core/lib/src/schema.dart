@@ -12,6 +12,7 @@ import 'categories.dart' show CategoryCols;
 import 'ecb.dart' show FxDayCols;
 import 'models.dart'
     show AccountCols, GoalCols, GoalContribCols, IouCols, IouPartCols, PlannedCols, RecurringCols, ReviewCols, RuleCols, TxCols, WishCols;
+import 'series.dart' show ViewCols;
 import 'splits.dart' show SplitCols;
 import 'tags.dart' show RuleTagCols, TagCols, TxTagCols;
 
@@ -129,6 +130,8 @@ const Map<String, EntityDef> _schema = {
   // only for the (currency, date) pairs the wallet needs (`WalletRepo.fillFxDays`); the full history stays in the
   // device-local `ecb_rates`.
   'fx_day': EntityDef('fx_days', FxDayCols.all),
+  // Saved Explore views (v21, ENG §6.3): name, query JSON (`SeriesQuery.toJson`), pinned on Overview, order.
+  'view': EntityDef('views', ViewCols.all),
 };
 
 /// The device-local tables: never synced or backed up. `ecb_rates` (v20, UX-FX): the downloaded ECB history
