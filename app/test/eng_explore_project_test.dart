@@ -436,7 +436,7 @@ void main() {
       expect(cap.name, 'bw-explore-2023-10-21-2026-10-20.csv');
     }, timeout: _timeout);
 
-    testWidgets('the Explore tab opens Explore; the old Spending page and Tags stay behind the switch', (tester) async {
+    testWidgets('the Explore tab opens Explore; the old Spending page stays behind the switch', (tester) async {
       final w = await exploreWallet();
       await pumpScreen(tester, BudgetScreen(wc: w.wc));
       expect(find.byType(ExploreScreen), findsOneWidget);
@@ -444,8 +444,6 @@ void main() {
       expect(k('searchOpen'), findsOneWidget);
       await tapKey(tester, 'budgetSpending');
       expect(w.wc.budgetView, 'spending');
-      await tapKey(tester, 'budgetTags');
-      expect(w.wc.budgetView, 'tags');
       await tapKey(tester, 'budgetExplore');
       expect(w.wc.budgetView, 'explore');
       await settle(tester);

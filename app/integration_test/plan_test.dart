@@ -7,7 +7,6 @@ import 'package:budget_wallet/src/screens/bills_tab.dart';
 import 'package:budget_wallet/src/screens/diagnostics.dart';
 import 'package:budget_wallet/src/screens/plan_screen.dart';
 import 'package:budget_wallet/src/screens/settings.dart';
-import 'package:budget_wallet/src/screens/tags_window.dart';
 import 'package:budget_wallet/src/tabs.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:flutter/material.dart';
@@ -29,7 +28,10 @@ Finder inPlan(Finder f) => find.descendant(of: find.byType(PlanScreen), matching
 Future<void> showPlan(WidgetTester t) async {
   if (find.byKey(const ValueKey('planTile')).evaluate().isNotEmpty) return;
   await goTab(t, 'Plan');
-  await tapVisible(t, find.byKey(const ValueKey('planPayday')));
+  final payday = find.byKey(const ValueKey('planPayday'));
+  // The switch is the top of a lazy list: a page that was scrolled down has not built it.
+  if (payday.evaluate().isEmpty) await t.dragUntilVisible(payday, pageList(PlanScreen), const Offset(0, 300));
+  await tapVisible(t, payday);
   await t.pumpAndSettle();
 }
 
@@ -245,7 +247,7 @@ void main() {
     final pets = await wc.addOwnCategory(name: 'Pets', kind: BudgetKind.flex);
     final vet = await wc.addOwnCategory(name: 'Vet', kind: BudgetKind.flex);
     await goTags(t);
-    await scrollTo(t, find.byKey(ValueKey('category:$vet')), TagsWindow);
+    await scrollTo(t, find.byKey(ValueKey('category:$vet')), SettingsScreen);
     expect(find.byKey(ValueKey('category:$pets')), findsOneWidget);
     expect(find.byKey(ValueKey('category:$vet')), findsOneWidget);
     await Harness.shot(t, 'plan-categories');
@@ -268,7 +270,7 @@ void main() {
     // Plan › Tags: add a tag, see it in the list, rename it, delete it with Undo.
     final tag = await wc.addTag('Holiday');
     await t.pumpAndSettle();
-    await scrollTo(t, find.byKey(ValueKey('tag:$tag')), TagsWindow);
+    await scrollTo(t, find.byKey(ValueKey('tag:$tag')), SettingsScreen);
     await Harness.shot(t, 'plan-tags');
     await tapVisible(t, find.byKey(ValueKey('tagMenu:$tag')));
     await t.pumpAndSettle();
@@ -288,7 +290,7 @@ void main() {
     wc.repo.setMerchantPattern('Cash', r'^atm\b');
     wc.reload();
     await goTags(t);
-    await scrollTo(t, find.byKey(ValueKey('rule:${wc.settings.patternRules.first.id}')), TagsWindow);
+    await scrollTo(t, find.byKey(ValueKey('rule:${wc.settings.patternRules.first.id}')), SettingsScreen);
     final id = wc.settings.patternRules.first.id;
     expect(find.byKey(ValueKey('rule:$id')), findsOneWidget);
     await Harness.shot(t, 'plan-rules');

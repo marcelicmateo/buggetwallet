@@ -1,4 +1,4 @@
-// Budget › Tags (UX-B2): main tags, tags and rules in one window. Recommendations first (payees that keep coming back with no main tag,
+// Settings › Tags and rules (UX-B2, moved from Explore in ENG E7b): main tags, tags and rules in one window. Recommendations first (payees that keep coming back with no main tag,
 // payee rules the wallet offers), then the three lists. One "Add" button asks what to add and opens that form. A recommendation changes
 // nothing until Accept; Dismiss hides it on this device only.
 import 'package:flutter/material.dart';
@@ -12,38 +12,31 @@ import 'categories_panel.dart';
 import 'rules_panel.dart';
 import 'tags_panel.dart';
 
+/// The section's panels in one column (the Settings page scrolls it; not a lazy list: the three panels build all their rows anyway,
+/// and a tap or a test can reach any of them).
 class TagsWindow extends StatelessWidget {
   final WalletController wc;
-
-  /// The Spending | Plan | Tags switch, shown at the top like on the other two pages.
-  final Widget switcher;
-  const TagsWindow({super.key, required this.wc, required this.switcher});
+  const TagsWindow({super.key, required this.wc});
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: wc,
-        builder: (context, _) => MarginLine(
-          // Not a lazy list: the three panels build all their rows anyway, and a tap or a test can reach any of them.
-          child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, pageBottomPad),
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: gapped([
-                    switcher,
-                    Align(
-                        alignment: Alignment.centerRight,
-                        child: FilledButton.icon(
-                            key: const ValueKey('tagsAdd'),
-                            style: FilledButton.styleFrom(minimumSize: const Size(0, touchMin)),
-                            icon: const Icon(Icons.add, size: 20),
-                            label: const Text('Add'),
-                            onPressed: () => openTagsAdd(context, wc))),
-                    _Recommendations(wc: wc),
-                    CategoriesPanel(key: const ValueKey('categoriesPanel'), wc: wc),
-                    TagsPanel(key: const ValueKey('tagsPanel'), wc: wc),
-                    RulesPanel(key: const ValueKey('rulesPanel'), wc: wc),
-                  ]))),
-        ),
+        builder: (context, _) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: gapped([
+              Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton.icon(
+                      key: const ValueKey('tagsAdd'),
+                      style: FilledButton.styleFrom(minimumSize: const Size(0, touchMin)),
+                      icon: const Icon(Icons.add, size: 20),
+                      label: const Text('Add'),
+                      onPressed: () => openTagsAdd(context, wc))),
+              _Recommendations(wc: wc),
+              CategoriesPanel(key: const ValueKey('categoriesPanel'), wc: wc),
+              TagsPanel(key: const ValueKey('tagsPanel'), wc: wc),
+              RulesPanel(key: const ValueKey('rulesPanel'), wc: wc),
+            ])),
       );
 }
 

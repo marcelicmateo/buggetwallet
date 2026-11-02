@@ -86,6 +86,8 @@ void main() {
       await tester.enterText(find.byKey(const ValueKey('wishName')), 'Desk lamp');
       await tester.pump();
       expect(cta().onPressed, isNotNull);
+      await tester.ensureVisible(find.byKey(const ValueKey('putOnWishlist'))); // the check is a panel with two buttons now: below the fold
+      await tester.pump();
       await tester.tap(find.byKey(const ValueKey('putOnWishlist')));
       await _settle(tester);
       expect(wc.wish.map((w) => w.name), ['Desk lamp']);

@@ -88,11 +88,11 @@ extension DeviceSettings on WalletController {
     notifyListeners();
   }
 
-  /// Explore's switch: 'explore' (default), 'spending' (the old month tiles, until E7 moves them) or 'tags'. Device-local, never synced,
-  /// remembered across starts (an old 'plan' value reads as the default).
+  /// Explore's switch: 'explore' (default) or 'spending' (the old month tiles, until E7 moves them). Device-local, never synced,
+  /// remembered across starts (an old 'plan' or 'tags' value reads as the default; Tags and rules moved to Settings).
   String get budgetView => switch (repo.localValue('budgetView')) { final v? when _budgetViews.contains(v) => v, _ => 'explore' };
 
-  static const _budgetViews = {'tags', 'spending'};
+  static const _budgetViews = {'spending'};
 
   /// Plan's switch: 'payday' (default) or 'saving'. Device-local like [budgetView].
   String get planView => repo.localValue('planView') == 'saving' ? 'saving' : 'payday';
@@ -105,7 +105,7 @@ extension DeviceSettings on WalletController {
     notifyListeners();
   }
 
-  /// Chooses Explore, Spending or Tags on the Explore tab. Links call it before they switch tabs.
+  /// Chooses Explore or Spending on the Explore tab. Links call it before they switch tabs.
   void setBudgetView(String view) {
     if (view != 'explore' && !_budgetViews.contains(view)) return;
     if (view == budgetView) return;

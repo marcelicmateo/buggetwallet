@@ -223,6 +223,8 @@ void main() {
       await t.tap(find.text('open'));
       await t.pumpAndSettle();
       await tapKey(t, 'txCategory');
+      // The picker sits high on the sheet now, so the menu is clipped above the selected item: scroll it down to the pick.
+      if (k('pick:$pick').evaluate().isEmpty) await t.dragUntilVisible(k('pick:$pick'), find.byType(Scrollable).last, const Offset(0, 100));
       await t.tap(k('pick:$pick').last);
       await t.pumpAndSettle();
       if (!always) {

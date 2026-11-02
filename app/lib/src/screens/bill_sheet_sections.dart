@@ -18,13 +18,18 @@ class _BillView {
 
   WalletController get wc => s.widget.wc;
 
-  InputDecoration deco(BuildContext context, String label, {bool filled = true, String? hint, String? suffix}) => InputDecoration(
-      labelText: label,
-      hintText: hint,
-      suffixText: suffix,
-      helperText: guessed && filled ? 'Unsure: read from text. Check it.' : null,
-      helperMaxLines: 2,
-      suffixIcon: guessed && filled ? Icon(Icons.help_outline, size: 18, color: context.c.warnInk) : null);
+  /// A guessed field that has a value gets the attention outline and the words "Unsure" (`withAttention`).
+  InputDecoration deco(BuildContext context, String label, {bool filled = true, String? hint, String? suffix}) {
+    final unsure = guessed && filled;
+    final d = InputDecoration(
+        labelText: label,
+        hintText: hint,
+        suffixText: suffix,
+        helperText: unsure ? 'Unsure: read from text. Check it.' : null,
+        helperMaxLines: 2,
+        suffixIcon: unsure ? Icon(Icons.help_outline, size: 18, color: context.c.warnInk) : null);
+    return unsure ? withAttention(context, d) : d;
+  }
 }
 
 /// A column that takes the sheet's width and only as much height as its children need (one section of the form).

@@ -13,6 +13,7 @@ import 'dart:io';
 import 'package:budget_wallet/main.dart';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/logging.dart';
+import 'package:budget_wallet/src/screens/plan_screen.dart' show PlanScreen;
 import 'package:budget_wallet/src/screens/settings.dart';
 import 'package:budget_wallet/src/tabs.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
@@ -354,7 +355,10 @@ Future<void> goTab(WidgetTester t, String label) async {
   await t.tap(navTab(label));
   await t.pumpAndSettle();
   if (label == 'Save') {
-    await t.tap(find.byKey(const ValueKey('planSaving')));
+    final saving = find.byKey(const ValueKey('planSaving'));
+    // The switch is the top of a lazy list: a Plan page that was scrolled down has not built it.
+    if (saving.evaluate().isEmpty) await t.dragUntilVisible(saving, pageList(PlanScreen), const Offset(0, 300));
+    await t.tap(saving);
     await t.pumpAndSettle();
   }
   if (label == 'Budget') {
@@ -367,12 +371,8 @@ Future<void> goTab(WidgetTester t, String label) async {
   }
 }
 
-/// Opens Budget › Tags (main tags, tags, rules); scroll it with `scrollTo(t, f, TagsWindow)`.
-Future<void> goTags(WidgetTester t) async {
-  await goTab(t, 'Budget');
-  await tapVisible(t, find.byKey(const ValueKey('budgetTags')));
-  await t.pumpAndSettle();
-}
+/// Opens Settings › Tags and rules (main tags, tags, rules); scroll it with `scrollTo(t, f, SettingsScreen)`.
+Future<void> goTags(WidgetTester t) => goSettings(t, SettingsSection.tags);
 
 /// Opens the Settings tab on [s]: from two panes wide it taps the section in the list; one page has nothing to tap (the test scrolls).
 Future<void> goSettings(WidgetTester t, SettingsSection s) async {

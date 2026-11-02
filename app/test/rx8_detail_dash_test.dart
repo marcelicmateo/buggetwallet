@@ -6,9 +6,7 @@ import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/insights_api.dart';
 import 'package:budget_wallet/src/screens/category_detail.dart';
-import 'package:budget_wallet/src/screens/tag_detail.dart';
 import 'package:budget_wallet/src/theme.dart';
-import 'package:budget_wallet/src/widgets/common.dart' show TxTile;
 import 'package:budget_wallet/src/widgets/dash.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -154,7 +152,7 @@ void main() {
         (320.0, 2.0, 1),
         (1024.0, 2.0, 2),
       ]) {
-        await _pump(tester, TagDetailScreen(wc: wc, tag: tag, range: r), size: Size(w, 4000), scale: scale);
+        await _pump(tester, CategoryDetailScreen(wc: wc, category: 'Groceries', range: r), size: Size(w, 4000), scale: scale);
         final boxes = _boxes(tester);
         final narrowest = boxes.map((b) => b.width).reduce((a, b) => a < b ? a : b);
         final gridW = tester.getSize(find.byType(DashGrid)).width;
@@ -167,45 +165,42 @@ void main() {
     }, timeout: _timeout);
   });
 
-  group('tag detail', () {
+  group('category detail: the shared compare and series tiles', () {
     testWidgets('hero total, month chip against last month, last month, average, bars and payments - all core numbers', (tester) async {
-      final (:wc, :tag) = await _wallet();
+      final (:wc, tag: _) = await _wallet();
       final r = wc.monthRange('2026-10');
-      await _pump(tester, TagDetailScreen(wc: wc, tag: tag, range: r), size: const Size(1280, 3000));
+      await _pump(tester, CategoryDetailScreen(wc: wc, category: 'Groceries', range: r), size: const Size(1280, 3000));
       // 152 + 100 + 23.45 + 19.99 = 295.44 in October; September 290.
-      expect(wc.tagTotalFor(tag, r), (spent: 29544, count: 4));
-      expect(heroIs('tagDetailTotal', moneyExact(29544, 'EUR')), findsOneWidget);
-      expect(wc.rowsOfTag(tag, r), hasLength(4));
-      final cmp = wc.compareTagFor(tag, r);
+      expect(wc.categoryTotal('Groceries', r), 29544);
+      expect(heroIs('detailTotal', moneyExact(29544, 'EUR')), findsOneWidget);
+      expect(wc.rowsOf('Groceries', null, r), hasLength(4));
+      final cmp = wc.compareFor('Groceries', r);
       expect((cmp.thisMonth, cmp.lastMonth), (29544, 29000));
       // The hero is October: no "this month" tile, the chip sits on the hero and says up (worse), 1.9 % -> 2 %.
       expect(_k('compareThis'), findsNothing);
       expect(find.descendant(of: _k('compareDelta'), matching: find.text('2 % vs Sep')), findsOneWidget);
       expect(inTile('compareLast', moneyExact(29000, 'EUR')), findsOneWidget);
       expect(inTile('compareAverage', moneyExact(cmp.average6, 'EUR')), findsOneWidget);
-      expect(cmp.average6, (29000 / 6).round());
-      expect(_k('tagDetailBars'), findsOneWidget);
+      expect(cmp.average6, 29000, reason: 'the average is over the months that have spending: only September before October');
+      expect(_k('detailBars_category'), findsOneWidget);
       // One month is ~30 day bars: the rows follow them (they are hidden only when there is a single bar), and add up to the hero.
-      final days = wc.spendingSeriesFor(r, bucketFor(r), tag: tag);
+      final days = wc.spendingSeriesFor(r, bucketFor(r), category: 'Groceries');
       expect(days, hasLength(31));
       for (final b in days) {
-        expect(_k('tagDetailRow_${b.span.start}'), findsOneWidget);
+        expect(_k('detailRow_category_${b.span.start}'), findsOneWidget);
       }
       expect(days.fold<int>(0, (a, b) => a + b.spent), 29544);
       // The hero label does not repeat the title.
-      expect(find.descendant(of: find.byType(AppBar), matching: find.text('#${wc.tagTable.label(tag)}')), findsOneWidget);
+      expect(find.descendant(of: find.byType(AppBar), matching: find.text(wc.categoryTable.label('Groceries'))), findsOneWidget);
       expect(find.text('TOTAL'), findsOneWidget, reason: 'the hero says Total, not the title again');
-      expect(find.descendant(of: _k('tagRows'), matching: find.byType(TxTile)), findsNWidgets(4));
-      // The sentence is behind the (i).
-      expect(find.textContaining('other tags too'), findsNothing);
       expect(tester.takeException(), isNull);
     }, timeout: _timeout);
 
     testWidgets('a range that starts mid-month: the hero is the range, so October gets its own tile with the chip', (tester) async {
-      final (:wc, :tag) = await _wallet();
+      final (:wc, tag: _) = await _wallet();
       final r = DateRange(start: '2026-10-03', end: '2026-10-31');
-      await _pump(tester, TagDetailScreen(wc: wc, tag: tag, range: r), size: const Size(1280, 3000));
-      final cmp = wc.compareTagFor(tag, r);
+      await _pump(tester, CategoryDetailScreen(wc: wc, category: 'Groceries', range: r), size: const Size(1280, 3000));
+      final cmp = wc.compareFor('Groceries', r);
       expect(inTile('compareThis', moneyExact(cmp.thisMonth, 'EUR')), findsOneWidget);
       expect(find.descendant(of: _k('compareThis'), matching: find.byKey(const ValueKey('compareDelta'))), findsOneWidget);
       expect(inTile('compareLast', moneyExact(cmp.lastMonth, 'EUR')), findsOneWidget, reason: 'September is not a row of this range');
@@ -214,18 +209,18 @@ void main() {
 
     testWidgets('a range that shows month rows with both months: the This month and Last month tiles would repeat them, only Average stays',
         (tester) async {
-      final (:wc, :tag) = await _wallet();
+      final (:wc, tag: _) = await _wallet();
       final r = DateRange(start: '2026-04-01', end: '2026-10-31'); // 214 days: a bar per month
-      await _pump(tester, TagDetailScreen(wc: wc, tag: tag, range: r), size: const Size(1280, 3000));
-      final cmp = wc.compareTagFor(tag, r);
-      expect(heroIs('tagDetailTotal', moneyExact(29000 + 29544, 'EUR')), findsOneWidget);
-      final months = wc.spendingSeriesFor(r, bucketFor(r), tag: tag);
+      await _pump(tester, CategoryDetailScreen(wc: wc, category: 'Groceries', range: r), size: const Size(1280, 3000));
+      final cmp = wc.compareFor('Groceries', r);
+      expect(heroIs('detailTotal', moneyExact(wc.categoryTotal('Groceries', r), 'EUR')), findsOneWidget);
+      final months = wc.spendingSeriesFor(r, bucketFor(r), category: 'Groceries');
       expect(months.first.bucket, Bucket.month);
       for (final b in months) {
-        expect(_k('tagDetailRow_${monthOf(b.span.start)}'), findsOneWidget);
+        expect(_k('detailRow_category_${monthOf(b.span.start)}'), findsOneWidget);
       }
-      expect(_k('tagDetailRow_2026-10'), findsOneWidget);
-      expect(_k('tagDetailRow_2026-09'), findsOneWidget);
+      expect(_k('detailRow_category_2026-10'), findsOneWidget);
+      expect(_k('detailRow_category_2026-09'), findsOneWidget);
       expect(_k('compareThis'), findsNothing);
       expect(_k('compareLast'), findsNothing);
       expect(inTile('compareAverage', moneyExact(cmp.average6, 'EUR')), findsOneWidget);
@@ -234,31 +229,31 @@ void main() {
 
     testWidgets('a range shown as weeks does not hold the months as rows: This month and Last month stay, the weeks add up to the hero',
         (tester) async {
-      final (:wc, :tag) = await _wallet();
+      final (:wc, tag: _) = await _wallet();
       final r = DateRange(start: '2026-08-01', end: '2026-10-31'); // 92 days: a bar per week
-      await _pump(tester, TagDetailScreen(wc: wc, tag: tag, range: r), size: const Size(1280, 3000));
-      final cmp = wc.compareTagFor(tag, r);
-      final weeks = wc.spendingSeriesFor(r, bucketFor(r), tag: tag);
+      await _pump(tester, CategoryDetailScreen(wc: wc, category: 'Groceries', range: r), size: const Size(1280, 3000));
+      final cmp = wc.compareFor('Groceries', r);
+      final weeks = wc.spendingSeriesFor(r, bucketFor(r), category: 'Groceries');
       expect(weeks.first.bucket, Bucket.week);
       for (final b in weeks) {
-        expect(_k('tagDetailRow_${b.span.start}'), findsOneWidget);
+        expect(_k('detailRow_category_${b.span.start}'), findsOneWidget);
       }
-      expect(weeks.fold<int>(0, (a, b) => a + b.spent), 29000 + 29544);
+      expect(weeks.fold<int>(0, (a, b) => a + b.spent), wc.categoryTotal('Groceries', r));
       expect(inTile('compareThis', moneyExact(cmp.thisMonth, 'EUR')), findsOneWidget);
       expect(inTile('compareLast', moneyExact(cmp.lastMonth, 'EUR')), findsOneWidget);
       expect(tester.takeException(), isNull);
     }, timeout: _timeout);
 
     testWidgets('no spending last month: no chip, the figure is 0 exactly; no payments: the empty note', (tester) async {
-      final (:wc, :tag) = await _wallet(septemberToo: false);
-      final r = wc.monthRange('2026-10');
-      await _pump(tester, TagDetailScreen(wc: wc, tag: tag, range: r), size: const Size(400, 3000));
+      final (:wc, tag: _) = await _wallet();
+      final r = wc.monthRange('2026-04'); // the first month with spending: March had none
+      await _pump(tester, CategoryDetailScreen(wc: wc, category: 'Groceries', range: r), size: const Size(400, 3000));
       expect(_k('compareDelta'), findsNothing);
       expect(inTile('compareLast', moneyExact(0, 'EUR')), findsOneWidget);
-      final other = wc.monthRange('2026-05');
-      await _pump(tester, TagDetailScreen(wc: wc, tag: tag, range: other), size: const Size(400, 3000));
-      expect(heroIs('tagDetailTotal', moneyExact(0, 'EUR')), findsOneWidget);
-      expect(find.text('Nothing spent with this tag in this range.'), findsOneWidget);
+      final other = wc.monthRange('2026-03');
+      await _pump(tester, CategoryDetailScreen(wc: wc, category: 'Groceries', range: other), size: const Size(400, 3000));
+      expect(heroIs('detailTotal', moneyExact(0, 'EUR')), findsOneWidget);
+      expect(find.text('Nothing spent in this range.'), findsOneWidget);
       expect(tester.takeException(), isNull);
     }, timeout: _timeout);
   });
@@ -314,20 +309,11 @@ void main() {
       ('1920', Size(1920, 3000), 1.0),
     ]) {
       for (final mode in Brightness.values) {
-        testWidgets('tag, category and merchant pages at $name, ${mode.name}', (tester) async {
+        testWidgets('category and merchant pages at $name, ${mode.name}', (tester) async {
           final errors = Errors();
-          final (:wc, :tag) = await _wallet();
+          final (:wc, tag: _) = await _wallet();
           final r = wc.monthRange('2026-10');
-          await _pump(tester, TagDetailScreen(wc: wc, tag: tag, range: r), size: size, scale: scale, mode: mode);
-          scanFlex(tester);
-          _expectOrdered(_boxes(tester), tester.getSize(find.byType(DashGrid)).width, 'tag $name');
-          _expectNoHoles(tester, scale, 'tag $name');
-          // Several months: the hero is the range, so "this month" is a tile of its own and the rows fill differently.
-          final months = DateRange(start: '2026-08-01', end: '2026-10-31');
-          await _pump(tester, TagDetailScreen(wc: wc, tag: tag, range: months), size: size, scale: scale, mode: mode);
-          scanFlex(tester);
-          _expectOrdered(_boxes(tester), tester.getSize(find.byType(DashGrid)).width, 'tag months $name');
-          _expectNoHoles(tester, scale, 'tag months $name');
+          final months = DateRange(start: '2026-08-01', end: '2026-10-31'); // several months: the hero is the range
           await _pump(tester, CategoryDetailScreen(wc: wc, category: 'Groceries', range: months), size: size, scale: scale, mode: mode);
           _expectNoHoles(tester, scale, 'category months $name');
           await _pump(tester, CategoryDetailScreen(wc: wc, category: 'Groceries', range: r), size: size, scale: scale, mode: mode);

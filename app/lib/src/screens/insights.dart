@@ -17,7 +17,7 @@ import '../widgets/sheets.dart';
 import 'bucket_payments.dart';
 import 'category_detail.dart';
 import 'period_reports.dart';
-import 'tag_detail.dart';
+import 'project.dart' show openProject;
 
 /// Opens Insights. [picker] replaces the system date range picker (tests).
 Future<void> openInsights(BuildContext context, WalletController wc, {RangePicker? picker}) =>
@@ -205,7 +205,7 @@ class InsightPanel extends StatelessWidget {
         currency: cur,
         onOpen: (tag) {
           logNav('insights.tag', {'graph': id});
-          openTag(context, wc, tag);
+          openProject(context, wc, tag);
         },
       ),
       if (share.slices.isNotEmpty || share.untaggedSpent > 0)

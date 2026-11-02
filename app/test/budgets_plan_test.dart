@@ -1,4 +1,4 @@
-// Plan › Budgets per category. All data is SYNTHETIC (budgetWallet: fixed clock, made-up amounts).
+// Plan › Budgets per main tag. All data is SYNTHETIC (budgetWallet: fixed clock, made-up amounts).
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
 import 'package:flutter/material.dart';
@@ -38,7 +38,7 @@ void main() {
     expect(_text(tester, 'Groceries'), '300');
     expect(_text(tester, 'Eating out'), '100');
     expect(_text(tester, 'Shopping'), '');
-    expect(find.text('BUDGETS PER CATEGORY'), findsOneWidget);
+    expect(find.text('BUDGETS PER MAIN TAG'), findsOneWidget);
     expect(find.byKey(const ValueKey('budget:Salary')), findsNothing, reason: 'income has no budget');
     expect(find.byKey(const ValueKey('budget:Internal transfer')), findsNothing);
     expect(find.byKey(const ValueKey('budget:Rent')), findsOneWidget);

@@ -257,11 +257,10 @@ class _SearchResults extends StatelessWidget {
   }
 }
 
-/// A rule found by name: its own form (Budget › Tags' edit path); a built-in rule cannot be edited, so Budget › Tags opens.
+/// A rule found by name: its own form (Settings › Tags and rules' edit path); a built-in rule cannot be edited, so Settings › Tags and rules opens.
 Future<void> _openRule(BuildContext context, WalletController wc, RuleView rule) async {
   if (rule.kind == RuleKind.builtIn || !rule.editable) {
-    wc.setBudgetView('tags');
-    wc.openTab(Tabs.explore, via: 'search');
+    wc.openSettings(SettingsSection.tags, via: 'search');
     return;
   }
   await openRuleForm(context, wc, edit: rule);

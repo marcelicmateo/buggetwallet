@@ -10,6 +10,7 @@ abstract final class Tabs {
 /// The sections of the Settings tab, in page order. [currencies] is a place inside Accounts (a link scrolls to it).
 enum SettingsSection {
   accounts('Accounts', 'Cash, banks and currencies'),
+  tags('Tags and rules', 'Main tags, tags, payee rules'),
   import('Import', 'Bank files and file layouts'),
   sync('Sync', 'Relay, devices and wallet key'),
   backup('Backup and export', 'Files you keep'),
@@ -20,6 +21,14 @@ enum SettingsSection {
 
   final String title, sub;
   const SettingsSection(this.title, this.sub);
+
+  /// The heading over this section in the list and on the one page (Settings index, ENG E7b).
+  String get group => switch (this) {
+        accounts || tags || import || currencies => 'Your money',
+        sync || backup => 'Devices and safety',
+        calendars => 'Reminders',
+        look || diagnostics => 'App',
+      };
 
   /// The entry of the section list this place belongs to.
   SettingsSection get nav => this == currencies ? accounts : this;
