@@ -357,7 +357,8 @@ class _HomeShellState extends State<HomeShell> {
   /// Builds the shown page again when the data or the day changed since it was built (a new day moves the period and months).
   void _refreshPages() {
     // todayTiles is device-local (no data version change), so it is part of the key.
-    final key = '${widget.wc.dataVersion}|${widget.wc.today()}|${widget.wc.numberStyleName}|${widget.wc.repo.localValue('todayTiles')}';
+    final key =
+        '${widget.wc.dataVersion}|${widget.wc.today()}|${widget.wc.numberStyleName}|${widget.wc.repo.localValue('todayTiles')}|${widget.wc.repo.localValue('amountsAs')}';
     if (key == _pagesKey) return;
     _pagesKey = key;
     if (_wcReplaced) {

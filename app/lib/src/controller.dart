@@ -17,7 +17,19 @@ import 'conflict_text.dart';
 import 'controller_deps.dart';
 import 'device_list.dart';
 import 'device_relay.dart';
-import 'format.dart' show NumberStyle, money, moneyExact, numberStyle, rateText, shortDateOrRaw, walletCurrencyCode;
+import 'format.dart'
+    show
+        NumberStyle,
+        groupInt,
+        hoursText,
+        money,
+        moneyExact,
+        monthLong,
+        numberStyle,
+        rateText,
+        shortDate,
+        shortDateOrRaw,
+        walletCurrencyCode;
 import 'hero.dart';
 import 'home_widget.dart';
 import 'ics_fetch.dart';
@@ -57,6 +69,7 @@ part 'controller_iou.dart';
 part 'controller_suggest.dart';
 part 'controller_setup.dart';
 part 'controller_warmup.dart';
+part 'controller_overview.dart';
 
 final _log = Logger('bw.app');
 final _sync = Logger('bw.sync');

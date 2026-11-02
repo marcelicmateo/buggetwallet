@@ -1,4 +1,5 @@
 // SYNTHETIC demo wallet for screenshot tests. Made-up amounts; merchants are well-known chains only.
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:wallet_core/wallet_core.dart';
@@ -59,6 +60,16 @@ Future<void> seedDemoAccounts(WalletRepo repo, String today) async {
   await repo.addAccount(name: 'PBZ current', source: 'pbz', currency: 'EUR', opening: 184250, openingDate: opened);
   await repo.addAccount(name: 'Cash', currency: 'EUR', opening: 6000, openingDate: opened);
   await repo.addAccount(name: 'Revolut travel', source: 'revolut', currency: 'USD', opening: 8000, openingDate: opened);
+}
+
+/// A pinned series for the demo (ENG E2): groceries per month over about 8 months. A real wallet pins nothing by itself.
+void seedDemoPin(WalletRepo repo, String today) {
+  final q = SeriesQuery(
+      measure: Measure.spent,
+      keys: const [SeriesKey(SeriesKind.mainTag, 'Groceries')],
+      bucket: Bucket.month,
+      window: DateRange(start: addDays(today, -240), end: today));
+  repo.patchView(repo.addView(name: 'Groceries per month', query: jsonEncode(q.toJson())), pinned: true);
 }
 
 /// SYNTHETIC IOUs for the demo (Q8): 120 lent to "Sam" with a 40 repayment, and 35 borrowed from "Alex"; neither is linked to a payment.

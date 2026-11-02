@@ -24,6 +24,9 @@ extension WarmUpTasks on WalletController {
           ('deliveries', () => deliveries),
           ('deliveryOrders90', () => deliveryOrders90),
           ('latestBySource', () => latestBySource),
+          ('findings', foundCards),
+          ('nearestGoal', nearestGoal),
+          for (final v in pinnedViews()) ('pin', () => pinData(v)),
         ],
       Tabs.explore => <WarmTask>[
           ('period', period),
@@ -57,7 +60,7 @@ extension WarmUpTasks on WalletController {
     return <WarmTask>[
       for (var tab = 0; tab < Tabs.names.length; tab++)
         for (final t in warmUpTasksFor(tab))
-          if (t.$1 == 'monthSummary' || seen.add(t.$1)) t,
+          if (t.$1 == 'monthSummary' || t.$1 == 'pin' || seen.add(t.$1)) t,
       for (final id in insightGraphs) ('insights.$id', () => _warmInsight(id)),
     ];
   }

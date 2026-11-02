@@ -260,9 +260,10 @@ void main() {
       await _size(tester, 1100, 900);
       expect(_todayWide(tester), isTrue);
     });
-    testWidgets('huge window: content capped at 1040 still gives four tile columns', (tester) async {
+    testWidgets('huge window: from 1280 dp Overview has two panes (the goal bar sits right of the hero)', (tester) async {
       await _pumpShell(tester, demoWallet(clock: pinnedNoon), w: 3840, h: 1080);
-      expect(_todayWide(tester), isTrue);
+      expect(tester.getTopLeft(find.byKey(const ValueKey('goalBar'))).dx,
+          greaterThan(tester.getTopRight(find.byKey(const ValueKey('heroTile'))).dx));
     });
     testWidgets('compact and medium never use four tile columns', (tester) async {
       await _pumpShell(tester, demoWallet(clock: pinnedNoon), w: 360, h: 800);

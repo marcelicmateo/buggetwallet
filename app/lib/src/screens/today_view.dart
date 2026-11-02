@@ -7,7 +7,9 @@ import '../file_chooser.dart';
 import '../widgets/sheets.dart';
 import 'accounts_panel.dart' show askBankBalance;
 import 'bill_sheet.dart';
+import 'findings.dart';
 import 'key_backup.dart';
+import 'period_report.dart';
 import 'review.dart';
 import 'setup_wizard.dart';
 import 'upcoming.dart';
@@ -70,6 +72,29 @@ class TodayView implements Listenable {
   int splitCount(String txId) => _wc.splitCount(txId);
   bool splitIsBroken(String txId) => _wc.splitIsBroken(txId);
   bool setupCollapsedFor(List<String> steps) => _wc.setupCollapsedFor(steps);
+
+  // ---------- Overview (E2) ----------
+  bool get hoursAvailable => _wc.hoursAvailable;
+  bool get showHours => _wc.showHours;
+  void setShowHours(bool on) => _wc.setShowHours(on);
+
+  /// An amount as Overview shows it: exact money, or hours of work when the switch is on.
+  String amount(int cents, String cur) => _wc.amountText(cents, cur);
+  List<FindingCard> foundCards() => _wc.foundCards();
+
+  /// The pinned series that can be drawn (a view this build cannot run is left out).
+  List<PinData> pins() => [
+        for (final v in _wc.pinnedViews())
+          if (_wc.pinData(v) case final d?) d
+      ];
+  void unpin(String id) => _wc.unpinView(id);
+  void repin(String id) => _wc.repinView(id);
+  Goal? nearestGoal() => _wc.nearestGoal();
+
+  /// Plan › Saving (the goal bar's link); the caller switches the tab.
+  void showSaving() => _wc.setPlanView('saving');
+  Future<void> showFindings(BuildContext context, {VoidCallback? openExplore}) => openFindings(context, _wc, openExplore: openExplore);
+  Future<void> showPeriodReport(BuildContext context) => openPeriodReport(context, _wc);
 
   // ---------- actions ----------
   void startNewMonth(String date) => _wc.startNewMonth(date);
