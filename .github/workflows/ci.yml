@@ -117,7 +117,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
         with: { linux-libs: true }
-      - { id: desktop, run: wallet-build ci step desktop -- wallet-build desktop-test }
+      # One combined entry file: the app builds and starts once (the local desktop-test runs one file at a time)
+      - { id: desktop, run: wallet-build ci step desktop -- wallet-build desktop-test, env: { BW_DESKTOP_COMBINED: "1" } }
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -213,12 +214,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - { id: setup, uses: ./.github/actions/setup, with: { flutter: false } }
+      - { uses: ./.github/actions/setup, with: { flutter: false } }
       - uses: actions/download-artifact@v4
         continue-on-error: true
         with: { pattern: "ci-log-*", path: "${{ runner.temp }}/logs" }
       - name: Publish log
-        if: steps.setup.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
           NEEDS: ${{ toJSON(needs) }}
@@ -226,13 +226,3 @@ jobs:
         run: |
           wallet-build ci merge --artifacts "$RUNNER_TEMP/logs" --needs-json "$NEEDS" --out "$RUNNER_TEMP/ci.txt" --history "$RUNNER_TEMP/history.jsonl"
           wallet-build ci publish-log "$NAME" "$RUNNER_TEMP/ci.txt" "$RUNNER_TEMP/history.jsonl"
-      # wallet-build did not build: a short latest.txt with plain git (the old script), so ci-logs still says what happened
-      - name: Publish log without wallet-build
-        if: always() && steps.setup.outcome == 'failure'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          NEEDS: ${{ toJSON(needs) }}
-          NAME: ${{ inputs.release && 'release-android-linux' || 'latest' }}
-        run: |
-          { echo "wallet-build=failure(did not build)"; echo "$NEEDS" | jq -r 'to_entries | map("job:\(.key)=\(.value.result) ") | join("")'; } > "$RUNNER_TEMP/ci.txt"
-          .github/scripts/publish-log.sh "$NAME" "$RUNNER_TEMP/ci.txt"

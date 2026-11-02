@@ -1,5 +1,5 @@
 // First run through the UI: start a new wallet, the salary banner, joining with a wrong and a right key.
-// Run: tools/emulator.sh test onboarding
+// Run: make emulator-test N=onboarding
 import 'package:budget_wallet/main.dart';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/key_store.dart';

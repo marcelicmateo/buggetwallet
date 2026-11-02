@@ -45,17 +45,3 @@ func TestGoCheckWithoutToolchainLineUsesGoLine(t *testing.T) {
 		t.Errorf("code %d\n%s", r.code, r.out)
 	}
 }
-
-// the nested parity module is vetted with its build tag
-func TestGoCheckVetsParityModule(t *testing.T) {
-	root := mkRepo(t)
-	write(t, filepath.Join(root, "tools/wallet-build/parity/go.mod"), "module parity\n")
-	r := runCLI(t, opts{root: root, env: []string{"BW_NATIVE=1"}, handle: goHandle(true)}, "lint")
-	found := false
-	for _, c := range r.calls {
-		found = found || c == "tools/wallet-build/parity$ go vet -tags parity ./..."
-	}
-	if !found || r.code != 0 {
-		t.Errorf("code %d calls %v", r.code, r.calls)
-	}
-}

@@ -1,4 +1,4 @@
-// Package ci ports tools/ci-status.sh (CI results of a commit from the GitHub check runs and the ci-logs branch) and holds the
+// Package ci ports wallet-build ci (CI results of a commit from the GitHub check runs and the ci-logs branch) and holds the
 // helpers of the workflows: step, job-log, merge, publish-log, keystore and android-key.
 package ci
 
@@ -142,7 +142,7 @@ func line3(log string) string {
 func (x *CI) Status(args []string) int {
 	c := x.C
 	wait := false
-	if len(args) > 0 && args[0] == "--log" { // tools/ci-status.sh --log [name]
+	if len(args) > 0 && args[0] == "--log" { // make ci-log [name]
 		return x.Log(args[1:])
 	}
 	if len(args) > 0 && args[0] == "--wait" {
@@ -203,7 +203,7 @@ func (x *CI) Status(args []string) int {
 	if failed > 0 {
 		c.Printf("\n")
 		if match {
-			c.Printf("%s\n--- failing lines (full log: tools/ci-status.sh --log) ---\n", line3(latest)) // M6: rename with the scripts
+			c.Printf("%s\n--- failing lines (full log: make ci-log) ---\n", line3(latest))
 			n := 0
 			for i, l := range strings.Split(latest, "\n") {
 				if reFail.MatchString(l) && !reSkip.MatchString(l) && n < 40 {
@@ -212,7 +212,7 @@ func (x *CI) Status(args []string) int {
 				}
 			}
 		} else {
-			c.Printf("ci-logs/latest.txt is for another commit; see tools/ci-status.sh --log\n") // M6: rename with the scripts
+			c.Printf("ci-logs/latest.txt is for another commit; see make ci-log\n")
 		}
 		return 1
 	}

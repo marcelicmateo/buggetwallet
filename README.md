@@ -34,23 +34,23 @@ The scripts need a Linux host with Bash 5+ (they use `EPOCHREALTIME`, `mapfile`,
 The script runs the same steps as CI.
 
 ```sh
-tools/make-signing-key.sh       # once: the Android signing key, kept in ~/.config/budget-wallet/
-tools/build.sh test             # lint, then importer + core + app: analyze and tests
-tools/build.sh lint             # quick: Dart format check, shellcheck, actionlint
-tools/build.sh format           # reformat Dart code (dart format)
-tools/build.sh apk              # Android APK   -> dist/BudgetWallet-android.apk
-tools/build.sh linux            # Linux bundle  -> dist/BudgetWallet-linux-x64.tar.gz
-tools/build.sh desktop-test     # integration tests on the Linux desktop app (Xvfb) -> dist/screens/linux/<test>/
-tools/build.sh desktop-test screens   # only app/integration_test/screens_test.dart
-tools/build.sh desktop-smoke    # build the Linux bundle, start it headless with an empty HOME for 10 s, check its log
-tools/build-times.sh            # recent build/test timings and medians (trend: slowest tests)
-tools/build.sh all              # tests, then both builds
-tools/build.sh shell            # shell inside the container
-tools/build.sh lsp              # Dart language server for your editor (stdin/stdout)
-tools/emulator.sh screens       # Android emulator: demo wallet (fake data), screenshot of every tab -> dist/screens/
-tools/emulator.sh start --window  # an emulator on your desktop; then `install`, `shot <name>`, `stop`
-tools/live.sh start --demo      # live mode: the Linux app in debug mode on your desktop, demo wallet (fake data)
-tools/live.sh reload            # hot reload after an edit; also restart, shot, trace start|stop, status, stop
+make signing-key       # once: the Android signing key, kept in ~/.config/budget-wallet/
+make test             # lint, then importer + core + app: analyze and tests
+make lint             # quick: Dart format check, shellcheck, actionlint
+make format           # reformat Dart code (dart format)
+make apk              # Android APK   -> dist/BudgetWallet-android.apk
+make linux            # Linux bundle  -> dist/BudgetWallet-linux-x64.tar.gz
+make desktop-test     # integration tests on the Linux desktop app (Xvfb) -> dist/screens/linux/<test>/
+make desktop-test N=screens   # only app/integration_test/screens_test.dart
+make desktop-smoke    # build the Linux bundle, start it headless with an empty HOME for 10 s, check its log
+make times            # recent build/test timings and medians (trend: slowest tests)
+make all              # tests, then both builds
+make shell            # shell inside the container
+make lsp              # Dart language server for your editor (stdin/stdout)
+make emulator-screens       # Android emulator: demo wallet (fake data), screenshot of every tab -> dist/screens/
+make emulator-start ARGS=--window  # an emulator on your desktop; then `install`, `shot <name>`, `stop`
+make live-start ARGS=--demo      # live mode: the Linux app in debug mode on your desktop, demo wallet (fake data)
+make live-reload            # hot reload after an edit; also restart, shot, trace start|stop, status, stop
 ```
 
 - The first run builds the image (~15 min).
@@ -62,9 +62,9 @@ tools/live.sh reload            # hot reload after an edit; also restart, shot, 
   - `history/steps.jsonl`, `history/tests.jsonl`: one JSON line per step / per test per run, append-only.
   - `device-logs/`: reserved for logs exported from the app.
 
-  Every run prints seconds per step and per-test p50/p90/p99/max. `tools/build-times.sh` shows the last runs and
+  Every run prints seconds per step and per-test p50/p90/p99/max. `make times` shows the last runs and
   the median per step (`--step app`, `--commit`, `--ci` adds CI's history from the `ci-logs` branch);
-  `tools/build-times.sh trend` shows the slowest tests over time.
+  `make trend` shows the slowest tests over time.
 - **Linux desktop tests** run in the same container on a virtual display (Xvfb, Mesa software OpenGL, a private
   D-Bus session). `desktop-test` runs every `app/integration_test/*_test.dart` with `flutter test -d linux`, each file
   with its own empty wallet folder; screenshots go to `dist/screens/linux/<test>/` and the app's log to
@@ -73,11 +73,11 @@ tools/live.sh reload            # hot reload after an edit; also restart, shot, 
   that only makes sense on Android should skip itself. `desktop-smoke` unpacks the release tarball and checks that it
   starts, logs `app.start` with no SEVERE line and exits on SIGTERM. CI runs both (`BW_NATIVE=1`); the Ubuntu
   packages for this are listed once in `dev/linux-packages.txt` (image and CI).
-- The first `tools/emulator.sh` run downloads the emulator and system image (~2 GB) into Podman volumes and saves a
-  clean-boot snapshot; later runs boot from it in seconds. `tools/emulator.sh reset` deletes them.
-- **Live mode** (`tools/live.sh`) keeps `flutter run -d linux` going in the container so you and Claude use the same
+- The first `make emulator-…` run downloads the emulator and system image (~2 GB) into Podman volumes and saves a
+  clean-boot snapshot; later runs boot from it in seconds. `make emulator-reset` deletes them.
+- **Live mode** (`make live-start`) keeps `flutter run -d linux` going in the container so you and Claude use the same
   running app: you click in the window, Claude hot-reloads, reads errors and the widget tree (through the `dart` MCP
-  server in `.mcp.json`, which runs `tools/build.sh mcp` in the container) and takes screenshots. The window opens
+  server in `.mcp.json`, which runs `make mcp` in the container) and takes screenshots. The window opens
   on your desktop through the Wayland socket alone, with the GPU passed in; `--headless` (or no Wayland session) uses
   Xvfb instead. X11 is never passed through: an X11 client can read other windows and keystrokes.
   The app's wallet, key and logs are a throwaway folder in `dist/live/` (`demo/` with `--demo`, else `wallet/`;
@@ -86,20 +86,20 @@ tools/live.sh reload            # hot reload after an edit; also restart, shot, 
   never with host input tools (xdotool, ydotool, uinput), and its screenshots come from the app (or Xvfb), never
   your screen. The app and the MCP server share a Podman pod (`bw-<checkout folder>`); only the VM service port is
   published, on 127.0.0.1, for DevTools in your browser (the URL `start` prints). `--profile` builds a profile app (no hot reload) for performance work:
-  `tools/live.sh trace start`, use the app, `tools/live.sh trace stop scroll` saves `trace-scroll.json` (open it in
+  `make live-trace start`, use the app, `make live-trace stop scroll` saves `trace-scroll.json` (open it in
   DevTools or ui.perfetto.dev) and a summary (frames, build/raster p50/p90/max, frames over 16 ms) in the run folder.
 - **Code style.** `dart format` with page width 140, and stricter analyzer rules (strict casts/inference/raw
   types plus extra lints) shared by the app and both packages in the root `analysis_options.yaml`. Infos fail the
   build too. Shell scripts are checked by shellcheck, workflows by actionlint; both are pinned in
   `dev/install-lint-tools.sh`, which the container image and CI both use, so local and CI results match.
-- **Editor.** Point your editor's Dart LSP client at `tools/build.sh lsp` (for example Neovim, Helix, Zed, Emacs).
+- **Editor.** Point your editor's Dart LSP client at `make lsp` (for example Neovim, Helix, Zed, Emacs).
   It runs the analysis server in the container with the repo mounted at the same path, so diagnostics, completion
   and format-on-save need no local SDK. Jumping into SDK or pub package sources does not work (those live in the
   container). The VS Code Dart extension needs a local Flutter SDK and can't use this. `.editorconfig` covers the basics.
 - `.git-blame-ignore-revs` hides the bulk reformat from blame: `git config blame.ignoreRevsFile .git-blame-ignore-revs`.
 - **Back up `~/.config/budget-wallet/`** (a password manager is fine). Every APK must be signed with that key, or
   Android refuses the update and the app has to be uninstalled, which deletes the wallet on the phone.
-- CI signs with the same key from GitHub secrets: run `tools/make-signing-key.sh --upload` once.
+- CI signs with the same key from GitHub secrets: run `make signing-key ARGS=--upload` once.
 - iPhone / macOS builds need a Mac with Xcode. CI builds every platform on `master`, tags, or `[release]` commits.
 
 ## Milestones

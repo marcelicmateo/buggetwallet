@@ -1,7 +1,7 @@
 # Shared analyzer, linter and formatter settings for the Dart code in this repo.
 # app/ and packages/*/ include this file on top of their base rule set
 # (flutter_lints for the app, lints/recommended for the packages).
-# Run: tools/build.sh lint (format check) and tools/build.sh test (analyze + tests).
+# Run: make lint (format check) and make test (analyze + tests).
 
 formatter:
   page_width: 140

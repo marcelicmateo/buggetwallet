@@ -1,6 +1,6 @@
 // Host side of `flutter drive`: saves the test's screenshots and its app log.
-//   tools/emulator.sh screens: dist/screens/<shot>.png and dist/logs/app-emulator.log
-//   tools/emulator.sh test (BW_TEST_NAME=<name>): dist/screens/<name>/<shot>.png, dist/logs/app-<name>.log and the
+//   make emulator-screens: dist/screens/<shot>.png and dist/logs/app-emulator.log
+//   make emulator-test (BW_TEST_NAME=<name>): dist/screens/<name>/<shot>.png, dist/logs/app-<name>.log and the
 //   rest of the test's report data (perf numbers, known bugs) as dist/logs/report-<name>.json
 import 'dart:convert';
 import 'dart:io';

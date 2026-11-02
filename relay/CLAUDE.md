@@ -71,7 +71,7 @@ Never put a signature, public key, body, full id or client address in a log line
   device; snapshot 507 counts only the kept snapshots, not the files they will prune.
 
 ## Test
-`tools/build.sh shell -c 'cd relay && dart pub get && dart analyze --fatal-infos && dart test'` (a `relay` step in `build.sh`
+`make shell C='cd relay && dart pub get && dart analyze --fatal-infos && dart test'` (a `relay` step in `make relay`
 comes with R7). Tests run over real HTTP on port 0 (`test/support.dart` `Harness`: temp folder, injectable clock, captured log
 sink, `restart()` over the same folder; requests are signed with the synthetic `keyA`/`keyB` (`TestKey`, written from the
 protocol text, not from `signing.dart`), `key: null` = unsigned, `skew` shifts `X-BW-Time`, `sign()` returns the headers

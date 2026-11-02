@@ -1,6 +1,6 @@
 // The browser wallet database (R6b): keyed on the wrapped IndexedDB VFS, an unkeyed database from the previous web build is converted,
 // a wrong key is refused, set-aside keeps the bytes, and forget + reopen uses a new vfsName. Real IndexedDB and sqlite3mc.wasm
-// (fetched by tools/build.sh as test/sqlite3.wasm). The tests run in order and share the page's module state. SYNTHETIC data.
+// (fetched by make as test/sqlite3.wasm). The tests run in order and share the page's module state. SYNTHETIC data.
 @TestOn('browser')
 library;
 

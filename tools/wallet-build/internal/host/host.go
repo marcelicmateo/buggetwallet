@@ -241,11 +241,11 @@ func (h *Host) Main(cmd string, rest []string) (code int) {
 		return h.execStdio("lsp", nil, []string{"-v", fmt.Sprintf("%s:%s:z", c.Root, c.Root), "-v", "bw-pub-cache:/cache/pub", "-v", "bw-dart-server:/root/.dartServer"},
 			[]string{filepath.Join(c.Root, "dist", "bin", "wallet-build"), "lsp"})
 	case "mcp":
-		// Like lsp, in the pod of tools/live.sh: the live app's VM service and DTD listen on the pod's 127.0.0.1.
+		// Like lsp, in the pod of `live start`: the live app's VM service and DTD listen on the pod's 127.0.0.1.
 		// dart mcp-server installs its pinned dart_mcp_server bundle on first use; the volume keeps it.
-		pod, rc := c.Capture("", filepath.Join(c.Root, "tools", "live.sh"), "pod")
+		pod, rc := c.Capture("", h.Self, "live", "pod")
 		if rc != 0 || pod == "" {
-			c.Eprintf("tools/live.sh pod failed\n")
+			c.Eprintf("live pod failed\n")
 			return 1
 		}
 		return h.execStdio("mcp", []string{"--pod", pod}, []string{"-v", fmt.Sprintf("%s:%s:z", c.Root, c.Root), "-v", "bw-pub-cache:/cache/pub",
@@ -306,13 +306,13 @@ func (h *Host) execStdio(kind string, podArgs, mounts, inner []string) int {
 // podRun hands the command to the container.
 func (h *Host) podRun(cmd string, rest []string) int {
 	c := h.C
-	// Android release signing key (tools/make-signing-key.sh), mounted read-only
+	// Android release signing key (make signing-key), mounted read-only
 	signingDir, envFile := h.signingPaths()
 	var signing []string
 	if st, err := os.Stat(envFile); err == nil && st.Mode().IsRegular() {
 		signing = []string{"-v", signingDir + ":/signing:ro,z", "--env-file", envFile, "-e", "BW_KEYSTORE=/signing/android-release.jks"}
 	} else if cmd == "apk" || cmd == "all" {
-		return h.failHost(cmd, fmt.Sprintf("No Android signing key in %s. Run tools/make-signing-key.sh first, otherwise the APK can't update the installed app.", signingDir))
+		return h.failHost(cmd, fmt.Sprintf("No Android signing key in %s. Run make signing-key first, otherwise the APK can't update the installed app.", signingDir))
 	}
 	// the host's go-check runs before the container (lint and test, in step lists of both implementations). A failure is
 	// recorded, the Dart checks still run, and the run exits non-zero at the end.
@@ -462,9 +462,9 @@ func (h *Host) stage() int {
 		return c.R.Run(c.Ctx, sys.Cmd{Argv: []string{"podman", "volume", "exists", n}, Env: c.Env}) == 0
 	}
 	if vol("bw-emulator") && vol("bw-emulator-image") {
-		subs = append(subs, sub{"emulator-screens", []string{filepath.Join(c.Root, "tools", "emulator.sh"), "screens"}})
+		subs = append(subs, sub{"emulator-screens", []string{h.Self, "emulator", "screens"}})
 	} else {
-		c.Printf("stage: emulator volumes missing, skipping emulator-screens (tools/emulator.sh screens sets them up, ~2 GB)\n")
+		c.Printf("stage: emulator volumes missing, skipping emulator-screens (make emulator-screens sets them up, ~2 GB)\n")
 	}
 	subs = append(subs, sub{"perf", []string{h.Self, "perf"}})
 	var names, secs, results, dirs []string
@@ -493,7 +493,7 @@ func (h *Host) stage() int {
 		fmt.Fprintf(&sb, "%-18s %8s s  %s\n", names[i], secs[i], results[i])
 	}
 	sb.WriteString(stageSummary(dirs))
-	sb.WriteString("--- slowest 10 tests (tools/build-times.sh trend)\n")
+	sb.WriteString("--- slowest 10 tests (make trend)\n")
 	sb.WriteString(trendText(c))
 	c.Printf("%s", sb.String())
 	_ = os.WriteFile(filepath.Join(stageDir, "stage-summary.txt"), []byte(c.Red.Clean(sb.String())), 0o644)

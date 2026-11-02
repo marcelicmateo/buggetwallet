@@ -33,7 +33,7 @@ func runDirs(t *testing.T, r result) []string {
 }
 
 const runEnvFlags = "-e BW_DATA_DIR -e BW_RUN_DIR -e BW_RUN_ID -e BW_RUN -e BW_COMMIT -e BW_CMD -e BW_IMAGE -e BW_COLD -e BW_SOURCE -e BW_WORKTREE"
-const passFlags = "-e BW_NATIVE=1 -e BW_JOBS -e BW_GL_THREADS -e BW_APK_ABIS -e BW_FUZZ_ITERATIONS -e BW_FUZZ_SEED -e BW_STEP_TIMEOUT -e BW_HEADLESS_TIMEOUT -e BW_SMOKE_SECONDS -w /work"
+const passFlags = "-e BW_NATIVE=1 -e BW_JOBS -e BW_GL_THREADS -e BW_APK_ABIS -e BW_FUZZ_ITERATIONS -e BW_FUZZ_SEED -e BW_STEP_TIMEOUT -e BW_HEADLESS_TIMEOUT -e BW_SMOKE_SECONDS -e BW_DESKTOP_COMBINED -w /work"
 
 func TestHostPodmanRunArgv(t *testing.T) {
 	r := runCLI(t, opts{handle: goHandle(true)}, "core", "test/x_test.dart")
@@ -211,7 +211,7 @@ func TestHostSecretsNeverLogged(t *testing.T) {
 func TestHostApkWithoutSigningKey(t *testing.T) {
 	for _, cmd := range []string{"apk", "all"} {
 		r := runCLI(t, opts{}, cmd)
-		if r.code != 1 || !strings.Contains(r.err, "No Android signing key in ") || !strings.Contains(r.err, "tools/make-signing-key.sh") || len(podmanRuns(r)) != 0 {
+		if r.code != 1 || !strings.Contains(r.err, "No Android signing key in ") || !strings.Contains(r.err, "make signing-key") || len(podmanRuns(r)) != 0 {
 			t.Errorf("%s: code %d err %q runs %v", cmd, r.code, r.err, podmanRuns(r))
 		}
 		dir := runDirs(t, r)[0]
@@ -365,7 +365,7 @@ func TestHostStage(t *testing.T) {
 	if !strings.HasSuffix(strings.TrimSpace(lines[3]), "FAILED") || !strings.HasSuffix(strings.TrimSpace(lines[0]), "ok") {
 		t.Errorf("rows: %q", lines[:4])
 	}
-	for _, want := range []string{"--- failing tests: none", "--- BUG: skips: none", "--- slowest 10 tests (tools/build-times.sh trend)"} {
+	for _, want := range []string{"--- failing tests: none", "--- BUG: skips: none", "--- slowest 10 tests (make trend)"} {
 		if !strings.Contains(sum, want) {
 			t.Errorf("stage-summary.txt lacks %q:\n%s", want, sum)
 		}
@@ -385,8 +385,8 @@ func TestHostStage(t *testing.T) {
 	for _, c := range r.fake.Calls {
 		names = append(names, strings.Join(c.Argv, " "))
 	}
-	if !strings.Contains(strings.Join(names, "\n"), r.root+"/tools/emulator.sh screens") {
-		t.Errorf("emulator.sh screens not run:\n%s", strings.Join(names, "\n"))
+	if !strings.Contains(strings.Join(names, "\n"), "/x/wallet-build emulator screens") {
+		t.Errorf("emulator screens not run:\n%s", strings.Join(names, "\n"))
 	}
 }
 
@@ -443,7 +443,7 @@ func TestHostLspMcpExec(t *testing.T) {
 		t.Error("lsp keeps no run")
 	}
 	h := func(c sys.Cmd) int {
-		if strings.HasSuffix(c.Argv[0], "live.sh") {
+		if len(c.Argv) > 2 && c.Argv[1] == "live" && c.Argv[2] == "pod" {
 			c.Stdout.Write([]byte("budget-wallet-live-pod\n"))
 		}
 		return 0
@@ -557,7 +557,7 @@ func TestHostForwardsTimeoutEnv(t *testing.T) {
 	if len(runs) != 1 {
 		t.Fatal(runs)
 	}
-	for _, want := range []string{"-e BW_FUZZ_SEED -e BW_STEP_TIMEOUT -e BW_HEADLESS_TIMEOUT -e BW_SMOKE_SECONDS -e BW_TIMEOUT_CORE_ONE -e BW_TIMEOUT_FORMAT -w /work"} {
+	for _, want := range []string{"-e BW_FUZZ_SEED -e BW_STEP_TIMEOUT -e BW_HEADLESS_TIMEOUT -e BW_SMOKE_SECONDS -e BW_DESKTOP_COMBINED -e BW_TIMEOUT_CORE_ONE -e BW_TIMEOUT_FORMAT -w /work"} {
 		if !strings.Contains(runs[0], want) {
 			t.Errorf("lacks %q in %s", want, runs[0])
 		}

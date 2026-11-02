@@ -47,6 +47,35 @@ class Harness {
   static final List<Map<String, Object?>> bugs = [];
   static final Map<String, Object?> report = {};
 
+  /// The combined CI entry runs every test file in one process. Each file's main() registers its private texts/amounts at
+  /// registration time, so the entry clears them before main(), takes them after it, and puts them back when the file's group starts
+  /// (a file run alone starts clean: nothing of another file counts against its log).
+  static void clearRegistered() {
+    _private
+      ..clear()
+      ..addAll(basePrivate);
+    _cents.clear();
+    _keys.clear();
+  }
+
+  static ({Set<String> texts, Set<int> cents, Set<String> keys}) takeRegistered() =>
+      (texts: {..._private}, cents: {..._cents}, keys: {..._keys});
+
+  static void useRegistered(({Set<String> texts, Set<int> cents, Set<String> keys}) r) {
+    _private
+      ..clear()
+      ..addAll(r.texts);
+    _cents
+      ..clear()
+      ..addAll(r.cents);
+    _keys
+      ..clear()
+      ..addAll(r.keys);
+    _logsCleared = false;
+    bugs.clear();
+    report.clear();
+  }
+
   /// Call first in main(). Registers the end-of-file hook that hands the app log and the report to the driver.
   static IntegrationTestWidgetsFlutterBinding init() {
     binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -166,8 +195,8 @@ class Harness {
   /// Off for views resized by a test: the screenshot then never completes on the emulator.
   static bool shots = true;
 
-  /// Screenshot. On a phone the driver saves it (tools/emulator.sh); on a desktop flutter_test_config.dart takes it
-  /// from the render tree (tools/build.sh desktop-test).
+  /// Screenshot. On a phone the driver saves it (make emulator-test); on a desktop flutter_test_config.dart takes it
+  /// from the render tree (make desktop-test).
   static Future<void> shot(WidgetTester t, String name) async {
     if (!shots) return;
     if (!_converted) {

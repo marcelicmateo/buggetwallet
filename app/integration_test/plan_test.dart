@@ -1,5 +1,5 @@
 // Tap-through on Plan: numbers (validation, save), start a new month, Sync (relay address), wallet key, Diagnostics (level,
-// log size, clear). Run: tools/emulator.sh test plan
+// log size, clear). Run: make emulator-test N=plan
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/logging.dart';

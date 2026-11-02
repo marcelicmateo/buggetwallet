@@ -1,6 +1,6 @@
-// Live-mode entry point with the SYNTHETIC demo wallet: `tools/live.sh start --demo`. Same start-up as lib/main.dart,
+// Live-mode entry point with the SYNTHETIC demo wallet: `make live-start ARGS="--demo"`. Same start-up as lib/main.dart,
 // plus the screenshot tests' demo data (integration_test/demo_data.dart) when the wallet folder is empty.
-// Live mode keeps that folder in dist/live/demo/; BW_LIVE_DEMO=1 (set by tools/live.sh) guards against seeding
+// Live mode keeps that folder in dist/live/demo/; BW_LIVE_DEMO=1 (set by make live-start) guards against seeding
 // anything else.
 import 'dart:async';
 import 'dart:convert';
@@ -15,7 +15,7 @@ import 'package:flutter/widgets.dart';
 import '../integration_test/demo_data.dart';
 
 Future<void> main() async {
-  if (Platform.environment['BW_LIVE_DEMO'] != '1') throw StateError('tool/live_demo.dart only runs from tools/live.sh start --demo');
+  if (Platform.environment['BW_LIVE_DEMO'] != '1') throw StateError('tool/live_demo.dart only runs from make live-start ARGS="--demo"');
   final total = Stopwatch()..start();
   await runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();

@@ -18,8 +18,6 @@ import (
 	"wallet-build/internal/sys"
 )
 
-const timingSh = "../../../timing.sh" // the bash implementation this port must stay compatible with
-
 type testCtx struct {
 	*Ctx
 	root, data string
@@ -152,28 +150,15 @@ func TestRecordWritesBashHistoryLine(t *testing.T) {
 	}
 }
 
-// log_history of tools/timing.sh and LogHistory must write byte-identical lines.
-func TestHistoryLineEqualsBash(t *testing.T) {
-	if _, err := exec.LookPath("bash"); err != nil {
-		t.Skip("no bash")
-	}
+// LogHistory writes the history line format the earlier bash tool wrote (field order and spacing are read by `times`).
+func TestHistoryLineFormat(t *testing.T) {
 	c := newCtx(t, "BW_RUN=2026-11-01T10:00:00+00:00", "BW_RUN_ID=20261101-100000-app-abc1234", "BW_CMD=app", "BW_COLD=0")
 	c.LogHistory("app", "121.8", "FAILED", "true", "2026-11-01T10:13:28+00:00")
 	c.LogHistory("core:one", "0.0", "ok", "false", "")
-	goData, _ := os.ReadFile(filepath.Join(c.data, "history", "steps.jsonl"))
-	bashData := t.TempDir()
-	script := `ROOT=` + c.root + `; source ` + timingSh + `
-BW_RUN=2026-11-01T10:00:00+00:00; BW_RUN_ID=20261101-100000-app-abc1234; BW_CMD=app; BW_COLD=0; BW_SOURCE=local; BW_WORKTREE=wt; BW_COMMIT=abc1234; BW_IMAGE=img:1
-log_history app 121.8 FAILED true 2026-11-01T10:13:28+00:00
-log_history core:one 0.0 ok false 2026-11-01T10:13:28+01:00`
-	cmd := exec.Command("bash", "-c", script)
-	cmd.Env = append(os.Environ(), "BW_DATA_DIR="+bashData)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("bash: %v %s", err, out)
-	}
-	bashLines, _ := os.ReadFile(filepath.Join(bashData, "history", "steps.jsonl"))
-	if string(goData) != string(bashLines) {
-		t.Errorf("go:\n%s\nbash:\n%s", goData, bashLines)
+	got, _ := os.ReadFile(filepath.Join(c.data, "history", "steps.jsonl"))
+	want := "{\"ts\":\"2026-11-01T10:13:28+00:00\",\"run\":\"20261101-100000-app-abc1234\",\"source\":\"local\",\"worktree\":\"wt\",\"commit\":\"abc1234\",\"cmd\":\"app\",\"step\":\"app\",\"seconds\":121.8,\"result\":\"FAILED\",\"image\":\"img:1\",\"cold\":true}\n{\"ts\":\"2026-11-01T10:13:28+01:00\",\"run\":\"20261101-100000-app-abc1234\",\"source\":\"local\",\"worktree\":\"wt\",\"commit\":\"abc1234\",\"cmd\":\"app\",\"step\":\"core:one\",\"seconds\":0.0,\"result\":\"ok\",\"image\":\"img:1\",\"cold\":false}\n"
+	if string(got) != want {
+		t.Errorf("got %q", got)
 	}
 }
 
@@ -298,39 +283,6 @@ func TestPruneKeepsNewestAndRunning(t *testing.T) {
 	}
 	if len(runs) != 31 || has("20260101-000000-x-c") || !has("20260101-000039-x-c") || !has("20260101-000010-x-c") {
 		t.Errorf("want newest 30 finished + 1 running, got %d: %v", len(runs), runs)
-	}
-}
-
-// Go and bash prune under one flock: running both at once on the same data dir must leave exactly the newest 30.
-func TestPruneConcurrentWithBash(t *testing.T) {
-	if _, err := exec.LookPath("bash"); err != nil {
-		t.Skip("no bash")
-	}
-	if _, err := exec.LookPath("flock"); err != nil {
-		t.Skip("no flock")
-	}
-	c := newCtx(t)
-	c.Clock = time.Now
-	for i := 0; i < 60; i++ {
-		mkRun(t, c.data, fmt.Sprintf("20260101-0000%02d-x-c", i), false, 0)
-	}
-	var wg sync.WaitGroup
-	for i := 0; i < 3; i++ {
-		wg.Add(2)
-		go func() { defer wg.Done(); c.PruneRuns() }()
-		go func() {
-			defer wg.Done()
-			cmd := exec.Command("bash", "-c", "ROOT=/nonexistent; source "+timingSh+"; prune_runs")
-			cmd.Env = append(os.Environ(), "BW_DATA_DIR="+c.data)
-			if out, err := cmd.CombinedOutput(); err != nil {
-				t.Errorf("bash prune: %v %s", err, out)
-			}
-		}()
-	}
-	wg.Wait()
-	runs := listRuns(c.data)
-	if len(runs) != 30 || runs[0] != "20260101-000030-x-c" || runs[29] != "20260101-000059-x-c" {
-		t.Errorf("got %d runs: %v", len(runs), runs)
 	}
 }
 

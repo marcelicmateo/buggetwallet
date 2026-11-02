@@ -1,6 +1,6 @@
 // Layout stress: every screen and sheet in dark mode, at text scale 1.3 and 2.0, and on a small phone (320x640),
 // scrolled top to bottom. Fails on any FlutterError (overflow, layout, paint), except the known bugs in Harness.knownLayoutBugs.
-// Screenshots: dist/screens/layout/<variant>-<screen>-<n>.png. Run: tools/emulator.sh test layout
+// Screenshots: dist/screens/layout/<variant>-<screen>-<n>.png. Run: make emulator-test N=layout
 import 'dart:math';
 
 import 'package:budget_wallet/src/platform.dart';

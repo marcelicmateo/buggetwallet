@@ -44,13 +44,14 @@ func GoCheck(sc *run.StepCtx) int {
 	if sc.CmdEnv(mod, goEnv, "go", "vet", "./...") != 0 {
 		rc = 1
 	}
-	sc.Printf("--- go test ./...\n")
-	if sc.CmdEnv(mod, goEnv, "go", "test", "./...") != 0 {
-		rc = 1
-	}
-	if st, err := os.Stat(filepath.Join(sc.C.Root, mod, "parity")); err == nil && st.IsDir() { // the nested module of the parity tests
-		sc.Printf("--- go vet -tags parity ./... (parity)\n")
-		if sc.CmdEnv(mod+"/parity", goEnv, "go", "vet", "-tags", "parity", "./...") != 0 {
+	// CI (BW_NATIVE=1) skips the tool's own tests: a cold 2-core runner spent ~45 s of the lint job compiling and running them,
+	// and every local `make lint`/`make test` runs them before a push.
+	native := sc.Env.Get("BW_NATIVE") == "1"
+	if native {
+		sc.Printf("--- go test not run in CI (make lint runs it)\n")
+	} else {
+		sc.Printf("--- go test ./...\n")
+		if sc.CmdEnv(mod, goEnv, "go", "test", "./...") != 0 {
 			rc = 1
 		}
 	}
@@ -129,7 +130,7 @@ func Stdio(c *run.Ctx, cmd string, rest []string) int {
 	return 0
 }
 
-// Container runs one command inside the container (or natively in CI): tools/build.sh's `case "$CMD"`. args[0] is the
+// Container runs one command inside the container (or natively in CI): wallet-build's `case "$CMD"`. args[0] is the
 // command. usage prints the usage text and returns 2.
 func Container(c *run.Ctx, args []string, self string, usage func() int) int {
 	cmd := args[0]

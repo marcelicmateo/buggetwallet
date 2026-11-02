@@ -76,7 +76,7 @@ func TestStatusFailedShowsFailingLines(t *testing.T) {
 		t.Fatalf("rc %d", rc)
 	}
 	out := e.out.String()
-	for _, want := range []string{"core  completed  failure", "\nlint=ok core=failure\n--- failing lines (full log: tools/ci-status.sh --log) ---\n", "6:Test failed: x\n", "9:an Exception happened\n"} {
+	for _, want := range []string{"core  completed  failure", "\nlint=ok core=failure\n--- failing lines (full log: make ci-log) ---\n", "6:Test failed: x\n", "9:an Exception happened\n"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("lacks %q:\n%s", want, out)
 		}
@@ -181,7 +181,7 @@ func TestMainDispatch(t *testing.T) {
 	}
 }
 
-// tools/ci-status.sh --log [name] is `ci status --log [name]` as well as `ci log [name]`
+// wallet-build ci --log [name] is `ci status --log [name]` as well as `ci log [name]`
 func TestStatusLogFlag(t *testing.T) {
 	e := newEnv(t, "the latest log\n")
 	if rc := e.x.Status([]string{"--log"}); rc != 0 || e.out.String() != "the latest log\n" {

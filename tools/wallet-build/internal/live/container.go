@@ -56,7 +56,7 @@ func serve(c *run.Ctx) int {
 	}
 	_ = os.WriteFile(filepath.Join(home, ".config", "xdg-desktop-portal", "portals.conf"), []byte("[preferred]\ndefault=gtk\n"), 0o644)
 	_ = os.WriteFile(filepath.Join(home, ".config", "gtk-3.0", "bookmarks"), []byte("file:///files Test files\n"), 0o644)
-	// Own build folder: tools/build.sh mounts the repo at /work, and CMake's cache is tied to the source path
+	// Own build folder: wallet-build mounts the repo at /work, and CMake's cache is tied to the source path
 	if rc := c.R.Run(c.Ctx, sys.Cmd{Argv: []string{"flutter", "config", "--build-dir=build/live"}, Dir: c.Root, Env: env, Stderr: c.Err}); rc != 0 {
 		return rc
 	}

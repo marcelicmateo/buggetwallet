@@ -1,4 +1,4 @@
-// Package emulator ports tools/emulator.sh: the Android emulator in a rootless Podman container (host side: image, volumes,
+// Package emulator ports wallet-build emulator: the Android emulator in a rootless Podman container (host side: image, volumes,
 // containers; container side: setup, boot and `flutter drive` runs).
 package emulator
 
@@ -23,7 +23,7 @@ import (
 //go:embed usage.txt
 var usageText string
 
-// Names and settings that tools/emulator.sh fixes.
+// Names and settings that wallet-build emulator fixes.
 const (
 	// ContainerName is the long-lived emulator container (`start`).
 	ContainerName = "bw-emulator"
@@ -161,7 +161,7 @@ func (e *hostSide) dispatch(cmd string, args []string) (code int) {
 		return e.stop()
 	case "reset":
 		if e.running() {
-			c.Eprintf("Stop the running emulator first: tools/emulator.sh stop\n")
+			c.Eprintf("Stop the running emulator first: make emulator-stop\n")
 			return 1
 		}
 		if rc := c.R.Run(c.Ctx, sys.Cmd{Argv: []string{"podman", "volume", "rm", "-f", "bw-emulator", "bw-emulator-image", "bw-emulator-avd"}, Env: c.Env, Stderr: c.ChildErr}); rc != 0 {
@@ -186,7 +186,7 @@ func (e *hostSide) needRunning() bool {
 	if e.running() {
 		return true
 	}
-	e.c.Eprintf("No emulator running. Start one with: tools/emulator.sh start\n")
+	e.c.Eprintf("No emulator running. Start one with: make emulator-start\n")
 	return false
 }
 

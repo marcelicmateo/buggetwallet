@@ -1,4 +1,4 @@
-// Screenshots of every tab with the synthetic demo wallet, then the app's log. Run on the emulator: tools/emulator.sh screens
+// Screenshots of every tab with the synthetic demo wallet, then the app's log. Run on the emulator: make emulator-screens
 // -> dist/screens/*.png and dist/logs/app-emulator.log (written by test_driver/integration_test.dart).
 import 'dart:async';
 import 'dart:convert';

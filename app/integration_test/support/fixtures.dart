@@ -1,4 +1,4 @@
-// GENERATED from packages/wallet_importer/test/fixtures (SYNTHETIC files from tools/make_fixtures.py), base64.
+// GENERATED from packages/wallet_importer/test/fixtures (SYNTHETIC files from make fixtures), base64.
 // A device has no access to the repo, so the importer fixtures are embedded here.
 // app/test/fixtures_sync_test.dart fails when they drift: then base64-encode the files again.
 import 'dart:convert';

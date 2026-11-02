@@ -1,6 +1,6 @@
 // Relay sync end to end on a desktop: a real relay (relay/ package) runs in this process on 127.0.0.1, device A is the
 // app under test (Plan › Sync), device B is a second controller with the same key. SYNTHETIC data only.
-// Run: tools/build.sh desktop-test relay_sync. Skipped on Android (the relay would have to run on the host).
+// Run: make desktop-test N=relay_sync. Skipped on Android (the relay would have to run on the host).
 import 'dart:io';
 
 import 'package:budget_wallet/src/bill_inputs.dart';

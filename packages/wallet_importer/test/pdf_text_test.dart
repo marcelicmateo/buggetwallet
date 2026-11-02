@@ -1,4 +1,4 @@
-// pdfText against the SYNTHETIC PDF fixtures in test/fixtures/bills (tools/make_fixtures.py ... bills), hand-built PDFs
+// pdfText against the SYNTHETIC PDF fixtures in test/fixtures/bills (make fixtures ... bills), hand-built PDFs
 // for its edges, and mutated fixtures (fuzz).
 import 'dart:convert';
 import 'dart:io';

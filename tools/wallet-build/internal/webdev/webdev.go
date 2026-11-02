@@ -1,4 +1,4 @@
-// Package webdev ports tools/web.sh and tools/web_shot.py: serve the web build (dist/web/) on this computer only, and screenshot it
+// Package webdev ports wallet-build web and tools/web_shot.py: serve the web build (dist/web/) on this computer only, and screenshot it
 // with headless Chrome. Nothing is published: the server binds 127.0.0.1 and the app's data lives in the browser profile.
 package webdev
 
@@ -18,7 +18,7 @@ import (
 	"wallet-build/internal/sys"
 )
 
-// Usage is what `web` prints for a wrong command line (the header of tools/web.sh).
+// Usage is what `web` prints for a wrong command line (the header of wallet-build web).
 const Usage = `Serve the web build (wallet-build web -> dist/web/) on this computer only, and screenshot it.
 
   wallet-build web serve [port]        serve dist/web/ on http://127.0.0.1:<port> (default 8080): loopback only, in the background
@@ -50,7 +50,7 @@ func IsCommand(word string) bool {
 type Web struct {
 	C    *run.Ctx
 	Self string // this binary: the detached server is `self web _serve`
-	// ImageName ensures the dev image exists (building it when missing) and returns its tag (tools/build.sh image-name).
+	// ImageName ensures the dev image exists (building it when missing) and returns its tag (wallet-build image-name).
 	ImageName func() (string, int)
 	// Spawn starts the detached server and returns its pid; replaced by the tests.
 	Spawn func(argv []string, dir, logPath string, env sys.Env) (int, error)
@@ -127,7 +127,7 @@ func (w *Web) pidInfo() string {
 
 func (w *Web) needBuild() bool {
 	if _, err := os.Stat(filepath.Join(w.C.Root, "dist", "web", "index.html")); err != nil {
-		w.C.Eprintf("no dist/web: run tools/build.sh web first\n") // M6: rename with the scripts
+		w.C.Eprintf("no dist/web: run make web first\n")
 		return false
 	}
 	return true

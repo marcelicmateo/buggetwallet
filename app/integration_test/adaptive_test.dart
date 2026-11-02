@@ -1,6 +1,6 @@
 // Adaptive layout on a desktop window: screenshots of every tab and the Add expense dialog at 1280x800, 1920x1080 and
 // 800x1280, plus the rail, shortcuts and window resizing on the real app. Desktop only (a resized phone view hangs the
-// screenshot). Run: tools/build.sh desktop-test adaptive -> dist/screens/linux/adaptive/<size>-<screen>.png
+// screenshot). Run: make desktop-test N=adaptive -> dist/screens/linux/adaptive/<size>-<screen>.png
 import 'package:budget_wallet/src/controller.dart' show TagsDb;
 import 'package:budget_wallet/src/layout.dart';
 import 'package:budget_wallet/src/platform.dart';
@@ -28,8 +28,7 @@ Future<void> _resize(WidgetTester t, Size s) async {
 
 void main() {
   if (isAndroid) {
-    test('adaptive: desktop windows only', () {},
-        skip: 'a resized phone view hangs the screenshot: run with tools/build.sh desktop-test adaptive');
+    test('adaptive: desktop windows only', () {}, skip: 'a resized phone view hangs the screenshot: run with make desktop-test N=adaptive');
     return;
   }
   Harness.init();

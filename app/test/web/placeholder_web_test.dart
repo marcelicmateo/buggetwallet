@@ -1,6 +1,6 @@
 // The controller holds a throwaway database while no wallet is open (first run, locked, another tab). On the web it must come
 // from the loaded sqlite3.wasm: `WalletRepo.inMemory()` throws there, which left the app blank on a fresh browser.
-// Real sqlite3mc.wasm (fetched by tools/build.sh as test/sqlite3.wasm). SYNTHETIC data.
+// Real sqlite3mc.wasm (fetched by make as test/sqlite3.wasm). SYNTHETIC data.
 @TestOn('browser')
 library;
 

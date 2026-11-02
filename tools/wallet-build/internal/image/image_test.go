@@ -10,7 +10,7 @@ import (
 
 const repoRoot = "../../../.."
 
-// The tag must be exactly what tools/build.sh computes (the same image serves both implementations).
+// The tag must be exactly what wallet-build computes (the same image serves both implementations).
 func TestTagEqualsBash(t *testing.T) {
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Skip("no bash")

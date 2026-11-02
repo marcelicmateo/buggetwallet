@@ -1,8 +1,8 @@
 // Writes the old-build fixtures of one release from the CURRENT code (run it at each release, with the release's
 // name, and commit the files; the tests in test/h12_old_builds_test.dart open every set in this folder):
 //
-//   tools/build.sh shell -c 'cd packages/wallet_core && dart run test/fixtures/old_builds/generate.dart schema7'
-//   tools/build.sh shell -c 'cd packages/wallet_core && dart run test/fixtures/old_builds/generate.dart schema7peer peer'
+//   make shell C='cd packages/wallet_core && dart run test/fixtures/old_builds/generate.dart schema7'
+//   make shell C='cd packages/wallet_core && dart run test/fixtures/old_builds/generate.dart schema7peer peer'
 //
 // Output (next to this script): <name>_plain.db (as builds before the encrypted local database wrote it),
 // <name>_keyed.db (encrypted with the key below), <name>.bwb (a sealed backup), <name>.json (what the files hold).

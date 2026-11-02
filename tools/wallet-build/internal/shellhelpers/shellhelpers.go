@@ -1,4 +1,4 @@
-// Package shellhelpers is the command table of the GO4-B helpers: the ports of tools/relay.sh, tools/web.sh, tools/web_shot.py,
+// Package shellhelpers is the command table of the GO4-B helpers: the ports of tools/relay.sh, wallet-build web, tools/web_shot.py,
 // tools/relay-native-check.sh, tools/make-signing-key.sh and tools/no-poll-hook.sh. relay-native-test lives in the host side
 // of the tool (it is a logged step); times, trend and ci are in the cli package.
 package shellhelpers
@@ -87,7 +87,7 @@ func Dispatch(c *run.Ctx, cmd string, rest []string, self string, usage func() i
 	return 0, false
 }
 
-// imageName is tools/build.sh image-name: the dev image tag, built first when it is missing.
+// imageName is wallet-build image-name: the dev image tag, built first when it is missing.
 func imageName(c *run.Ctx, self string, usage func() int, d Deps) (string, int) {
 	h := host.New(c, self, usage)
 	if d.HostSetup != nil {

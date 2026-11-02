@@ -3,7 +3,7 @@
 # the native relay binary + systemd + Caddy (files in relay/deploy/native/, its README lists what goes where).
 #
 #   tools/relay-deploy.sh [--dry-run] native-install <host> <domain> [--data-dir /path]   first install
-#   tools/relay-deploy.sh [--dry-run] native-upgrade|native-status <host>                 (build first: tools/build.sh relay-bin arm64)
+#   tools/relay-deploy.sh [--dry-run] native-upgrade|native-status <host>                 (build first: make relay-bin ARCH=arm64)
 #   tools/relay-deploy.sh [--dry-run] native-backup <host> [dir]           stop, rsync the data folder (through sudo) to dir, start
 #   tools/relay-deploy.sh --self-test                                      offline check of the dry-run output (lint step)
 #
@@ -242,11 +242,11 @@ native_target() {
   echo "$1"
 }
 
-# Sets NBIN (the binary built by tools/build.sh relay-bin arm64, checksum verified here before anything is copied).
+# Sets NBIN (the binary built by make relay-bin ARCH=arm64, checksum verified here before anything is copied).
 native_binary() {
   NBIN=$ROOT/dist/relay/relay-linux-${BW_NATIVE_ARCH:-arm64}
   if ((DRY)); then return; fi
-  [[ -x $NBIN && -f $NBIN.sha256 ]] || die "no $NBIN: run tools/build.sh relay-bin ${BW_NATIVE_ARCH:-arm64} first"
+  [[ -x $NBIN && -f $NBIN.sha256 ]] || die "no $NBIN: run make relay-bin ARCH=${BW_NATIVE_ARCH:-arm64} first"
   (cd "$(dirname "$NBIN")" && sha256sum -c "$(basename "$NBIN").sha256" > /dev/null) || die "checksum of $NBIN does not match"
 }
 
@@ -391,7 +391,7 @@ while (($#)); do
   a=$1
   shift
   case "$a" in
-    --print-script)  # the remote script of a function (remote_native_place, ...): used by tools/relay-native-test.sh
+    --print-script)  # the remote script of a function (remote_native_place, ...): used by make relay-native-test
       (($#)) || usage
       case $1 in
         remote_native_place | remote_native_upgrade | remote_native_status | remote_native_datadir | remote_native_stop | remote_native_start) "$1" ;;

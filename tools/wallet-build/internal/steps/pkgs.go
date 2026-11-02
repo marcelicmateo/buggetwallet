@@ -1,4 +1,4 @@
-// Package steps is the container side of wallet-build: the steps tools/build.sh runs inside the image (or natively in CI).
+// Package steps is the container side of wallet-build: the steps wallet-build runs inside the image (or natively in CI).
 package steps
 
 import (
@@ -173,7 +173,7 @@ func dartFormat(sc *run.StepCtx, args ...string) int {
 // FormatCheck fails when a Dart file is not formatted.
 func FormatCheck(sc *run.StepCtx) int {
 	if dartFormat(sc, "-o", "none", "--set-exit-if-changed") != 0 {
-		sc.Printf("format check failed: run tools/build.sh format\n")
+		sc.Printf("format check failed: run make format\n")
 		return 1
 	}
 	return 0
@@ -251,21 +251,14 @@ func lintSpecs(c *run.Ctx, self string) []run.Spec {
 	return []run.Spec{
 		{Name: "format", Fn: FormatCheck},
 		{Name: "shellcheck", Fn: func(sc *run.StepCtx) int {
-			files := expand(root, "tools/*.sh", "dev/*.sh", ".github/scripts/*.sh")
+			files := expand(root, "tools/*.sh", "dev/*.sh")
 			if len(files) == 0 {
 				return 0
 			}
 			return sc.Cmd("", append([]string{"shellcheck"}, files...)...)
 		}},
 		{Name: "actionlint", Fn: cmd("actionlint")},
-		// the bash hook and its Go port (wallet-build hook no-poll) both have to pass until the hook is switched (GO4-B)
-		{Name: "hook-selftest", Fn: func(sc *run.StepCtx) int {
-			rc := sc.Cmd("", "tools/no-poll-hook.sh", "--self-test")
-			if sc.Cmd("", self, "hook", "no-poll", "--self-test") != 0 {
-				rc = 1
-			}
-			return rc
-		}},
+		{Name: "hook-selftest", Fn: cmd(self, "hook", "no-poll", "--self-test")},
 		{Name: "env-selftest", Fn: EnvSelftest},
 		{Name: "deploy-selftest", Fn: cmd("tools/relay-deploy.sh", "--self-test")},
 		{Name: "native-units", Fn: cmd(self, "relay-native-check")},

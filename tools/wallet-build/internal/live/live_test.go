@@ -293,7 +293,7 @@ func TestUsageIsTwo(t *testing.T) {
 		t.Errorf("trace: %d", rc)
 	}
 	r = newRig(t)
-	if rc := r.host("trace", "pause"); rc != 1 || !strings.Contains(r.errb.String(), "Live mode is not running. Start it with: tools/live.sh start") {
+	if rc := r.host("trace", "pause"); rc != 1 || !strings.Contains(r.errb.String(), "Live mode is not running. Start it with: make live-start") {
 		t.Errorf("trace not running: %d %q", rc, r.errb.String())
 	}
 }
@@ -301,7 +301,7 @@ func TestUsageIsTwo(t *testing.T) {
 func TestNotRunningMessages(t *testing.T) {
 	for _, cmd := range []string{"reload", "restart", "shot", "trace"} {
 		r := newRig(t)
-		if rc := r.host(cmd, "start"); rc != 1 || r.errb.String() != "Live mode is not running. Start it with: tools/live.sh start\n" {
+		if rc := r.host(cmd, "start"); rc != 1 || r.errb.String() != "Live mode is not running. Start it with: make live-start\n" {
 			t.Errorf("%s: %d %q", cmd, rc, r.errb.String())
 		}
 	}
@@ -316,7 +316,7 @@ func TestNotRunningMessages(t *testing.T) {
 	// the run folder is gone
 	r = newRig(t)
 	r.exists, r.runnin, r.runDir = true, true, filepath.Join(r.data, "gone")
-	if rc := r.host("status"); rc != 1 || r.errb.String() != "Live mode's run folder is gone; tools/live.sh stop, then start.\n" {
+	if rc := r.host("status"); rc != 1 || r.errb.String() != "Live mode's run folder is gone; make live-stop, then start.\n" {
 		t.Errorf("status, folder gone: %d %q", rc, r.errb.String())
 	}
 }
@@ -547,7 +547,7 @@ func TestStartWithoutFrameLineAndAlreadyRunning(t *testing.T) {
 	if rc := r.host("start", "--demo"); rc != 0 {
 		t.Fatal(rc)
 	}
-	if !strings.HasPrefix(r.out.String(), "already running (tools/live.sh stop first):\nmode:      debug (started)\n") || len(r.podmanRunCalls()) != 0 {
+	if !strings.HasPrefix(r.out.String(), "already running (make live-stop first):\nmode:      debug (started)\n") || len(r.podmanRunCalls()) != 0 {
 		t.Errorf("out %q", r.out.String())
 	}
 }
@@ -580,7 +580,7 @@ func TestStatus(t *testing.T) {
 	r.runnin = false
 	write(t, filepath.Join(r.runDir, "flutter-run.jsonl"), `[{"event":"app.start","params":{"appId":"a","mode":"debug"}}]`+"\n"+`[{"event":"app.stop","params":{"error":"boom"}}]`+"\n")
 	r.host("status")
-	if !strings.HasPrefix(r.out.String(), "the container has exited (boom); see "+r.runDir+"/flutter-run.err; tools/live.sh stop cleans up\nmode:      debug (stopped)\n") {
+	if !strings.HasPrefix(r.out.String(), "the container has exited (boom); see "+r.runDir+"/flutter-run.err; make live-stop cleans up\nmode:      debug (stopped)\n") {
 		t.Errorf("out %q", r.out.String())
 	}
 }
@@ -623,7 +623,7 @@ func TestReloadAndRestart(t *testing.T) {
 	// profile mode has no hot reload
 	r = newRig(t)
 	r.started("profile", "1")
-	if rc := r.host("reload"); rc != 1 || r.errb.String() != "No hot reload in --profile mode: tools/live.sh stop, then start again.\n" {
+	if rc := r.host("reload"); rc != 1 || r.errb.String() != "No hot reload in --profile mode: make live-stop, then start again.\n" {
 		t.Errorf("profile: %d %q", rc, r.errb.String())
 	}
 	// no reply within 120 s: the wait is cut off, the command fails
@@ -705,10 +705,10 @@ func TestPod(t *testing.T) {
 	}
 }
 
-func TestMcpExecsBuildSh(t *testing.T) {
+func TestMcpExecsWalletBuild(t *testing.T) {
 	r := newRig(t)
 	r.host("mcp", "--x")
-	if len(r.fake.Execs) != 1 || strings.Join(r.fake.Execs[0].Argv, " ") != r.root+"/tools/build.sh mcp --x" {
+	if len(r.fake.Execs) != 1 || strings.Join(r.fake.Execs[0].Argv, " ") != r.root+"/dist/bin/wallet-build mcp --x" {
 		t.Errorf("%v", r.fake.Execs)
 	}
 }
@@ -788,7 +788,7 @@ func TestTrace(t *testing.T) {
 	}
 	p := filepath.Join(r.runDir, "trace-run1.json")
 	sum := file(t, filepath.Join(r.runDir, "trace-run1-summary.txt"))
-	if !strings.HasPrefix(sum, "timeline: 0.0 s, 2 events, 1 frames, 1 over 16 ms") || !strings.Contains(sum, "(debug build: timings are not representative; tools/live.sh start --profile for real numbers)") ||
+	if !strings.HasPrefix(sum, "timeline: 0.0 s, 2 events, 1 frames, 1 over 16 ms") || !strings.Contains(sum, "(debug build: timings are not representative; make live-start ARGS=--profile for real numbers)") ||
 		r.out.String() != sum+"saved "+p+"\n" {
 		t.Errorf("summary %q out %q", sum, r.out.String())
 	}

@@ -1,4 +1,4 @@
-// Package fixtures generates the SYNTHETIC importer fixtures (port of tools/make_fixtures.py): bill codes, UBL invoices and
+// Package fixtures generates the SYNTHETIC importer fixtures (formerly make_fixtures.py): bill codes, UBL invoices and
 // PDFs, generic CSVs and the Revolut-style CSV, plus `embed`, which base64-encodes the bank files into the Dart file the
 // integration tests use. Nothing here is real data. The JSON, XML and CSV files are byte-identical to what the Python script
 // wrote (CPython's random is reproduced by internal/pyrand); the PDFs are written with Go's zlib, so their compressed streams
@@ -175,7 +175,7 @@ const (
 // Embed returns the text of app/integration_test/support/fixtures.dart for the bank files in fixturesDir (a device has no
 // access to the repo, so the integration tests carry them as base64).
 func Embed(fixturesDir string) (string, error) {
-	s := "// GENERATED from packages/wallet_importer/test/fixtures (SYNTHETIC files from tools/make_fixtures.py), base64.\n" +
+	s := "// GENERATED from packages/wallet_importer/test/fixtures (SYNTHETIC files from make fixtures), base64.\n" +
 		"// A device has no access to the repo, so the importer fixtures are embedded here.\n" +
 		"// app/test/fixtures_sync_test.dart fails when they drift: then base64-encode the files again.\n" +
 		"import 'dart:convert';\nimport 'dart:typed_data';\n"

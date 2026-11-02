@@ -130,7 +130,7 @@ func Summary(trace []TraceEvent, mode string) string {
 		lines = append(lines, fmt.Sprintf("%-7s n=%-5d p50=%6.1f ms  p90=%6.1f ms  max=%6.1f ms", l.label, len(l.values), Pct(l.values, 50), Pct(l.values, 90), mx))
 	}
 	if mode != "" && mode != "profile" {
-		lines = append(lines, fmt.Sprintf("(%s build: timings are not representative; tools/live.sh start --profile for real numbers)", mode))
+		lines = append(lines, fmt.Sprintf("(%s build: timings are not representative; make live-start ARGS=--profile for real numbers)", mode))
 	}
 	return strings.Join(lines, "\n") + "\n"
 }

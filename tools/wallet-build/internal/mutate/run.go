@@ -31,7 +31,7 @@ var Downstream = map[string][]string{"core": {"packages/sync"}}
 const Usage = `usage: mutate <importer|core|sync> <lib file>... [--max N] [--seed S] [--tests <test file>...] [--timeout SECS] [--list]
 
 Mutation testing for the pure Dart packages. Normally started as
-  tools/build.sh mutate <importer|core|sync> <lib file>... [options]      (make mutate ARGS="...")
+  wallet-build mutate <importer|core|sync> <lib file>... [options]      (make mutate ARGS="...")
 which runs it in the build container.
 
 Per target file it lists simple one-token mutants (+/-, * and ~/, < <=, > >=, == !=, && ||, integer literals, true/false,

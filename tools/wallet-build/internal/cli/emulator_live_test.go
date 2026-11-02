@@ -50,12 +50,12 @@ func TestEmulatorQuietRunPrintsNothing(t *testing.T) {
 }
 
 func TestLiveHasNoQuietMode(t *testing.T) {
-	// tools/live.sh has no -q and ignores BW_QUIET: so does the port, for now
+	// wallet-build live has no -q and ignores BW_QUIET: so does the port, for now
 	r := runCLI(t, opts{handle: noContainer, env: []string{"BW_QUIET=1"}}, "live", "status")
 	if r.code != 0 || r.out != "not running\n" {
 		t.Errorf("BW_QUIET=1: %d %q", r.code, r.out)
 	}
-	r = runCLI(t, opts{handle: noContainer}, "live", "-q", "status") // what `tools/live.sh -q status` hands over
+	r = runCLI(t, opts{handle: noContainer}, "live", "-q", "status") // what `wallet-build live -q status` hands over
 	if r.code != 2 || !strings.HasPrefix(r.out, "Live mode: the Linux desktop app") {
 		t.Errorf("-q after live: %d %q", r.code, r.out)
 	}

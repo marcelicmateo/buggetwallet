@@ -254,7 +254,7 @@ func tester(t *testing.T, root string, fake *sys.Fake, env sys.Env) (*Tester, *b
 func TestTestNeedsTheBinary(t *testing.T) {
 	root := t.TempDir()
 	tt, _, errb := tester(t, root, &sys.Fake{}, nil)
-	if rc := tt.Test(context.Background(), nil); rc != 2 || !strings.Contains(errb.String(), "relay-native-test: build the binary first: tools/build.sh relay-bin x64") {
+	if rc := tt.Test(context.Background(), nil); rc != 2 || !strings.Contains(errb.String(), "relay-native-test: build the binary first: make relay-bin ARCH=x64") {
 		t.Errorf("rc %d err %q", rc, errb.String())
 	}
 	// present but not executable

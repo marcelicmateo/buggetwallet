@@ -1,6 +1,6 @@
 // Import through the code the file picker calls (WalletController.importFiles) with the importer's SYNTHETIC fixtures
 // and a generated current-month Revolut CSV: result lines, resulting screens, matching to added expenses, re-import.
-// Run: tools/emulator.sh test import
+// Run: make emulator-test N=import
 import 'dart:convert';
 import 'dart:typed_data';
 

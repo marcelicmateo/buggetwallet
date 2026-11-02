@@ -1,4 +1,4 @@
-// Stage Q wave 3: tests added for mutants that survived `tools/build.sh mutate core` on forecast.dart, accounts.dart,
+// Stage Q wave 3: tests added for mutants that survived `make mutate ARGS="core …"` on forecast.dart, accounts.dart,
 // recurring.dart (recurringCost), repo_iou.dart and categories.dart (kindFor). All data is SYNTHETIC.
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';

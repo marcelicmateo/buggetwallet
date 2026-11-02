@@ -2,7 +2,7 @@
 
 ## 1. Install the app
 
-**Android:** open the latest successful run of the `ci` workflow on GitHub (Actions tab), download `budget-wallet-android`, unzip, open `app-release.apk` on the phone and allow installing from this source. The published APK is for 64-bit Android phones only (arm64-v8a; all phones since about 2017), about 44 MB. 32-bit-only phones cannot install it. A local `tools/build.sh apk` also includes x86_64 (about 86 MB) so it installs on the emulator; `BW_APK_ABIS=arm64 tools/build.sh apk` builds the phone-only one.
+**Android:** open the latest successful run of the `ci` workflow on GitHub (Actions tab), download `budget-wallet-android`, unzip, open `app-release.apk` on the phone and allow installing from this source. The published APK is for 64-bit Android phones only (arm64-v8a; all phones since about 2017), about 44 MB. 32-bit-only phones cannot install it. A local `make apk` also includes x86_64 (about 86 MB) so it installs on the emulator; `BW_APK_ABIS=arm64 make apk` builds the phone-only one.
 
 **Linux:** download `budget-wallet-linux`, unzip, run `budget_wallet`.
 
@@ -27,7 +27,7 @@ Open the app → **Start a new wallet**. Then Plan → **Show wallet key** and s
 
 Devices sync through a small server you run yourself (see §5). It stores only encrypted files and cannot read them.
 
-1. Start the relay (§5; for a try-out on one computer `tools/relay.sh start`).
+1. Start the relay (§5; for a try-out on one computer `make relay-start`).
 2. In the app: Plan › Sync → **Relay address**, enter `https://<your relay name>` (§5; `http://<server>:8787` only for a try-out on your home network), tap **Save address**, then **Test connection** and **Sync now**.
 3. Each additional device: **Join my wallet from another device**, enter the key and the same address. A relay set up as in §5 also asks
    for its **create token** once, when the wallet is first created on it (not for devices that join an existing wallet).
@@ -38,9 +38,9 @@ leaves the device. Over `https://` nobody on the way can read or change the traf
 at home and away. On plain `http://` (a try-out on the home network only) someone on the network can see who syncs, when and
 how much, and can block or delay sync; they still cannot read your data or forge a change.
 
-**Sync the local web build.** The web build (`tools/build.sh web`, `tools/web.sh serve`, opened at `http://127.0.0.1:8080`) syncs through the
+**Sync the local web build.** The web build (`make web`, `make web-serve`, opened at `http://127.0.0.1:8080`) syncs through the
 same relay as the phone. A browser may call a relay only from an allowed origin: start the relay with `--origin http://127.0.0.1:8080`
-(`tools/relay.sh start` already allows it) and enter the relay address in Settings › Sync; a relay on another machine must be an
+(`make relay-start` already allows it) and enter the relay address in Settings › Sync; a relay on another machine must be an
 `https://` address. Join with the wallet key and a passphrase for this browser (it wraps the key in the browser's storage).
 
 Backups: Plan › Backup → **Back up now** saves an encrypted `.bwb` file through the save dialog; restore works only into an empty wallet.
@@ -93,7 +93,7 @@ firewall when it finds firewalld or ufw active (otherwise it says so: allow them
 
 ### 5.4 Install (from the laptop)
 ```sh
-tools/build.sh relay-bin arm64          # -> dist/relay/relay-linux-arm64 (+ .sha256), cross-compiled in the build container
+make relay-bin ARCH=arm64          # -> dist/relay/relay-linux-arm64 (+ .sha256), cross-compiled in the build container
 tools/relay-deploy.sh --dry-run native-install <pi-host> <your-domain>     # prints every command and remote script, changes nothing
 tools/relay-deploy.sh native-install <pi-host> <your-domain>               # data in /var/lib/bw-relay
 tools/relay-deploy.sh native-install <pi-host> <your-domain> --data-dir /mnt/ssd/bw-relay    # data on an SSD (below)
@@ -123,7 +123,7 @@ copy the files into it as root and `sudo chown -R bw-relay: <dir>`.
   64 MiB request bodies, no access log, Caddy's error log off.
 - **Service hardening.** Own user without login, `NoNewPrivileges`, read-only system, private `/tmp`, only the data folder writable, no
   capabilities, a system-call filter, 384 MB memory cap. `systemd-analyze security bw-relay` on the Pi shows the exposure score.
-- **Upgrade.** `tools/build.sh relay-bin arm64 && tools/relay-deploy.sh native-upgrade <pi-host>` replaces the binary and units,
+- **Upgrade.** `make relay-bin ARCH=arm64 && tools/relay-deploy.sh native-upgrade <pi-host>` replaces the binary and units,
   keeps env, token and data (the old binary stays as `/usr/local/bin/bw-relay.prev`; if the new one does not start and answer health it is
   put back and the command fails), restarts the relay (Caddy retries while it restarts) and checks health. A changed Caddyfile is saved
   once as `/etc/caddy/Caddyfile.pre-bw-relay`. OS updates: the OS's own
@@ -134,7 +134,7 @@ copy the files into it as root and `sudo chown -R bw-relay: <dir>`.
 - **By hand.** Everything `native-install` does is listed in `relay/deploy/native/README.md`.
 
 ### 5.7 Plain HTTP on the home network (development and try-outs only)
-`tools/relay.sh start` runs the same image on `127.0.0.1:8787` (data in `~/.local/share/budget-wallet/relay/`, read-only root file
+`make relay-start` runs the same image on `127.0.0.1:8787` (data in `~/.local/share/budget-wallet/relay/`, read-only root file
 system, wallet creation open, the local web build's origins allowed): the way to try the app on one computer or the emulator
 (`http://10.0.2.2:8787`). For a phone on the same Wi-Fi, run the image by hand with a published port:
 
@@ -162,8 +162,8 @@ phone / laptop --https :443--> Hetzner server: Caddy --127.0.0.1:8787--> bw-rela
 In the Hetzner Cloud console (console.hetzner.cloud), new project, **Add server**:
 - **Location:** an EU one (Falkenstein, Nuremberg or Helsinki).
 - **Image:** Debian 12 or Ubuntu 24.04 (apt) or Fedora (dnf): the install detects both.
-- **Type:** the smallest plan is plenty. The binary must match the CPU: `tools/build.sh relay-bin arm64` for ARM (CAX),
-  `tools/build.sh relay-bin x64` for the shared x86 plans (set `BW_NATIVE_ARCH=x64` for `relay-deploy.sh`).
+- **Type:** the smallest plan is plenty. The binary must match the CPU: `make relay-bin ARCH=arm64` for ARM (CAX),
+  `make relay-bin ARCH=x64` for the shared x86 plans (set `BW_NATIVE_ARCH=x64` for `relay-deploy.sh`).
 - **Networking:** public IPv4 and IPv6 (IPv4 costs a little extra but phones on mobile data often have no IPv6).
 - **SSH key:** add your laptop's public key (`~/.ssh/id_ed25519.pub`); no root password.
 - **Firewall:** create one with inbound **TCP 22**, **TCP 80** and **TCP 443** only (22 limited to your home IP if it is fixed) and
@@ -198,7 +198,7 @@ log in as `ssh bw@<server IP>` (or add an ssh alias).
    (Caddy retries on its own).
 2. **Install**, from the laptop, exactly as in 5.4 with the server as the host (add `--dry-run` first to see every command):
    ```sh
-   tools/build.sh relay-bin arm64            # or x64, see 6.1
+   make relay-bin ARCH=arm64            # or x64, see 6.1
    tools/relay-deploy.sh native-install bw@<server IP> <your name>
    ```
    It shows the creation token once: save it. Then `curl -sI https://<your name>/v2/health` should answer `HTTP/2 200`.
@@ -206,7 +206,7 @@ log in as `ssh bw@<server IP>` (or add an ssh alias).
 In the app the relay address is `https://<your name>` (Plan › Sync › Test connection).
 
 ### 6.4 Upgrading
-As in 5.6: `tools/build.sh relay-bin arm64 && tools/relay-deploy.sh native-upgrade bw@<server IP>`. The system updates itself
+As in 5.6: `make relay-bin ARCH=arm64 && tools/relay-deploy.sh native-upgrade bw@<server IP>`. The system updates itself
 (`unattended-upgrades` / `dnf-automatic`); reboot now and then with `sudo systemctl reboot` (the services start again by themselves).
 
 ### 6.5 Backup

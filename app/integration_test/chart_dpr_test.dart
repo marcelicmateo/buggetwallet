@@ -1,5 +1,5 @@
 // The Spending chart at several device pixel ratios (laptop screens use 1.25 and 1.5): screenshots for a look by eye.
-// Desktop only. Run: tools/build.sh desktop-test chart_dpr -> dist/screens/linux/chart_dpr/dpr-<ratio>.png
+// Desktop only. Run: make desktop-test N=chart_dpr -> dist/screens/linux/chart_dpr/dpr-<ratio>.png
 import 'package:budget_wallet/src/platform.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
