@@ -20,7 +20,8 @@ abstract final class LoanCols {
   static const payment = MoneyCol(entity, 'payment', label: 'Monthly payment', nullable: true, positive: true);
   static const accountId = RefCol(entity, 'account_id', label: 'Account', target: 'account', nullable: true);
   static const payeeKey = TextCol(entity, 'payee_key', label: 'Lender', nullable: true, maxLength: 200);
-  static const reference = TextCol(entity, 'reference', label: 'Reference', nullable: true, maxLength: 60);
+  static const reference =
+      TextCol(entity, 'reference', label: 'Reference', nullable: true, minLength: loanReferenceMinLength, maxLength: 60);
   static const goalId = RefCol(entity, 'goal_id', label: 'Goal', target: 'goal', nullable: true);
   static const tagId = RefCol(entity, 'tag_id', label: 'Project tag', target: 'tag', nullable: true);
   static const closedAt = DateCol(entity, 'closed_at', label: 'Closed on', nullable: true);
@@ -220,6 +221,15 @@ class LoanState {
       required this.interestToPay});
 }
 
+/// The index of the month of [s] whose window holds [date]: from 15 days before its due date to 15 days before the
+/// next one (the last month's window has no end); -1 before the first window.
+int _monthAt(List<LoanMonth> s, String date) {
+  for (var i = s.length - 1; i >= 0; i--) {
+    if (date.compareTo(addDays(s[i].due, -15)) >= 0) return i;
+  }
+  return -1;
+}
+
 /// [schedule] (`loanSchedule`) against the dates of the matched payments ([matchedPayments], `YYYY-MM-DD`, e.g. from
 /// `loanPayments`). A payment pays the month whose window holds it: from 15 days before its due date to 15 days before
 /// the next one (so an early or late payment still counts, and two payments in one window count once).
@@ -229,12 +239,7 @@ LoanState loanState(List<LoanMonth> schedule, List<String> matchedPayments, Stri
   }
   final paid = List.filled(schedule.length, false);
   for (final d in matchedPayments) {
-    for (var i = schedule.length - 1; i >= 0; i--) {
-      if (d.compareTo(addDays(schedule[i].due, -15)) >= 0) {
-        if (i == schedule.length - 1 || d.compareTo(addDays(schedule[i + 1].due, -15)) < 0) paid[i] = true;
-        break;
-      }
-    }
+    if (_monthAt(schedule, d) case final i when i >= 0) paid[i] = true;
   }
   final last = paid.lastIndexOf(true);
   final first = schedule.first;
@@ -295,18 +300,28 @@ LoanWhatIf loanWhatIf(Loan l,
   return LoanWhatIf(base.length - alt.length, interest(base) - interest(alt), newPayment);
 }
 
-/// The payment in force for [l] on [date]: the latest [rates] row from on or before it with a payment, else
-/// [Loan.payment] (null when neither is known).
-int? loanPaymentOn(Loan l, List<LoanRate> rates, String date) {
+/// The payment in force for [l] on [date]: the scheduled payment of the month whose window holds it ([loanSchedule]
+/// with [rates] and [checks]; before the first window the first month's, after the last the last month's). Without a
+/// schedule (principal, length or first due date unknown): the latest [rates] row from on or before [date] with a
+/// payment, else [Loan.payment] (null when neither is known).
+int? loanPaymentOn(Loan l, List<LoanRate> rates, List<LoanCheck> checks, String date) =>
+    _paymentOn(l, rates, loanSchedule(l, rates, checks), date).$1;
+
+/// [loanPaymentOn] on a schedule already made, and whether it is the last month's (the exact rest).
+(int?, bool) _paymentOn(Loan l, List<LoanRate> rates, List<LoanMonth> s, String date) {
+  if (s.isNotEmpty) {
+    final i = _monthAt(s, date);
+    return (s[i < 0 ? 0 : i].paid, i == s.length - 1);
+  }
   LoanRate? best;
   for (final r in rates) {
     if (r.payment != null && r.from.compareTo(date) <= 0 && (best == null || r.from.compareTo(best.from) >= 0)) best = r;
   }
-  return best?.payment ?? l.payment;
+  return (best?.payment ?? l.payment, false);
 }
 
-/// A bank row that pays [Loan] (`loanPayments`); [amountChanged]: its amount is not the payment in force on its date
-/// (the lender changed it): still matched, flagged for the owner.
+/// A bank row that pays [Loan] (`loanPayments`); [amountChanged]: its amount is not the scheduled payment in force on
+/// its date ([loanPaymentOn]; the exact-rest last payment is never flagged): still matched, flagged for the owner.
 class LoanPaymentMatch {
   final String txId, date;
   final int amount;
@@ -314,21 +329,27 @@ class LoanPaymentMatch {
   const LoanPaymentMatch(this.txId, this.date, this.amount, this.amountChanged);
 }
 
+/// The minimum length of [Loan.reference] (shorter text would match unrelated rows).
+const loanReferenceMinLength = 4;
+
 /// The rows that pay [l], oldest first: live bank outflows (not hand-added, no own transfer) in [currency], from 15
 /// days before the first due date (when known) up to the closing date, whose payee key is [Loan.payeeKey] or whose
-/// description holds [Loan.reference] (case and accents ignored). Never by amount: a row of another payee with the
-/// loan's amount is not a payment.
-List<LoanPaymentMatch> loanPayments(Loan l, List<LoanRate> rates, Iterable<Tx> rows, {required String currency}) {
-  final key = l.payeeKey ?? '', ref = foldText(l.reference?.trim() ?? '');
+/// description holds [Loan.reference] (at least [loanReferenceMinLength] characters; case and accents ignored). Never
+/// by amount: a row of another payee with the loan's amount is not a payment.
+List<LoanPaymentMatch> loanPayments(Loan l, List<LoanRate> rates, List<LoanCheck> checks, Iterable<Tx> rows, {required String currency}) {
+  final key = l.payeeKey ?? '';
+  final rawRef = foldText(l.reference?.trim() ?? '');
+  final ref = rawRef.runes.length >= loanReferenceMinLength ? rawRef : '';
   if (key.isEmpty && ref.isEmpty) return const [];
   final from = l.firstDue == null ? null : addDays(l.firstDue!, -15);
+  final schedule = loanSchedule(l, rates, checks);
   final out = <LoanPaymentMatch>[];
   for (final t in rows) {
     if (!t.live || t.manual || t.amount >= 0 || t.currency != currency || t.transferTo != null) continue;
     if ((from != null && t.date.compareTo(from) < 0) || (l.closedAt != null && t.date.compareTo(l.closedAt!) > 0)) continue;
     if (!((key.isNotEmpty && merchantKey(t) == key) || (ref.isNotEmpty && foldText(t.description).contains(ref)))) continue;
-    final expected = loanPaymentOn(l, rates, t.date);
-    out.add(LoanPaymentMatch(t.id, t.date, -t.amount, expected != null && -t.amount != expected));
+    final (expected, last) = _paymentOn(l, rates, schedule, t.date);
+    out.add(LoanPaymentMatch(t.id, t.date, -t.amount, !last && expected != null && -t.amount != expected));
   }
   return out..sort((a, b) => a.date != b.date ? a.date.compareTo(b.date) : a.txId.compareTo(b.txId));
 }

@@ -1,10 +1,12 @@
 // ENG E6 (ENG_UI_SPEC §5.5, §6.5): loans (schema 21): schedule, state, what-if, payment matching, the plan's loan lines,
 // the old single loan's migration and "I bought it" with its Undo. Literals were computed outside Dart with exact
 // fractions (Python Fraction, round half away from zero) by the same rules. All data SYNTHETIC.
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
+import 'package:wallet_sync/wallet_sync.dart';
 
 import 'support/sim.dart';
 
@@ -104,52 +106,73 @@ void main() {
         Tx(id: id, source: 'pbz', date: date, amount: amount, description: desc, currency: currency, manual: manual);
     final lender = row('a', '2026-01-15', -86066, 'SYNTH BANK LOAN');
     final key = merchantKey(lender);
+    const byRef = Loan(id: 'l1', principal: 1000000, rateBp: 600, months: 12, firstDue: '2026-01-15', reference: 'hr12-3456');
 
-    test('by payee key or by reference; another payee with the same amount is not a payment', () {
-      final loan = Loan(id: 'l1', principal: 1000000, rateBp: 600, months: 12, firstDue: '2026-01-15', payment: 86066, payeeKey: key);
+    test('by payee key; another payee with the same amount, another currency, hand-added or too early: not a payment', () {
+      final loan = Loan(id: 'l1', principal: 1000000, rateBp: 600, months: 12, firstDue: '2026-01-15', payeeKey: key);
       final rows = [
         lender,
-        row('b', '2026-02-15', -86066, 'SYNTH SHOP'), // same amount, other payee
+        row('b', '2026-02-15', -86066, 'SYNTH SHOP'),
         row('c', '2026-02-16', -86066, 'SYNTH BANK LOAN', currency: 'USD'),
         row('d', '2026-02-17', -86066, 'SYNTH BANK LOAN', manual: true),
-        row('e', '2025-12-01', -86066, 'SYNTH BANK LOAN'), // before first due − 15
+        row('e', '2025-12-01', -86066, 'SYNTH BANK LOAN'),
       ];
-      expect(loanPayments(loan, const [], rows, currency: 'EUR').map((m) => m.txId), ['a']);
+      expect(loanPayments(loan, const [], const [], rows, currency: 'EUR').map((m) => m.txId), ['a']);
     });
 
     test('matched by reference with a changed amount: still matched, flagged "amount changed"', () {
-      const loan =
-          Loan(id: 'l1', principal: 1000000, rateBp: 600, months: 12, firstDue: '2026-01-15', payment: 86066, reference: 'hr12-3456');
       final rows = [
         row('a', '2026-01-15', -86066, 'TRANSFER HR12-3456 SYNTH'),
         row('b', '2026-02-15', -88000, 'Transfer hr12-3456'),
       ];
-      final m = loanPayments(loan, const [], rows, currency: 'EUR');
+      final m = loanPayments(byRef, const [], const [], rows, currency: 'EUR');
       expect(m.map((x) => (x.txId, x.amount, x.amountChanged)), [('a', 86066, false), ('b', 88000, true)]);
       const r = LoanRate(loanId: 'l1', from: '2026-02-01', rateBp: 700, payment: 88000);
-      expect(loanPayments(loan, const [r], rows, currency: 'EUR').last.amountChanged, isFalse, reason: 'the new payment');
+      expect(loanPayments(byRef, const [r], const [], rows, currency: 'EUR').last.amountChanged, isFalse, reason: 'the new payment');
+    });
+
+    test('a rate row without a payment changes the expected amount (from the schedule); the last exact rest is not flagged', () {
+      const r = LoanRate(loanId: 'l1', from: '2026-07-01', rateBp: 1200);
+      final rows = [row('a', '2026-07-15', -87565, 'HR12-3456'), row('z', '2026-12-15', -87567, 'HR12-3456')];
+      final m = loanPayments(byRef, const [r], const [], rows, currency: 'EUR');
+      expect(m.map((x) => x.amountChanged), [false, false]);
+      expect(loanPaymentOn(byRef, const [r], const [], '2026-07-10'), 87565);
+      expect(loanPaymentOn(byRef, const [], const [], '2026-07-10'), 86066);
+      expect(loanPayments(byRef, const [], const [], [row('y', '2026-12-15', -86070, 'HR12-3456')], currency: 'EUR').single.amountChanged,
+          isFalse);
+    });
+
+    test('a reference shorter than 4 characters never matches and is refused when stored', () {
+      const short = Loan(id: 's', payment: 100, reference: 'ab1');
+      expect(loanPayments(short, const [], const [], [row('a', '2026-01-15', -100, 'X AB1 Y')], currency: 'EUR'), isEmpty);
+      final repo = WalletRepo.inMemory();
+      addTearDown(repo.close);
+      expect(() => repo.addLoan(short), throwsArgumentError);
     });
   });
 
-  group('repo: loans in the plan, migration, bought and its Undo', () {
+  group('repo: loans in the plan, conversion, bought and its Undo', () {
     late WalletRepo repo;
     setUp(() => repo = WalletRepo.inMemory(now: () => DateTime.utc(2026, 11, 2, 9).millisecondsSinceEpoch));
     tearDown(() => repo.close());
 
-    test('open loans add their payment in force to the fixed plan; a closed or deleted one leaves it', () {
-      repo.updateSettings({'salary': 300000, 'rent': 50000});
-      expect(repo.settings().loanPlan, 0);
+    test('open loans add their payment in force to the old loan setting; a closed or deleted one leaves it', () {
+      repo.updateSettings({'salary': 300000, 'rent': 50000, 'loan': 5000});
+      expect(repo.settings().loanPlan, 5000);
       final a = repo.addLoan(const Loan(id: '', name: 'Car', payment: 20000));
       final b = repo.addLoan(const Loan(id: '', name: 'Boat', payment: 10000));
       expect(repo.settings().loanLines, {a: 20000, b: 10000});
-      expect(monthlyFlex(repo.settings()), 300000 - 50000 - 30000);
+      expect(monthlyFlex(repo.settings()), 300000 - 50000 - 5000 - 30000);
       repo.addLoanRate(a, from: '2026-10-01', rateBp: 500, payment: 21000);
       repo.addLoanRate(a, from: '2027-01-01', rateBp: 600, payment: 25000); // not in force yet
-      expect(repo.settings().loanPlan, 31000);
+      expect(repo.settings().loanPlan, 5000 + 31000);
       repo.patch(LoanCols.entity, b, <Col, Object?>{LoanCols.closedAt: '2026-11-01'});
-      expect(repo.settings().loanPlan, 21000, reason: 'a paid-off loan leaves the plan');
+      expect(repo.settings().loanPlan, 5000 + 21000, reason: 'a paid-off loan leaves the plan');
       repo.deleteLoan(a);
-      expect(repo.settings().loanPlan, 0);
+      expect(repo.settings().loanPlan, 5000);
+      final c = repo.addLoan(_l);
+      repo.addLoanRate(c, from: '2026-07-01', rateBp: 1200); // no payment: the schedule's
+      expect(repo.settings().loanLines[c], 87565);
       final st = repo.settings();
       expect(WalletSettings.fromMap(st.toMap()).loanPlan, st.loanPlan, reason: 'the app round-trips settings');
     });
@@ -170,106 +193,243 @@ void main() {
       expect([s[5].balance, s.last.balance, s.last.paid], [500000, 0, 78360]);
     });
 
-    test('"I bought it" and its Undo: one write each, Undo restores goal, loan, plan line and tag rows', () async {
-      repo.updateSettings({'salary': 300000});
-      final txId = repo.addTransaction(date: '2026-10-20', amount: -500000, category: 'Shopping');
+    test('convertLegacyLoan: one write, the setting goes to 0 and the row takes its payment; the plan counts it once', () {
+      repo.updateSettings({'salary': 300000, 'loan': 40000, 'loanEnd': '2027-03', 'paydayDay': 15});
+      expect(loanLeft(repo.settings(), '2026-11-02')?.payments, 5, reason: 'unchanged until converted');
+      final flex = monthlyFlex(repo.settings());
+      final v = repo.dataVersion;
+      expect(repo.convertLegacyLoan(principal: 200000, rateBp: 500, months: 5, firstDue: '2026-11-15'), Loan.legacyId);
+      expect(repo.dataVersion, v + 1, reason: 'one write');
+      expect([repo.settings().loan, repo.settings().loanPlan, monthlyFlex(repo.settings())], [0, 40000, flex]);
+      final l = repo.loans().single;
+      expect([l.payment, l.principal, l.months], [40000, 200000, 5]);
+      expect(() => repo.convertLegacyLoan(), throwsArgumentError, reason: 'nothing left to move');
+      expect(
+          planProposals(const PlanSuggestion(loan: Suggested(value: 45000, basis: 'synthetic')), repo.settings())
+              .map((p) => (p.key, p.current)),
+          [('loan', null)],
+          reason: 'the plan suggestion still targets the setting');
+    });
+
+    test('opening a schema-20 wallet writes no loan row: the setting keeps counting', () {
+      final dir = Directory.systemTemp.createTempSync('bw-eng-loan-');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final path = '${dir.path}/w.db';
+      int now() => DateTime.utc(2026, 11, 2, 9).millisecondsSinceEpoch;
+      var r = WalletRepo.open(path, now: now);
+      r.updateSettings({'loan': 40000, 'loanEnd': '2027-03', 'paydayDay': 15});
+      r.db.execute("UPDATE meta SET value = '20' WHERE key = 'schema'");
+      r.close();
+      r = WalletRepo.open(path, now: now);
+      addTearDown(r.close);
+      expect([r.loans(), r.settings().loan, r.settings().loanPlan], [<Loan>[], 40000, 40000]);
+      expect(
+          planProposals(const PlanSuggestion(loan: Suggested(value: 45000, basis: 'synthetic')), r.settings())
+              .map((p) => (p.key, p.current)),
+          [('loan', 40000)]);
+    });
+
+    test('bought: the purchase is paid by the goal\'s saved money, safe-to-spend does not drop by it; Undo restores', () {
+      const today = '2026-11-02';
+      repo.updateSettings({'salary': 300000, 'paydayDay': 15, 'periodStart': '2026-10-15'});
+      final txId = repo.addTransaction(date: '2026-10-20', amount: 500000, category: 'Shopping');
       final gid = repo.saveGoal(name: 'Synth car', target: 1000000, saved: 600000, monthly: 25000);
       repo.patch(GoalCols.entity, gid, <Col, Object?>{GoalCols.price: 2000000, GoalCols.depositPermille: 300});
-      final goalBefore = repo.goals().single;
-      final flexBefore = monthlyFlex(repo.settings(), goals: repo.goals());
-      final v = repo.dataVersion;
+      PeriodBudget period() {
+        final st = repo.settings();
+        final txs = repo.categorizer().expandAll(repo.transactions());
+        final p0 = computePeriod(txs, st, repo.goals(), today, table: repo.categoryTable());
+        return computePeriod(txs, st, repo.goals(), today,
+            table: repo.categoryTable(), goalTakenOut: repo.goalTakenOutBetween(p0.start, p0.end));
+      }
 
+      final before = period();
+      final goalBefore = repo.goals().single;
+      final v = repo.dataVersion;
       final loanId = repo.buyGoal(gid,
           date: '2026-11-01', purchaseTxIds: [txId], loan: const Loan(id: '', principal: 1400000, rateBp: 500, months: 60, payment: 26420));
       expect(repo.dataVersion, v + 1, reason: 'one write');
+      expect(loanId, 'l:goal:$gid');
       final g = repo.goals().single;
-      expect([g.boughtAt, g.loanId, g.monthly], ['2026-11-01', loanId, 0]);
+      expect([g.boughtAt, g.loanId, g.monthly, g.saved], ['2026-11-01', loanId, 25000, 100000], reason: 'monthly is kept, skipped');
+      final after = period();
+      // Before: the 5000.00 purchase row lowered this period's money. After: the goal's saved money pays it (taken out
+      // into this period, so it no longer lowers it), the goal's 250.00 a month is no longer set aside, and the loan's
+      // 264.20 is a new fixed line.
+      expect(after.remaining, before.remaining + 500000 + 25000 - 26420);
+      expect(monthlyFlex(repo.settings(), goals: repo.goals()), 300000 - 26420);
       final loan = repo.loans().single;
       expect([loan.name, loan.goalId, loan.payment], ['Synth car', gid, 26420]);
       final tag = repo.tagTable().liveIds.single;
-      expect(loan.tagId, tag);
-      expect(repo.categorizer().categorize(repo.transaction(txId)!).tags, [tag]);
-      expect(repo.settings().loanPlan, 26420);
+      expect([
+        loan.tagId,
+        repo.categorizer().categorize(repo.transaction(txId)!).tags
+      ], [
+        tag,
+        [tag]
+      ]);
+      expect(repo.goalPeriodAmounts('2026-10-15')[gid], 0);
+      repo.payGoals(period: '2026-10-15');
+      expect(repo.goals().single.saved, 100000, reason: 'a bought goal is not paid');
       expect(() => repo.buyGoal(gid, date: '2026-11-01'), throwsArgumentError);
 
       repo.undoBuyGoal(gid);
       expect(repo.dataVersion, v + 2, reason: 'one write');
       final back = repo.goals().single;
-      expect([back.boughtAt, back.loanId, back.monthly, back.price, back.depositPermille],
-          [null, null, goalBefore.monthly, goalBefore.price, goalBefore.depositPermille]);
+      expect([back.boughtAt, back.loanId, back.monthly, back.saved], [null, null, goalBefore.monthly, goalBefore.saved]);
       expect(repo.loans(), isEmpty);
-      expect(repo.settings().loanPlan, 0);
-      expect(repo.tagTable().liveIds, isEmpty);
-      expect(repo.categorizer().categorize(repo.transaction(txId)!).tags, isEmpty);
-      expect(monthlyFlex(repo.settings(), goals: repo.goals()), flexBefore);
+      expect(period().remaining, before.remaining);
+      expect(repo.tagTable().liveIds, [tag], reason: 'the project tag and its links stay');
       expect(() => repo.undoBuyGoal(gid), throwsArgumentError);
     });
 
-    test('bought with an existing tag of that name: reused, Undo only turns off the links it added', () async {
-      final tag = await repo.addTag('Synth car');
-      final a = repo.addTransaction(date: '2026-10-20', amount: -100, category: 'Shopping');
-      final b = repo.addTransaction(date: '2026-10-21', amount: -200, category: 'Shopping');
-      await repo.setTxTag(a, tag, true);
-      final gid = repo.saveGoal(name: 'Synth car', target: 0, saved: 0, monthly: 0);
+    test('the saved money covers the purchase rows up to the saved total', () {
+      final a = repo.addTransaction(date: '2026-10-20', amount: 30000, category: 'Shopping');
+      final b = repo.addTransaction(date: '2026-10-21', amount: 50000, category: 'Shopping');
+      final gid = repo.saveGoal(name: 'Synth bike', target: 0, saved: 60000, monthly: 0);
       expect(repo.buyGoal(gid, date: '2026-11-01', purchaseTxIds: [a, b]), isNull, reason: 'paid in full: no loan');
-      repo.undoBuyGoal(gid);
-      final cz = repo.categorizer();
-      expect([
-        cz.categorize(repo.transaction(a)!).tags,
-        cz.categorize(repo.transaction(b)!).tags
-      ], [
-        [tag],
-        <String>[]
-      ]);
-      expect(repo.tagTable().isLive(tag), isTrue);
+      expect(repo.goalTakenOutByDate('2026-10-01', '2026-11-01'), {'2026-10-20': 30000, '2026-10-21': 30000});
+      expect(repo.goals().single.saved, 0);
+      final income = repo.addTransaction(date: '2026-10-22', amount: -100, category: 'Extra income');
+      expect(() => repo.buyGoal(repo.saveGoal(name: 'X', target: 0, saved: 0, monthly: 0), date: '2026-11-01', purchaseTxIds: [income]),
+          throwsArgumentError);
     });
   });
 
-  test('schema 20 → 21: the old single loan becomes one loan row, counted once; loanLeft keeps working', () {
-    final dir = Directory.systemTemp.createTempSync('bw-eng-loan-');
-    addTearDown(() => dir.deleteSync(recursive: true));
-    final path = '${dir.path}/w.db';
-    int now() => DateTime.utc(2026, 11, 2, 9).millisecondsSinceEpoch;
-    var r = WalletRepo.open(path, now: now);
-    r.updateSettings({'salary': 300000, 'loan': 40000, 'loanEnd': '2027-03', 'paydayDay': 15});
-    final leftBefore = loanLeft(r.settings(), '2026-11-02');
-    final flexBefore = monthlyFlex(r.settings());
-    r.db.execute("UPDATE meta SET value = '20' WHERE key = 'schema'");
-    r.close();
-    r = WalletRepo.open(path, now: now);
-    addTearDown(r.close);
-    final l = r.loans().single;
-    expect([l.id, l.payment, l.principal, l.rateBp, l.months, l.firstDue], [Loan.legacyId, 40000, null, null, null, null]);
-    expect(r.settings().loanPlan, 40000, reason: 'the row replaces the setting, never both');
-    expect(monthlyFlex(r.settings()), flexBefore);
-    expect(loanLeft(r.settings(), '2026-11-02')?.cents, leftBefore?.cents);
-    expect(r.pendingOps().where((o) => o.$2.entity == 'loan').length, 1, reason: 'the migration syncs');
-    r.patch(LoanCols.entity, Loan.legacyId, <Col, Object?>{LoanCols.closedAt: '2026-11-01'});
-    expect(r.settings().loanPlan, 0, reason: 'closed: the old setting does not come back');
-  });
-
-  test('two devices: a loan, its rate row and its check sync', () async {
-    final net = Net();
-    final key = VaultKey.generate();
+  group('two devices', () {
+    late Net net;
+    late VaultKey key;
     var now = DateTime.utc(2026, 11, 2, 9).millisecondsSinceEpoch;
-    final a = Device('a', null, key, () => now, net: net), b = Device('b', null, key, () => now, net: net);
-    addTearDown(() {
-      a.close();
-      b.close();
-    });
-    final id = a.repo.addLoan(_l);
-    a.repo.addLoanRate(id, from: '2026-07-01', rateBp: 1200);
-    a.repo.addLoanCheck(id, date: '2026-06-20', balance: 500000);
-    now += 1000;
-    await a.run();
-    await b.run();
-    b.repo.patch(LoanCols.entity, id, <Col, Object?>{LoanCols.reference: 'hr12-3456'});
-    now += 1000;
-    await b.run();
-    await a.run();
-    for (final d in [a, b]) {
-      final s = loanSchedule(d.repo.loans().single, d.repo.loanRates(id), d.repo.loanChecks(id));
-      expect([s.length, s.last.balance, d.repo.loans().single.reference], [12, 0, 'hr12-3456'], reason: d.name);
+    final devices = <Device>[];
+    Device device(String name, {Directory? dir, String? dbPath}) {
+      final d = Device(name, dir, key, () => now, net: net, dbPath: dbPath);
+      devices.add(d);
+      return d;
     }
+
+    setUp(() {
+      net = Net();
+      key = VaultKey.generate();
+      now = DateTime.utc(2026, 11, 2, 9).millisecondsSinceEpoch;
+    });
+    tearDown(() {
+      for (final d in devices) {
+        d.close();
+      }
+      devices.clear();
+    });
+
+    test('a loan, its rate row and its check sync', () async {
+      final a = device('a'), b = device('b');
+      final id = a.repo.addLoan(_l);
+      a.repo.addLoanRate(id, from: '2026-07-01', rateBp: 1200);
+      a.repo.addLoanCheck(id, date: '2026-06-20', balance: 500000);
+      now += 1000;
+      await a.run();
+      await b.run();
+      b.repo.patch(LoanCols.entity, id, <Col, Object?>{LoanCols.reference: 'hr12-3456'});
+      now += 1000;
+      await b.run();
+      await a.run();
+      for (final d in [a, b]) {
+        final s = loanSchedule(d.repo.loans().single, d.repo.loanRates(id), d.repo.loanChecks(id));
+        expect([s.length, s.last.balance, d.repo.loans().single.reference], [12, 0, 'hr12-3456'], reason: d.name);
+      }
+    });
+
+    test('convertLegacyLoan on one device: both agree, the plan counts it once', () async {
+      final a = device('a'), b = device('b');
+      a.repo.updateSettings({'loan': 40000});
+      now += 1000;
+      await a.run();
+      await b.run();
+      a.repo.convertLegacyLoan();
+      now += 1000;
+      await a.run();
+      await b.run();
+      for (final d in [a, b]) {
+        expect([d.repo.settings().loan, d.repo.loans().single.payment, d.repo.settings().loanPlan], [0, 40000, 40000], reason: d.name);
+      }
+    });
+
+    test('an older build edits the setting before the conversion: the row takes the newer payment', () async {
+      final tmp = Directory.systemTemp.createTempSync('bw-eng-loan-old-');
+      addTearDown(() => tmp.deleteSync(recursive: true));
+      final neu = device('new'), old = device('old', dir: tmp, dbPath: '${tmp.path}/old.db');
+      old.repo.db.execute("UPDATE meta SET value = '20' WHERE key = 'schema'");
+      Future<SyncReport> oldRun() => SyncEngine(_Schema20Reader(old.relay, key), key).run(old.repo);
+      neu.repo.updateSettings({'loan': 40000});
+      now += 1000;
+      await neu.run();
+      await oldRun();
+      old.repo.updateSettings({'loan': 45000}); // the older build's own edit
+      now += 1000;
+      await oldRun();
+      await neu.run();
+      neu.repo.convertLegacyLoan();
+      now += 1000;
+      await neu.run();
+      await oldRun();
+      expect([neu.repo.loans().single.payment, neu.repo.settings().loan, neu.repo.settings().loanPlan], [45000, 0, 45000]);
+      expect(old.repo.settings().loan, 0, reason: 'the older build sees the setting moved (it does not know loan rows)');
+      expect(old.repo.db.select('SELECT COUNT(*) AS n FROM loans').first['n'], 0);
+    });
+
+    test('bought on two devices offline: one loan', () async {
+      final a = device('a'), b = device('b');
+      final gid = a.repo.saveGoal(name: 'Synth boat', target: 0, saved: 0, monthly: 0);
+      now += 1000;
+      await a.run();
+      await b.run();
+      a.repo.buyGoal(gid, date: '2026-11-01', loan: const Loan(id: '', payment: 30000));
+      now += 1000;
+      b.repo.buyGoal(gid, date: '2026-11-02', loan: const Loan(id: '', payment: 31000));
+      now += 1000;
+      await a.run();
+      await b.run();
+      await a.run();
+      for (final d in [a, b]) {
+        expect(d.repo.loans().map((l) => (l.id, l.payment)), [('l:goal:$gid', 31000)], reason: d.name);
+        expect(d.repo.settings().loanPlan, 31000, reason: d.name);
+        expect(d.repo.goals().single.boughtAt, '2026-11-02', reason: d.name);
+      }
+    });
   });
+}
+
+/// What a schema-20 build reads from the relay: the `loan` entity renamed to one it does not know either (skipped, no
+/// clock), as the Q8/V3 old-build tests do.
+class _Schema20Reader implements SyncTransport {
+  final SyncTransport inner;
+  final VaultKey key;
+  _Schema20Reader(this.inner, this.key);
+
+  Future<List<int>> _rewrite(List<int> bytes, List<int> aad) async {
+    final j = jsonDecode(utf8.decode(await unseal(bytes, key, aad: aad)));
+    final ops = (j is Map ? j['ops'] : j) as List;
+    final out = [
+      for (final o in ops.cast<Map<String, Object?>>())
+        if ((o['e'] as String).startsWith('loan')) {...o, 'e': '${o['e']}~v21'} else o
+    ];
+    return seal(utf8.encode(jsonEncode(j is Map ? {...j, 'ops': out} : out)), key, aad: aad);
+  }
+
+  @override
+  Future<List<int>> get(String device, int seq) async => _rewrite(await inner.get(device, seq), aadSyncFile(device, seq));
+  @override
+  Future<List<int>> getSnapshot(String id) async => _rewrite(await inner.getSnapshot(id), aadSnapshot(id));
+  @override
+  Future<RelayState> state() => inner.state();
+  @override
+  Future<void> put(String device, int seq, List<int> bytes) => inner.put(device, seq, bytes);
+  @override
+  Future<void> ack(String device, Map<String, int> cursors) => inner.ack(device, cursors);
+  @override
+  Future<void> putSnapshot(String id, Map<String, int> covers, List<int> bytes) => inner.putSnapshot(id, covers, bytes);
+  @override
+  Future<void> putBlob(String hash, List<int> bytes) => inner.putBlob(hash, bytes);
+  @override
+  Future<List<int>?> getBlob(String hash) => inner.getBlob(hash);
+  @override
+  Future<void> putSnapshotBlobs(String id, List<String> hashes) => inner.putSnapshotBlobs(id, hashes);
 }

@@ -33,7 +33,7 @@ bool _perKeySetting(String key) =>
 /// restored here, or an entry an older build added after this device migrated. An entry with a row never reads the
 /// legacy map again, so a removed budget stays removed.
 WalletSettings _readSettings(CommonDatabase db,
-    {CategoryTable? table, EcbRates ecb = EcbRates.none, Map<String, int> loanLines = const {}, bool legacyLoanMoved = false}) {
+    {CategoryTable? table, EcbRates ecb = EcbRates.none, Map<String, int> loanLines = const {}}) {
   final m = <String, Object?>{};
   final rowIds = <String>{}; // per-key rows, live or removed
   for (final r in db.select('SELECT id, value, deleted FROM settings')) {
@@ -70,7 +70,7 @@ WalletSettings _readSettings(CommonDatabase db,
     }
   }
   m.remove(WalletSettings.ecbKey); // ECB rates come from the `fx_day` rows only, never from a settings row
-  return WalletSettings.fromMap(m, table: table, ecb: ecb, loanLines: loanLines, legacyLoanMoved: legacyLoanMoved);
+  return WalletSettings.fromMap(m, table: table, ecb: ecb, loanLines: loanLines);
 }
 
 /// [WalletRepo.updateSettings]: whole-value settings, one row per key. `categoryBudgets`, `merchantPatterns` and the

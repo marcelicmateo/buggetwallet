@@ -578,7 +578,9 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
 }
 
 /// PS: this period's savings: each goal's [amounts] entry (`WalletRepo.goalPeriodAmounts`), else its monthly amount.
-int _goalSum(List<Goal> goals, Map<String, int>? amounts) => goals.fold<int>(0, (s, g) => _ok(s + (amounts?[g.id] ?? g.monthly)));
+/// A bought goal (ENG E6, `Goal.boughtAt`) saves no more.
+int _goalSum(List<Goal> goals, Map<String, int>? amounts) =>
+    goals.fold<int>(0, (s, g) => g.boughtAt != null ? s : _ok(s + (amounts?[g.id] ?? g.monthly)));
 
 /// What a pay period [start] .. [end] (exclusive) sets aside, one path for [computePeriod] and [projectedReserves]:
 /// [dueCycles] of [outBills] (no incomes), the cycles that reserve (not [DueCycle.coveredIn] a plan line, reserve > 0),
@@ -788,7 +790,7 @@ int monthlyFlex(WalletSettings st, {List<Goal> goals = const [], CategoryTable? 
     if (t.hasPlanLine(e.key)) left -= e.value;
   }
   for (final g in goals) {
-    left -= g.monthly;
+    if (g.boughtAt == null) left -= g.monthly; // a bought goal saves no more
   }
   return left < 0 ? 0 : left;
 }

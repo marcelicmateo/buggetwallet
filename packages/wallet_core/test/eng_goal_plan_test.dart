@@ -278,7 +278,7 @@ void main() {
     final g = _goal(price: 10000000, deposit: 200); // need 2 600 000
     GoalPlan plan({int monthly = 100000}) => _plan(g, monthly: monthly); // 26 months
     RecurringBill inc(String id, int amount,
-            {String category = 'Other income', String status = 'confirmed', String? direction = 'in', int days = 30, String? endsOn}) =>
+            {String category = 'Extra income', String status = 'confirmed', String? direction = 'in', int days = 30, String? endsOn}) =>
         RecurringBill(
             id: id,
             payee: id,
@@ -323,13 +323,15 @@ void main() {
       expect(goalLevers(txs, st, CategoryTable.builtIn, _today, plan: plan()), isEmpty);
     });
 
-    test('confirmed side incomes at their monthly figure; salary, candidates, bills and finished ones left out', () {
+    test('confirmed side incomes (kind extra) at their monthly figure; salary, other kinds, candidates, bills and finished ones left out',
+        () {
       final l = goalLevers(const [], st, CategoryTable.builtIn, _today,
           plan: plan(),
           incomes: [
             inc('side', 30000),
             inc('yearly', 120000, days: 365), // 100.00 a month
             inc('salary', 250000, category: 'Salary'), // the plan counts it as salary already
+            inc('flex', 40000, category: 'Shopping'), // not a side income
             inc('cand', 50000, status: 'candidate'),
             inc('bill', 50000, direction: null),
             inc('ended', 50000, endsOn: '2026-10-20'),

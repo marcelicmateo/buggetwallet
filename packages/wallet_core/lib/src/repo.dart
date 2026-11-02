@@ -203,8 +203,8 @@ class WalletRepo {
   /// export account), the synced entity `fx_day` (table `fx_days`, ECB rates the wallet needs) and the device-local,
   /// never-synced cache table `ecb_rates`; no data migration. Version 21 (ENG E6): `goals` gains the big-purchase
   /// fields `price`, `deposit_permille`, `costs_permille`, `loan_rate_bp`, `loan_months`, `compare_line_id`, `bought_at`,
-  /// `loan_id` (`goalPlan`), the entities `loan`, `loanrate`, `loancheck`; the old `loan` setting becomes one loan row
-  /// (`Loan.legacyId`). Older builds ignore all of it.
+  /// `loan_id` (`goalPlan`) and the entities `loan`, `loanrate`, `loancheck`; no data migration (the old `loan` setting
+  /// keeps counting until the owner moves it, `convertLegacyLoan`). Older builds ignore all of it.
   static const schemaVersion = 21;
 
   /// Device-local, set once by the schema-15 migration ([_migrateBlobTables]): the next sync runs PUT every cached file
@@ -572,8 +572,7 @@ class WalletRepo {
   /// The stored settings ([_readSettings]: per-key budget and pattern rows, legacy maps only as a fallback), with the
   /// wallet's ECB rates ([WalletSettings.ecb], `ecbRates`) for the money paths.
   WalletSettings settings() {
-    final (lines, moved) = _loanPlanLines();
-    return _readSettings(db, table: categoryTable(), ecb: ecbRates(), loanLines: lines, legacyLoanMoved: moved);
+    return _readSettings(db, table: categoryTable(), ecb: ecbRates(), loanLines: _loanPlanLines());
   }
 
   /// Built-ins plus the stored category rows ([categoryRows], deleted ones included: a row pointing at one falls back).
@@ -871,7 +870,8 @@ class WalletRepo {
   void payGoals({required String period}) {
     final due = [
       for (final g in goals())
-        if (g.monthly > 0 && _paidPeriod(g.id, period) == null) _contribution(g.id, _payAmount(g), id: _payId(g.id, period)),
+        if (g.boughtAt == null && g.monthly > 0 && _paidPeriod(g.id, period) == null)
+          _contribution(g.id, _payAmount(g), id: _payId(g.id, period)),
     ];
     if (due.isNotEmpty) _write(due);
   }
@@ -937,7 +937,9 @@ class WalletRepo {
   /// as `computePeriod(goalAmounts:)`.
   Map<String, int> goalPeriodAmounts(String period) => {
         for (final g in goals())
-          if (_paidPeriod(g.id, period) case final p?)
+          if (g.boughtAt != null)
+            g.id: 0 // bought (ENG E6): it saves no more
+          else if (_paidPeriod(g.id, period) case final p?)
             g.id: (_contribAmount(_payId(g.id, p)) ?? 0) + (_contribAmount('adj:${g.id}:$p') ?? 0)
           else
             g.id: g.monthly + (_contribAmount('adj:${g.id}:$period') ?? 0),

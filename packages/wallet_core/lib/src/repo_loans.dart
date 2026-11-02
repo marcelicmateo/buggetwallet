@@ -99,111 +99,122 @@ extension WalletRepoLoans on WalletRepo {
     return id;
   }
 
-  /// For `settings()`: each open live loan's payment in force today ([loanPaymentOn], 0 when unknown), and whether
-  /// the legacy row exists (live or not: once moved, the old `loan` setting never counts again).
-  (Map<String, int>, bool) _loanPlanLines() {
+  /// For `settings()`: each open live loan's payment in force today ([loanPaymentOn]: its schedule when known; 0 when
+  /// unknown).
+  Map<String, int> _loanPlanLines() {
     final today = _today();
-    final lines = <String, int>{};
-    var moved = false;
-    for (final r in db.select('SELECT * FROM loans')) {
-      final l = Loan.fromRow(r);
-      if (l.id == Loan.legacyId) moved = true;
-      if (r['deleted'] != 0 || !l.open) continue;
-      lines[l.id] = loanPaymentOn(l, loanRates(l.id), today) ?? 0;
+    return {
+      for (final l in loans())
+        if (l.open) l.id: loanPaymentOn(l, loanRates(l.id), loanChecks(l.id), today) ?? 0,
+    };
+  }
+
+  /// Moves the old single plan loan (`WalletSettings.loan`, with `loanEnd`) to loan row [Loan.legacyId], in ONE owner
+  /// write: the row with payment = that setting and the given details, and the `loan` setting set to 0, so the plan
+  /// counts it once and every device agrees by last-writer-wins. Returns the id. No old loan (0) or a live row
+  /// already: [ArgumentError]. A build without loan rows that sets `loan` again later counts on top (known limit).
+  String convertLegacyLoan(
+      {String name = 'Loan',
+      int? principal,
+      int? rateBp,
+      int? months,
+      String? firstDue,
+      String? accountId,
+      String? payeeKey,
+      String? reference}) {
+    final payment = _readSettings(db).loan;
+    if (payment <= 0) throw ArgumentError('There is no plan loan to move.');
+    if (db.select('SELECT 1 FROM loans WHERE id = ? AND deleted = 0', [Loan.legacyId]).isNotEmpty) {
+      throw ArgumentError('The plan loan is already a loan.');
     }
-    return (lines, moved);
-  }
-
-  /// Schema 21: the old single plan loan (`WalletSettings.loan` > 0) becomes loan [Loan.legacyId] with that payment
-  /// (principal, rate, length and first due date unknown: `loanLeft` keeps reading `loanEnd` until they are filled in).
-  /// Every device migrating the same setting writes the same row. The settings rows stay for older builds.
-  int _migrateLegacyLoan() {
-    final st = _readSettings(db);
-    if (st.loan <= 0 || db.select('SELECT 1 FROM loans WHERE id = ?', [Loan.legacyId]).isNotEmpty) return 0;
-    _writeInternal([
-      ('loan', Loan.legacyId, {'name': 'Loan', 'payment': st.loan, 'deleted': 0})
+    final l = Loan(
+        id: Loan.legacyId,
+        name: name,
+        principal: principal,
+        rateBp: rateBp,
+        months: months,
+        firstDue: firstDue,
+        payment: payment,
+        accountId: accountId,
+        payeeKey: payeeKey,
+        reference: reference);
+    _write([
+      ..._settingChanges({'loan': 0}),
+      ('loan', Loan.legacyId, _loanFields(l))
     ]);
-    return 1;
+    logEvent(_log, Level.INFO, 'loan.convertLegacy', {'principal': principal != null, 'schedule': months != null && firstDue != null});
+    return Loan.legacyId;
   }
 
-  static String _undoBuyKey(String goalId) => 'undoBuy.$goalId';
+  /// The loan a bought goal becomes: one id per goal, so buying on two devices offline makes one loan.
+  static String goalLoanId(String goalId) => 'l:goal:$goalId';
 
-  /// "I bought it" (§5.5 step 3), one write: goal [goalId] gets `bought_at` [date] and `monthly` 0 (its money is spent
-  /// on the purchase, it no longer saves); a project tag named like the goal (an existing live tag of that name is
-  /// reused; none when the name is taken by a main tag or the tag limit is reached) goes on [purchaseTxIds]; with
-  /// [loan], a loan row tied to the goal and the tag (its payment then counts in the fixed plan). Returns the loan id.
-  /// The goal must be live and not bought, the rows live: else [ArgumentError]. [undoBuyGoal] takes it back.
+  /// The `out:` contribution of goal [goalId]'s saved money spent on purchase row [txId] by [buyGoal].
+  static String _buyOutId(String goalId, String txId) => 'out:buy:$goalId:$txId';
+
+  /// "I bought it" (§5.5 step 3), one write. Goal [goalId] gets `bought_at` [date] and `loan_id` (a bought goal saves no
+  /// more: its monthly is skipped wherever it is paid or counted). Its saved money is spent on [purchaseTxIds]: per row
+  /// (in the given order) an `out:` contribution of the row's amount, together at most the saved total, dated on the
+  /// row, so `goalTakenOutBetween` gives it back to that period and the purchase does not count twice. A project tag
+  /// named like the goal (an existing live tag of that name is reused; none when the name is taken by a main tag or at
+  /// the tag limit) goes on the purchase rows. With [loan], loan [goalLoanId] tied to the goal and the tag (its payment
+  /// then counts in the fixed plan). Returns the loan id. The goal must be live and not bought, the rows live and
+  /// spending (amount below 0): else [ArgumentError]. [undoBuyGoal] takes it back.
   String? buyGoal(String goalId, {required String date, List<String> purchaseTxIds = const [], Loan? loan}) {
-    final rs = db.select('SELECT * FROM goals WHERE id = ? AND deleted = 0', [goalId]);
-    if (rs.isEmpty) throw ArgumentError('No such goal.');
-    final g = Goal.fromRow(rs.first);
+    final g = goals().where((g) => g.id == goalId).firstOrNull;
+    if (g == null) throw ArgumentError('No such goal.');
     if (g.boughtAt != null) throw ArgumentError('This goal is already bought.');
     final goalFields = _patchFields(<Col, Object?>{GoalCols.boughtAt: date});
-    for (final id in purchaseTxIds) {
-      if (transaction(id) case final t? when !t.deleted) continue;
-      throw ArgumentError('No such transaction.');
+    final rows = <Tx>[];
+    for (final id in purchaseTxIds.toSet()) {
+      final t = transaction(id);
+      if (t == null || t.deleted || t.amount >= 0) throw ArgumentError('Pick the payments the purchase was made with.');
+      rows.add(t);
     }
+    final changes = <(String, String, Map<String, Object?>)>[];
     final t = tagTable();
     final key = foldText(g.name.trim());
-    String? tagId = t.liveIds.where((id) => foldText(t.label(id).trim()) == key).firstOrNull;
-    final changes = <(String, String, Map<String, Object?>)>[];
-    var created = false;
-    if (tagId == null && t.liveIds.length < TagRow.maxLive) {
+    var tagId = t.liveIds.where((id) => foldText(t.label(id).trim()) == key).firstOrNull;
+    if (tagId == null) {
       try {
-        final name = _checkTagName(g.name, t);
-        tagId = _newTagId();
-        created = true;
-        var next = 0;
-        for (final id in t.liveIds) {
-          final p = t.position(id);
-          if (p < (1 << 30) && p >= next) next = p + 1;
-        }
-        changes.add(('tag', tagId, {'name': name, 'position': next, 'hidden': 0, 'deleted': 0}));
+        final row = _newTagRow(g.name, t);
+        tagId = row.$2;
+        changes.add(row);
       } on ArgumentError {
-        tagId = null; // a main tag has this name: no project tag
+        tagId = null; // a main tag has this name, or the tag limit: no project tag
       }
     }
-    final links = <String>[];
-    if (tagId != null) {
-      for (final id in purchaseTxIds.toSet()) {
-        final on = db.select("SELECT 1 FROM tx_tags WHERE id = ? AND state = 'on'", ['$id|$tagId']).isNotEmpty;
-        if (on) continue;
-        links.add(id);
-        changes.add(('txtag', '$id|$tagId', {'tx': id, 'tag': tagId, 'state': 'on'}));
-      }
+    for (final r in rows) {
+      if (tagId != null) changes.add(('txtag', '${r.id}|$tagId', {'tx': r.id, 'tag': tagId, 'state': 'on'}));
     }
-    final loanId = loan == null ? null : _newId('l');
+    var left = g.saved;
+    for (final r in rows) {
+      final spent = -r.amount < left ? -r.amount : left;
+      if (spent <= 0) break;
+      left -= spent;
+      changes.add(_contribution(goalId, -spent, date: r.date, id: _buyOutId(goalId, r.id)));
+    }
+    final loanId = loan == null ? null : goalLoanId(goalId);
     if (loan != null) changes.add(('loan', loanId!, _loanFields(loan, fallbackName: g.name, goalId: goalId, tagId: tagId)));
-    changes.add(('goal', goalId, {...goalFields, 'loan_id': loanId, 'monthly': 0}));
+    changes.add(('goal', goalId, {...goalFields, 'loan_id': loanId}));
     _write(changes);
-    setLocalValue(
-        _undoBuyKey(goalId), jsonEncode({'monthly': g.monthly, 'tag': tagId, 'tagCreated': created, 'links': links, 'loan': loanId}));
-    logEvent(_log, Level.INFO, 'goal.bought', {'loan': loanId != null, 'tag': tagId != null, 'rows': links.length});
+    logEvent(_log, Level.INFO, 'goal.bought', {'loan': loanId != null, 'tag': tagId != null, 'rows': rows.length});
     return loanId;
   }
 
-  /// Undo of [buyGoal], one write: the goal is not bought again (its `monthly` back, `loan_id` cleared), its loan is
-  /// deleted (so its plan line ends), and the tag links it added are turned off (the tag itself deleted when it made it).
-  /// What it added is read from this device's record of the buy; without one (bought on another device) the goal and
-  /// its loan are restored and the tag rows stay. A goal that is not bought: [ArgumentError].
+  /// Undo of [buyGoal], one write, on any device: `bought_at` and `loan_id` cleared (the goal saves again), its loan
+  /// deleted (its plan line ends) and its `out:` contributions removed (the saved money is back). The project tag and
+  /// its links stay (the owner removes them on the Project screen if unwanted). A goal that is not bought: [ArgumentError].
   void undoBuyGoal(String goalId) {
-    final rs = db.select('SELECT * FROM goals WHERE id = ? AND deleted = 0', [goalId]);
-    if (rs.isEmpty) throw ArgumentError('No such goal.');
-    final g = Goal.fromRow(rs.first);
+    final g = goals().where((g) => g.id == goalId).firstOrNull;
+    if (g == null) throw ArgumentError('No such goal.');
     if (g.boughtAt == null) throw ArgumentError('This goal is not bought.');
-    final rec = switch (localValue(_undoBuyKey(goalId))) { final String s => jsonDecode(s), _ => null };
-    final m = rec is Map<String, Object?> ? rec : const <String, Object?>{};
-    final tagId = m['tag'] as String?;
-    final changes = <(String, String, Map<String, Object?>)>[
-      ('goal', goalId, {'bought_at': null, 'loan_id': null, if (m['monthly'] case final int v) 'monthly': v}),
+    final outs = db.select("SELECT id FROM goal_contrib WHERE goal_id = ? AND id LIKE ? AND deleted = 0", [goalId, _buyOutId(goalId, '%')]);
+    _write([
+      ('goal', goalId, {'bought_at': null, 'loan_id': null}),
       if (g.loanId case final l?) ('loan', l, {'deleted': 1}),
-      if (tagId != null && m['tagCreated'] == true) ('tag', tagId, {'deleted': 1}),
-      if (tagId != null)
-        for (final tx in (m['links'] as List? ?? const []).whereType<String>())
-          ('txtag', '$tx|$tagId', {'tx': tx, 'tag': tagId, 'state': 'off'}),
-    ];
-    _write(changes);
-    setLocalValue(_undoBuyKey(goalId), null);
-    logEvent(_log, Level.INFO, 'goal.unbought', {'record': rec != null});
+      for (final r in outs) ('goal_contrib', r['id'] as String, {'deleted': 1}),
+    ]);
+    logEvent(_log, Level.INFO, 'goal.unbought', {'outs': outs.length});
   }
 }

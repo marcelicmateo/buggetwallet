@@ -1287,13 +1287,13 @@ class WalletSettings {
   /// `WalletRepo.settings()` fills it; [toMap] leaves it out.
   final EcbRates ecb;
 
-  /// ENG E6: each open loan's payment in force today (`loan` rows, `WalletRepo.settings()` fills it; id → cents), and
-  /// whether the old single plan [loan] became a loan row (`Loan.legacyId`, the schema-21 migration). Not settings.
+  /// ENG E6: each open loan's payment in force today (`loan` rows, `WalletRepo.settings()` fills it; id → cents). Not
+  /// a setting.
   final Map<String, int> loanLines;
-  final bool legacyLoanMoved;
 
-  /// The loans' part of the fixed plan: Σ [loanLines], plus the old [loan] setting until it became a loan row.
-  int get loanPlan => loanLines.values.fold(legacyLoanMoved ? 0 : loan, (s, v) => s + v);
+  /// The loans' part of the fixed plan: the old single [loan] setting (0 once the owner moved it to a loan row,
+  /// `WalletRepoLoans.convertLegacyLoan`) plus Σ [loanLines].
+  int get loanPlan => loanLines.values.fold(loan, (s, v) => s + v);
 
   const WalletSettings({
     this.salary = 0,
@@ -1328,7 +1328,6 @@ class WalletSettings {
     this.builtInRuleOverrides = const {},
     this.ecb = EcbRates.none,
     this.loanLines = const {},
-    this.legacyLoanMoved = false,
   });
 
   /// Largest accepted amount (minor units) and wait (hours: a year) in a stored or synced value.
@@ -1357,8 +1356,8 @@ class WalletSettings {
   /// The [toMap] key of [ecb] (in memory only: the repo never reads a stored settings row of that name).
   static const ecbKey = 'ecb';
 
-  /// The [toMap] keys of [loanLines] / [legacyLoanMoved] (in memory only, like [ecbKey]).
-  static const loanLinesKey = 'loanLines', legacyLoanMovedKey = 'legacyLoanMoved';
+  /// The [toMap] key of [loanLines] (in memory only, like [ecbKey]).
+  static const loanLinesKey = 'loanLines';
 
   static const budgetPrefix = 'budget:', patternPrefix = 'pattern:', planPrefix = 'plan:', fxPrefix = 'fx:';
 
@@ -1384,8 +1383,7 @@ class WalletSettings {
   /// bug, a damaged op) falls back to that setting's default alone, logged as `settings.invalid` with the key only
   /// (never the value), once per key and value ([logInvalidSetting]); the other settings are kept.
   /// [table] decides which category budgets are valid (live top-level spending categories); null = built-ins only.
-  static WalletSettings fromMap(Map<String, Object?> m,
-      {CategoryTable? table, EcbRates ecb = EcbRates.none, Map<String, int>? loanLines, bool? legacyLoanMoved}) {
+  static WalletSettings fromMap(Map<String, Object?> m, {CategoryTable? table, EcbRates ecb = EcbRates.none, Map<String, int>? loanLines}) {
     final cats = table ?? CategoryTable.builtIn;
     T bad<T>(String k, T d) {
       logInvalidSetting(k, m[k]);
@@ -1520,7 +1518,6 @@ class WalletSettings {
               }),
             _ => const <String, int>{},
           },
-      legacyLoanMoved: legacyLoanMoved ?? m[legacyLoanMovedKey] == true,
     );
   }
 
@@ -1672,6 +1669,5 @@ class WalletSettings {
         // UX-FX: the wallet's ECB rates (`fx_day` rows, read by the repo), so fromMap(toMap()) keeps them.
         if (!ecb.isEmpty) ecbKey: ecb.toJson(),
         if (loanLines.isNotEmpty) loanLinesKey: loanLines,
-        if (legacyLoanMoved) legacyLoanMovedKey: true,
       };
 }

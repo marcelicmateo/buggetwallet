@@ -109,9 +109,8 @@ class GoalLever {
 /// calendar months before [today]'s month exceeds their median over those 12 (a month without spend = 0; "Where it
 /// goes" rows in the home currency, [countsAsSpending] after [inHomeCurrency], refunds subtracted): cut = the
 /// difference rounded down to whole euros (none under 1 €). Then each confirmed, unfinished recurring income in
-/// [incomes] at its monthly figure ([recurringCycleCost]), except salary: an income whose category is of kind
-/// [BudgetKind.income] (Salary, or a custom income category) is what the plan already counts as `salary`; side
-/// incomes are of kind extra (P9 detects them on extra rows). Tags by cut (largest first), then incomes.
+/// [incomes] whose category is of kind [BudgetKind.extra] (a side income: P9 detects incomes on extra rows; salary
+/// and other income kinds are what the plan already counts) at its monthly figure ([recurringCycleCost]). Tags by cut (largest first), then incomes.
 List<GoalLever> goalLevers(List<CategorizedTx> expanded, WalletSettings st, CategoryTable table, String today,
     {required GoalPlan plan, List<RecurringBill> incomes = const []}) {
   if (plan.left == 0) return const [];
@@ -143,7 +142,7 @@ List<GoalLever> goalLevers(List<CategorizedTx> expanded, WalletSettings st, Cate
   }
   final ins = [
     for (final r in incomes)
-      if (r.isIncome && r.confirmed && !r.finished && table.kindOf(r.category) != BudgetKind.income)
+      if (r.isIncome && r.confirmed && !r.finished && table.kindOf(r.category) == BudgetKind.extra)
         if (recurringCycleCost(r) case (monthly: final m, yearly: _) when m > 0) lever(GoalLeverKind.income, r.id, m),
   ];
   return [...tags..sort(order), ...ins.whereType<GoalLever>().toList()..sort(order)];
