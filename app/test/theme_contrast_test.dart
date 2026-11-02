@@ -41,6 +41,8 @@ void main() {
         'ink/accentSoft (nudge card)': (c.ink, c.accentSoft),
         'bg on ink (active chip)': (c.bg, c.ink),
         'ink on lineStrong (seg selected)': (c.ink, c.lineStrong),
+        'ink2/surface': (c.ink2, c.surface),
+        'ink2/surface2': (c.ink2, c.surface2),
         'good/surface (pace up)': (c.good, c.surface),
         'bad/surface (over)': (c.bad, c.surface),
       };
@@ -49,29 +51,32 @@ void main() {
       // Non-text pairs >= 3:1. Known spec misses are listed below instead, with what they are checked against.
       final nonText = <String, (Color, Color)>{
         'muted/bg (input and checkbox edge)': (c.muted, c.bg),
+        'lineStrong/bg (chip, button, axis)': (c.lineStrong, c.bg),
+        'lineStrong/surface': (c.lineStrong, c.surface),
         'accent/bg': (c.accent, c.bg),
         'pos/bg': (c.pos, c.bg),
         'neg/bg': (c.neg, c.bg),
         for (final n
             in {'chartPos': c.chartPos, 'chartNeg': c.chartNeg, 'chart2': c.chart2, 's1': c.s1, 's2': c.s2, 's6': c.s6}.entries) ...{
-          // Light s2 (#EB6834) is 2.95:1 on the page: a spec miss by 0.05, listed below.
-          if (!(e.key == 'light' && (n.key == 's2' || n.key == 'chart2'))) '${n.key}/bg': (n.value, c.bg),
+          '${n.key}/bg': (n.value, c.bg),
           '${n.key}/surface': (n.value, c.surface),
         },
       };
       nonText.forEach((n, p) => test('non-text $n >= 3.0', () => expect(contrastRatio(p.$1, p.$2), greaterThanOrEqualTo(3.0), reason: n)));
 
-      // SPEC MISSES (reported, values kept as the spec has them): `lineStrong` is a chip/button outline and axis colour at about 1.4-1.7:1
-      // on the page (the theme draws input and checkbox edges in `muted` instead), and the light data slots 3-5 are below 3:1 (the spec's
-      // own validator WARN: every chart that uses them shows its values), and light s2 is 2.95:1 on the page. The floors keep a slip visible.
-      test('known misses stay inside their floor', () {
-        expect(contrastRatio(c.lineStrong, c.bg), greaterThanOrEqualTo(1.3));
-        // The nudge card's border sits on a filled card with its own text: decorative (dark 2.1:1, light 1.4:1 on the page).
-        expect(contrastRatio(c.accentSoftLine, c.bg), greaterThanOrEqualTo(1.3));
-        expect(contrastRatio(c.s2, c.bg), greaterThanOrEqualTo(2.9));
+      // The spec's light data slots 3-5 (#1BAF7A, #EDA100, #E87BA4) are below 3:1 on the page (the spec's own dataviz-validator WARN). The
+      // spec accepts it because every chart that uses them shows its values or a table, so colour is never the only way to read them.
+      // They are the only exemption: every other pair above stays at 4.5 (text) / 3 (non-text). The floor only catches a slip.
+      test('light data slots 3-5: spec WARN, values always shown (floor 1.9); dark slots hold 3:1', () {
         for (final s in [c.s3, c.s4, c.s5]) {
           expect(contrastRatio(s, c.bg), greaterThanOrEqualTo(e.key == 'light' ? 1.9 : 3.0));
         }
+      });
+
+      // `accentSoftLine` (the nudge card's border) is decorative: the card has its own fill and the text inside is checked above
+      // (ink/accentSoft), so the border is not needed to see the card. 1.4:1 light, 2.1:1 dark on the page.
+      test('accentSoftLine is decorative (floor 1.3)', () {
+        expect(contrastRatio(c.accentSoftLine, c.bg), greaterThanOrEqualTo(1.3));
       });
 
       test('every token is fully opaque', () {
@@ -135,9 +140,11 @@ void main() {
     test('hold the spec values', () {
       const light = WalletColors.light, dark = WalletColors.dark;
       expect([light.s1, light.s2, light.s3, light.s4, light.s5, light.s6],
-          const [Color(0xFF2A78D6), Color(0xFFEB6834), Color(0xFF1BAF7A), Color(0xFFEDA100), Color(0xFFE87BA4), Color(0xFF6250D6)]);
+          const [Color(0xFF2A78D6), Color(0xFFEB6530), Color(0xFF1BAF7A), Color(0xFFEDA100), Color(0xFFE87BA4), Color(0xFF6250D6)]);
       expect([dark.s1, dark.s2, dark.s3, dark.s4, dark.s5, dark.s6],
           const [Color(0xFF3987E5), Color(0xFFD95926), Color(0xFF199E70), Color(0xFFC98500), Color(0xFFD55181), Color(0xFF9085E9)]);
+      expect([light.lineStrong, dark.lineStrong, light.s2, light.chart2],
+          const [Color(0xFF7D91A2), Color(0xFF546A7C), Color(0xFFEB6530), Color(0xFFEB6530)]);
       expect([light.bg, light.surface, light.line, light.ink, light.accent],
           const [Color(0xFFF4F6F8), Color(0xFFFFFFFF), Color(0xFFE1E6EB), Color(0xFF121A21), Color(0xFF1F5FBF)]);
       expect([dark.bg, dark.surface, dark.line, dark.ink, dark.accent],

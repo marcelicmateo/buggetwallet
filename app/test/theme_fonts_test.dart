@@ -73,4 +73,24 @@ void main() {
       }
     }
   });
+
+  // Manrope is one variable file: ui.FontWeight must move its wght axis, or w400 and w800 would look alike.
+  group('Manrope weights', () {
+    setUpAll(loadAppFonts);
+    double width(ui.FontWeight w) {
+      final pb = ui.ParagraphBuilder(ui.ParagraphStyle(fontFamily: 'Manrope', fontSize: 20, fontWeight: w))
+        ..pushStyle(ui.TextStyle(fontFamily: 'Manrope', fontSize: 20, fontWeight: w))
+        ..addText('Overview Money Explore Plan 1234567890');
+      final para = pb.build()..layout(const ui.ParagraphConstraints(width: 5000));
+      return para.maxIntrinsicWidth;
+    }
+
+    test('w400, w500, w600, w700 and w800 lay out at five different widths', () {
+      final widths = [
+        for (final w in [ui.FontWeight.w400, ui.FontWeight.w500, ui.FontWeight.w600, ui.FontWeight.w700, ui.FontWeight.w800]) width(w)
+      ];
+      expect(widths.toSet().length, 5, reason: 'widths $widths');
+      expect(widths, [...widths]..sort(), reason: 'heavier is wider');
+    });
+  });
 }

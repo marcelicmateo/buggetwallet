@@ -58,7 +58,8 @@ class WalletColors extends ThemeExtension<WalletColors> {
     required this.badSoft,
   });
 
-  /// Engineer, light. [ink2] is not in the spec: a step between ink and muted.
+  /// Engineer, light. [ink2] is not in the spec: a step between ink and muted. Two spec values were moved for 3:1 (ENG E1 decision):
+  /// `lineStrong` #CBD3DA -> #7D91A2 and `s2` #EB6834 -> #EB6530 (same hues).
   static const light = WalletColors(
     bg: Color(0xFFF4F6F8),
     surface: Color(0xFFFFFFFF),
@@ -67,7 +68,7 @@ class WalletColors extends ThemeExtension<WalletColors> {
     ink2: Color(0xFF38444F),
     muted: Color(0xFF56636F),
     line: Color(0xFFE1E6EB),
-    lineStrong: Color(0xFFCBD3DA),
+    lineStrong: Color(0xFF7D91A2),
     accent: Color(0xFF1F5FBF),
     accentSoft: Color(0xFFEAF1FC),
     accentSoftLine: Color(0xFFBFD3F0),
@@ -82,10 +83,10 @@ class WalletColors extends ThemeExtension<WalletColors> {
     heat: [Color(0xFFE3EDF9), Color(0xFFBBD3F1), Color(0xFF86B2E6), Color(0xFF4F8CD6), Color(0xFF2A65B3)],
     chartPos: Color(0xFF2A78D6),
     chartNeg: Color(0xFFC2412F),
-    chart2: Color(0xFFEB6834),
+    chart2: Color(0xFFEB6530),
     desk: Color(0xFFF4F6F8),
     s1: Color(0xFF2A78D6),
-    s2: Color(0xFFEB6834),
+    s2: Color(0xFFEB6530),
     s3: Color(0xFF1BAF7A),
     s4: Color(0xFFEDA100),
     s5: Color(0xFFE87BA4),
@@ -94,7 +95,7 @@ class WalletColors extends ThemeExtension<WalletColors> {
     badSoft: Color(0xFFFDF1EE),
   );
 
-  /// Engineer, dark. [ink2] is not in the spec: a step between ink and muted.
+  /// Engineer, dark. [ink2] is not in the spec: a step between ink and muted. `lineStrong` #33404B -> #546A7C for 3:1 (same hue).
   static const dark = WalletColors(
     bg: Color(0xFF0F1418),
     surface: Color(0xFF161D23),
@@ -103,7 +104,7 @@ class WalletColors extends ThemeExtension<WalletColors> {
     ink2: Color(0xFFC3CFD8),
     muted: Color(0xFF9AAAB6),
     line: Color(0xFF26313A),
-    lineStrong: Color(0xFF33404B),
+    lineStrong: Color(0xFF546A7C),
     accent: Color(0xFF8DB8F5),
     accentSoft: Color(0xFF172231),
     accentSoftLine: Color(0xFF3B4B66),
