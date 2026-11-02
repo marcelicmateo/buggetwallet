@@ -159,27 +159,38 @@ extension WalletRepoLoans on WalletRepo {
   /// The loan a bought goal becomes: one id per goal, so buying on two devices offline makes one loan.
   static String goalLoanId(String goalId) => 'l:goal:$goalId';
 
-  /// The `out:` contribution of goal [goalId]'s saved money spent on purchase row [txId] by [buyGoal].
-  static String _buyOutId(String goalId, String txId) => 'out:buy:$goalId:$txId';
+  /// The one `out:` contribution of goal [goalId]'s saved money spent on its purchase by [buyGoal] (one per goal, so
+  /// two devices buying offline settle by last-writer-wins).
+  static String _buyOutId(String goalId) => 'out:buy:$goalId';
 
   /// "I bought it" (§5.5 step 3), one write. Goal [goalId] gets `bought_at` [date] and `loan_id` (a bought goal saves no
-  /// more: its monthly is skipped wherever it is paid or counted). Its saved money is spent on [purchaseTxIds]: per row
-  /// (in the given order) an `out:` contribution of the row's amount, together at most the saved total, dated on the
-  /// row, so `goalTakenOutBetween` gives it back to that period and the purchase does not count twice. A project tag
-  /// named like the goal (an existing live tag of that name is reused; none when the name is taken by a main tag or at
-  /// the tag limit) goes on the purchase rows. With [loan], loan [goalLoanId] tied to the goal and the tag (its payment
-  /// then counts in the fixed plan). Returns the loan id. The goal must be live and not bought, the rows live and
-  /// spending (amount below 0): else [ArgumentError]. [undoBuyGoal] takes it back.
+  /// more: its monthly is skipped wherever it is paid or counted). Its saved money pays the purchase rows that lowered
+  /// the spending money (`computePeriod`'s flexible spending: live, home currency, kind flex): one `out:buy:<goal>`
+  /// contribution of min(saved, Σ those rows), dated on the latest of them, so `goalTakenOutBetween` gives it back and
+  /// the purchase does not count twice. Fixed-category, transfer or income rows get none (they never lowered it). A
+  /// project tag named like the goal (an existing live tag of that name is reused; none when the name is taken by a main
+  /// tag or at the tag limit) goes on every picked row. With [loan], loan [goalLoanId] tied to the goal and the tag (its
+  /// payment then counts in the fixed plan). Returns the loan id. The goal must be live and not bought, the rows live
+  /// payments out in the wallet currency: else [ArgumentError]. [undoBuyGoal] takes it back.
   String? buyGoal(String goalId, {required String date, List<String> purchaseTxIds = const [], Loan? loan}) {
     final g = goals().where((g) => g.id == goalId).firstOrNull;
     if (g == null) throw ArgumentError('No such goal.');
     if (g.boughtAt != null) throw ArgumentError('This goal is already bought.');
     final goalFields = _patchFields(<Col, Object?>{GoalCols.boughtAt: date});
+    final currency = _readSettings(db).currency;
+    final cz = categorizer(withTags: false);
     final rows = <Tx>[];
+    var flex = 0;
+    String? lastFlex;
     for (final id in purchaseTxIds.toSet()) {
       final t = transaction(id);
-      if (t == null || t.deleted || t.amount >= 0) throw ArgumentError('Pick the payments the purchase was made with.');
+      if (t == null || !t.live || t.amount >= 0) throw ArgumentError('Pick the payments the purchase was made with.');
+      if (t.currency != currency) throw ArgumentError('Pick payments in $currency: the goal is saved in it.');
       rows.add(t);
+      if (cz.categorize(t).kind == BudgetKind.flex) {
+        flex -= t.amount;
+        if (lastFlex == null || t.date.compareTo(lastFlex) > 0) lastFlex = t.date;
+      }
     }
     final changes = <(String, String, Map<String, Object?>)>[];
     final t = tagTable();
@@ -197,13 +208,8 @@ extension WalletRepoLoans on WalletRepo {
     for (final r in rows) {
       if (tagId != null) changes.add(('txtag', '${r.id}|$tagId', {'tx': r.id, 'tag': tagId, 'state': 'on'}));
     }
-    var left = g.saved;
-    for (final r in rows) {
-      final spent = -r.amount < left ? -r.amount : left;
-      if (spent <= 0) break;
-      left -= spent;
-      changes.add(_contribution(goalId, -spent, date: r.date, id: _buyOutId(goalId, r.id)));
-    }
+    final spent = flex < g.saved ? flex : g.saved;
+    if (spent > 0) changes.add(_contribution(goalId, -spent, date: lastFlex, id: _buyOutId(goalId)));
     final loanId = loan == null ? null : goalLoanId(goalId);
     if (loan != null) changes.add(('loan', loanId!, _loanFields(loan, fallbackName: g.name, goalId: goalId, tagId: tagId)));
     changes.add(('goal', goalId, {...goalFields, 'loan_id': loanId}));
@@ -213,18 +219,25 @@ extension WalletRepoLoans on WalletRepo {
   }
 
   /// Undo of [buyGoal], one write, on any device: `bought_at` and `loan_id` cleared (the goal saves again), its loan
-  /// deleted (its plan line ends) and its `out:` contributions removed (the saved money is back). The project tag and
-  /// its links stay (the owner removes them on the Project screen if unwanted). A goal that is not bought: [ArgumentError].
+  /// deleted (the goal's `loan_id` and [goalLoanId] whenever that row exists: two devices may have bought with and
+  /// without a loan; its plan line ends) and its `out:buy` contribution removed (the saved money is back). The project
+  /// tag and its links stay (the owner removes them on the Project screen if unwanted). A goal that is not bought:
+  /// [ArgumentError].
   void undoBuyGoal(String goalId) {
     final g = goals().where((g) => g.id == goalId).firstOrNull;
     if (g == null) throw ArgumentError('No such goal.');
     if (g.boughtAt == null) throw ArgumentError('This goal is not bought.');
-    final outs = db.select('SELECT id FROM goal_contrib WHERE goal_id = ? AND id LIKE ? AND deleted = 0', [goalId, _buyOutId(goalId, '%')]);
+    final own = goalLoanId(goalId);
+    final loanIds = {
+      if (g.loanId case final l?) l,
+      if (db.select('SELECT 1 FROM loans WHERE id = ? AND deleted = 0', [own]).isNotEmpty) own,
+    };
+    final out = db.select('SELECT 1 FROM goal_contrib WHERE id = ? AND deleted = 0', [_buyOutId(goalId)]).isNotEmpty;
     _write([
       ('goal', goalId, {'bought_at': null, 'loan_id': null}),
-      if (g.loanId case final l?) ('loan', l, {'deleted': 1}),
-      for (final r in outs) ('goal_contrib', r['id'] as String, {'deleted': 1}),
+      for (final l in loanIds) ('loan', l, {'deleted': 1}),
+      if (out) ('goal_contrib', _buyOutId(goalId), {'deleted': 1}),
     ]);
-    logEvent(_log, Level.INFO, 'goal.unbought', {'outs': outs.length});
+    logEvent(_log, Level.INFO, 'goal.unbought', {'loans': loanIds.length, 'out': out});
   }
 }

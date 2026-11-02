@@ -919,6 +919,7 @@ class WalletRepo {
     if (cents > Goal.maxContribution) throw ArgumentError('The amount is too large.');
     final g = goals().where((g) => g.id == goalId).firstOrNull;
     if (g == null) throw ArgumentError('No such goal.');
+    if (g.boughtAt != null) throw ArgumentError('This goal is bought: it saves no more.');
     final p = _paidPeriod(goalId, period) ?? period;
     final payId = _payId(goalId, p), adjId = 'adj:$goalId:$p';
     final paid = _contribAmount(payId);
@@ -957,6 +958,9 @@ class WalletRepo {
     final live = {for (final g in goals()) g.id: g};
     final g = live[goalId];
     if (g == null || (toGoalId != null && !live.containsKey(toGoalId))) throw ArgumentError('No such goal.');
+    if (g.boughtAt != null || (toGoalId != null && live[toGoalId]!.boughtAt != null)) {
+      throw ArgumentError('This goal is bought: its money paid the purchase.');
+    }
     if (toGoalId == goalId) throw ArgumentError('Pick another goal.');
     if (cents <= 0) throw ArgumentError('The amount must be above zero.');
     if (cents > g.saved) throw ArgumentError('The goal has less saved than that.');

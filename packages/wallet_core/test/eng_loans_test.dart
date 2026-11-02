@@ -291,12 +291,51 @@ void main() {
       expect(() => repo.undoBuyGoal(gid), throwsArgumentError);
     });
 
+    test('only flexible spending rows are paid from the goal; safe-to-spend is unchanged by the purchase', () {
+      const today = '2026-11-02';
+      repo.updateSettings({'salary': 300000, 'rent': 200000, 'paydayDay': 15, 'periodStart': '2026-10-15'});
+      int remaining() {
+        final st = repo.settings();
+        final txs = repo.categorizer().expandAll(repo.transactions());
+        final p0 = computePeriod(txs, st, repo.goals(), today, table: repo.categoryTable());
+        return computePeriod(txs, st, repo.goals(), today,
+                table: repo.categoryTable(), goalTakenOut: repo.goalTakenOutBetween(p0.start, p0.end))
+            .remaining;
+      }
+
+      final gid = repo.saveGoal(name: 'Synth flat', target: 0, saved: 600000, monthly: 0);
+      final base = remaining();
+      final flex = repo.addTransaction(date: '2026-10-20', amount: 300000, category: 'Shopping');
+      final fixed = repo.addTransaction(date: '2026-10-22', amount: 200000, category: 'Rent');
+      final usd = repo.addTransaction(date: '2026-10-23', amount: 1000, category: 'Shopping', currency: 'USD');
+      expect(remaining(), base - 300000, reason: 'only the flexible row lowered it');
+      expect(() => repo.buyGoal(gid, date: '2026-11-01', purchaseTxIds: [flex, usd]), throwsArgumentError, reason: 'another currency');
+      expect(repo.goals().single.boughtAt, isNull, reason: 'nothing written');
+      repo.buyGoal(gid, date: '2026-11-01', purchaseTxIds: [flex, fixed]);
+      expect(repo.goalTakenOutByDate('2026-10-01', '2026-11-01'), {'2026-10-20': 300000}, reason: 'the fixed row gets none');
+      expect(repo.goals().single.saved, 300000);
+      expect(remaining(), base, reason: 'the purchase no longer changes safe-to-spend');
+      final tag = repo.tagTable().liveIds.single;
+      expect(repo.categorizer().categorize(repo.transaction(fixed)!).tags, [tag], reason: 'every picked row gets the tag');
+      repo.undoBuyGoal(gid);
+      expect([remaining(), repo.goals().single.saved], [base - 300000, 600000]);
+    });
+
+    test('a bought goal refuses period amounts and take-outs', () {
+      final gid = repo.saveGoal(name: 'Synth van', target: 0, saved: 1000, monthly: 100);
+      final other = repo.saveGoal(name: 'Other', target: 0, saved: 1000, monthly: 0);
+      repo.buyGoal(gid, date: '2026-11-01');
+      expect(() => repo.setGoalPeriodAmount(gid, '2026-10-15', 50), throwsArgumentError);
+      expect(() => repo.takeOutOfGoal(gid, 10, date: '2026-11-01'), throwsArgumentError);
+      expect(() => repo.takeOutOfGoal(other, 10, date: '2026-11-01', toGoalId: gid), throwsArgumentError);
+    });
+
     test('the saved money covers the purchase rows up to the saved total', () {
       final a = repo.addTransaction(date: '2026-10-20', amount: 30000, category: 'Shopping');
       final b = repo.addTransaction(date: '2026-10-21', amount: 50000, category: 'Shopping');
       final gid = repo.saveGoal(name: 'Synth bike', target: 0, saved: 60000, monthly: 0);
       expect(repo.buyGoal(gid, date: '2026-11-01', purchaseTxIds: [a, b]), isNull, reason: 'paid in full: no loan');
-      expect(repo.goalTakenOutByDate('2026-10-01', '2026-11-01'), {'2026-10-20': 30000, '2026-10-21': 30000});
+      expect(repo.goalTakenOutByDate('2026-10-01', '2026-11-01'), {'2026-10-21': 60000}, reason: 'one row, on the latest');
       expect(repo.goals().single.saved, 0);
       final income = repo.addTransaction(date: '2026-10-22', amount: -100, category: 'Extra income');
       expect(() => repo.buyGoal(repo.saveGoal(name: 'X', target: 0, saved: 0, monthly: 0), date: '2026-11-01', purchaseTxIds: [income]),
@@ -381,6 +420,50 @@ void main() {
       expect([neu.repo.loans().single.payment, neu.repo.settings().loan, neu.repo.settings().loanPlan], [45000, 0, 45000]);
       expect(old.repo.settings().loan, 0, reason: 'the older build sees the setting moved (it does not know loan rows)');
       expect(old.repo.db.select('SELECT COUNT(*) AS n FROM loans').first['n'], 0);
+    });
+
+    test('bought on two devices offline from different rows: the saved money counts once', () async {
+      final a = device('a'), b = device('b');
+      final gid = a.repo.saveGoal(name: 'Synth boat', target: 0, saved: 50000, monthly: 0);
+      final tx1 = a.repo.addTransaction(date: '2026-10-20', amount: 60000, category: 'Shopping');
+      final tx2 = a.repo.addTransaction(date: '2026-10-21', amount: 70000, category: 'Shopping');
+      now += 1000;
+      await a.run();
+      await b.run();
+      a.repo.buyGoal(gid, date: '2026-11-01', purchaseTxIds: [tx1]);
+      now += 1000;
+      b.repo.buyGoal(gid, date: '2026-11-01', purchaseTxIds: [tx2]);
+      now += 1000;
+      await a.run();
+      await b.run();
+      await a.run();
+      for (final d in [a, b]) {
+        expect(d.repo.goalTakenOutBetween('2026-10-01', '2026-11-01'), 50000, reason: d.name);
+        expect(d.repo.goals().single.saved, 0, reason: d.name);
+      }
+    });
+
+    test('bought with a loan on one device and without on another: Undo still ends the loan', () async {
+      final a = device('a'), b = device('b');
+      final gid = a.repo.saveGoal(name: 'Synth car', target: 0, saved: 0, monthly: 0);
+      now += 1000;
+      await a.run();
+      await b.run();
+      a.repo.buyGoal(gid, date: '2026-11-01', loan: const Loan(id: '', payment: 30000));
+      now += 1000;
+      b.repo.buyGoal(gid, date: '2026-11-01'); // later: its loan_id null wins
+      now += 1000;
+      await a.run();
+      await b.run();
+      await a.run();
+      expect([b.repo.goals().single.loanId, b.repo.loans().single.id], [null, 'l:goal:$gid']);
+      b.repo.undoBuyGoal(gid);
+      now += 1000;
+      await b.run();
+      await a.run();
+      for (final d in [a, b]) {
+        expect([d.repo.loans(), d.repo.settings().loanPlan, d.repo.goals().single.boughtAt], [<Loan>[], 0, null], reason: d.name);
+      }
     });
 
     test('bought on two devices offline: one loan', () async {

@@ -509,12 +509,14 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   row's payment, else `payment`), `loanPayments(l, rates, checks, rows, currency:)` (payee key or reference, never
   amount; `amountChanged` against `loanPaymentOn`, never for the exact-rest last month). Repo: `loans`, `loanRates`,
   `loanChecks`, `addLoan(Loan)`, `addLoanRate`, `addLoanCheck`, `deleteLoan`/`undeleteLoan`, edits via `patch`.
-  `buyGoal(goalId, date:, purchaseTxIds:, loan:)` (one write: goal `bought_at` + `loan_id`; per purchase row an `out:buy:<goal>:<tx>`
-  contribution of its amount, together at most the saved total, dated on the row, so `goalTakenOutBetween` offsets
-  the purchase; project tag named like the goal (reused if live, `_newTagRow` shared with `addTag`) on the rows; loan
+  `buyGoal(goalId, date:, purchaseTxIds:, loan:)` (one write: goal `bought_at` + `loan_id`; rows must be live payments
+  out in the wallet currency; one `out:buy:<goal>` contribution = min(saved, Σ the rows that are flexible spending, as
+  `computePeriod` counts them), dated on the latest of them, so `goalTakenOutBetween` offsets the purchase and two
+  offline buys settle by LWW; fixed/transfer rows get none; project tag named like the goal (reused if live, `_newTagRow` shared with `addTag`) on the rows; loan
   `l:goal:<goalId>`, one per goal across devices) and `undoBuyGoal` (one write, any device: clears `bought_at`/`loan_id`,
-  deletes the loan and the `out:buy` rows; the tag and its links stay). A bought goal's `monthly` is kept but skipped
-  (`_goalSum`, `monthlyFlex`, `goalPeriodAmounts` = 0, `payGoals`). Plan: `settings()` fills `WalletSettings.loanLines`
+  deletes the goal's loan and `l:goal:<goalId>` whenever it exists, and the `out:buy` row; the tag and its links stay).
+  A bought goal's `monthly` is kept but skipped (`_goalSum`, `monthlyFlex`, `goalPeriodAmounts` = 0, `payGoals`);
+  `setGoalPeriodAmount` and `takeOutOfGoal` refuse it. Plan: `settings()` fills `WalletSettings.loanLines`
   (open live loans' `loanPaymentOn` today); `loanPlan` = the old `loan` setting + Σ lines replaces `loan` in the fixed
   sums. No migration: the old setting keeps counting (and `loanLeft` reads it) until the owner runs
   `convertLegacyLoan(...)` (one write: row `loan:settings` with payment = the setting, setting → 0; an older build
@@ -984,6 +986,11 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   build), while an entry it adds shows up. When that older device upgrades, its migration writes only the map entries
   that still have no row (with the map's clock); its edits to entries that have one are lost. Upgraded devices'
   per-key edits never reach an older build (it keeps showing its own map).
+
+- Loans (ENG E6): an open loan keeps its payment in the fixed plan until it is closed (`closeLoan`: the last payment
+  matched or the owner confirms a 0 balance), also after its schedule's last month (the safe side: money stays set
+  aside). A build without loan rows that sets the old `loan` setting again after `convertLegacyLoan` counts on top of
+  the loan row until the owner clears it.
 
 - Calendar refs (KL-A, `calendarEventRef`): stable uid + date + start time, else normalized title + date + start time;
   the same event read from two sources (phone calendar and an `.ics` link with another uid) gives two suggestions. A
