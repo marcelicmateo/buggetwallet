@@ -7,7 +7,7 @@
 ## Source of truth
 - **Git (`docs/context/` on `v2`) holds the plan, status, decisions and workflow.** Claude Code and claude.ai chat sessions both read and update them here.
 - The claude.ai Project "Buget Wallet" holds only personal figures: `claude/BASELINE.md` (bank analysis) and `claude/STATUS.md` (payday plan, salary, loan, savings). They never go into git.
-- Every session starts by reading `docs/context/STATUS.md`, so nothing has to be re-explained. A chat session in the Project clones the repo first.
+- Every main session starts by reading `docs/context/STATUS.md` (subagents don't; their brief carries what they need), so nothing has to be re-explained. A chat session in the Project clones the repo first.
 
 ## The product
 - v1: private claude.ai web app (artifact) with its own database — `artifact/` (v2 branch) or `app/index.html` (master).

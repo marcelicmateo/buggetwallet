@@ -9,7 +9,11 @@ suites stay serialized (one Haiku run per stage); builders run only targeted che
   test-writer). Dependent or not-yet-needed work waits in the queue; waiting costs nothing.
 - Parallel only for independent items needed in the current stage.
 - test-writer only for money and sync logic; UI features get tests from the builder.
-- Briefs are pointer-style: exact files, the API to match, the one allowed check; reports under 15 lines.
+- Briefs are pointer-style and short (owner 2026-11-02, about 30 lines / 2,500 characters at most, plus the scout pack): goal in one
+  or two lines, exact files and line ranges, the API to match, the one allowed check, done criteria. No history, no
+  stage narrative, no STATUS or PIPELINE excerpts beyond the facts the agent needs; never tell an agent to read STATUS.md
+  or PIPELINE.md (agents are told not to). Reports under 15 lines. Measured 2026-10-26..11-02: briefs p50 2.4k / p90 4.5k
+  characters, 35 agents read STATUS.md and 22 read PIPELINE.md on their own (mostly reviewers, via the root CLAUDE.md).
 - Scout first (owner, 2026-10-21): before a builder or test-writer starts, a `scout` (haiku/low, read-only) returns a
   context pack (files, line ranges, APIs, tests, helpers); the lead pastes it into the brief. Builders read code by
   `grep -n` + line ranges, never whole files, build output by result line + failures, screenshots downscaled to 540 px.

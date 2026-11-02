@@ -26,7 +26,7 @@ First, check your base: worktrees may be created from `master`. If `git log -1` 
 named (normally the tip of `v2`) and you have no changes yet, run `git reset --hard <that commit>`.
 
 The root `CLAUDE.md` is already loaded. Before coding, read `docs/context/BRIEF.md`, `docs/design/` if the lead points to a
-design, and the `app/CLAUDE.md` sections the context pack names (`grep -n '^## ' app/CLAUDE.md`, then the range). When the
+design, and the `app/CLAUDE.md` sections the context pack names (`grep -n '^## ' app/CLAUDE.md`, then the range). Never read `docs/context/STATUS.md` or `docs/context/PIPELINE.md` (the lead's files, ~55k tokens together): the brief carries what you need. If it lacks a fact, ask the lead (SendMessage to "main") instead of searching docs. When the
 lead resumes you with review findings (SendMessage), keep your worktree and context: fix, don't re-orient. Use the `dart-flutter` plugin skills (layout fixes, responsive layout, widget and
 integration tests), running every command through `tools/` as `CLAUDE.md` says.
 

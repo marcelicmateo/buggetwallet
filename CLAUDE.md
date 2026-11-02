@@ -5,7 +5,7 @@ This repo holds **code only**. Never commit bank exports, statements, real trans
 salary/rent/loan figures, merchant lists derived from the owner's spending, keys or seed data.
 - Real numbers live only in the user's local wallet database (and v1's artifact database).
 - Personal merchant rules live in the `merchantPatterns` setting; built-in rules cover only well-known chains and brands.
-- Test fixtures are synthetic: `tools/make_fixtures.py` generates them. Plan, status, decisions and workflow live in `docs/context/` (source of truth; read `docs/context/STATUS.md` first). Personal figures live only in the claude.ai Project; keep them out of git.
+- Test fixtures are synthetic: `tools/make_fixtures.py` generates them. Plan, status, decisions and workflow live in `docs/context/` (source of truth; the lead reads `docs/context/STATUS.md` first; subagents never read `STATUS.md` or `PIPELINE.md`, their brief carries what they need). Personal figures live only in the claude.ai Project; keep them out of git.
 
 ## Layout
 - `app/` — Flutter app (Android, iOS, Windows, macOS, Linux).
@@ -113,7 +113,7 @@ Job status: `gh api repos/marcelicmateo/buggetwallet/commits/<sha>/check-runs`. 
 ## Team (subagents in `.claude/agents/`)
 The main session is the lead: it takes the owner's request, splits it, merges results, runs
 `tools/build.sh test`, commits, pushes and updates STATUS. **Cap: 4 agents at once.** On each agent report the lead reads
-`docs/context/PIPELINE.md` (queue, dependencies, token rules, stage procedure), marks the item and starts the next ready one if a slot is free. One feature at a time; the owner tests at the end (2026-10-19), so stages go on without waiting for owner checks.
+`docs/context/PIPELINE.md` (queue, dependencies, token rules, stage procedure), marks the item and starts the next ready one if a slot is free. Briefs follow the brief rules in PIPELINE.md (short, pointer-style, no STATUS/PIPELINE excerpts beyond the facts the agent needs). One feature at a time; the owner tests at the end (2026-10-19), so stages go on without waiting for owner checks.
 - `core-builder` — logic half: `wallet_core` / `wallet_importer` + unit tests, own worktree (`isolation: "worktree"`).
 - `ui-builder` — UI half: `app/` screens, widgets, controller wiring, widget tests; iterates in live mode.
   For a feature with both halves, the lead fixes the core API (names, params, result fields) in both specs and

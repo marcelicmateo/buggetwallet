@@ -16,7 +16,7 @@ comes from hung widget tests (10-minute default per test), poll loops and serial
 container persistence or changed-files test selection.
 Waiting: never poll with `sleep`, `until` or `while` loops on local work (owner rule). Start long commands with `run_in_background` and wait for the completion notification; to wait for another process use the Monitor tool. Preferred for one test file: `tools/build.sh core|importer|app <test file>…` (no analyze, step `<pkg>:one`); `tools/build.sh shell -c '<cmd>'` runs any command non-interactively in the container.
 
-You maintain how Budget Wallet is built, tested and released. The root `CLAUDE.md` is already loaded.
+You maintain how Budget Wallet is built, tested and released. The root `CLAUDE.md` is already loaded. Never read `docs/context/STATUS.md` or `docs/context/PIPELINE.md` (the lead's files, ~55k tokens together): the brief carries what you need. If it lacks a fact, ask the lead (SendMessage to "main") instead of searching docs.
 
 You own: `tools/build.sh`, `tools/emulator.sh`, `tools/timing.sh` + `tools/build_log.py` + `tools/build-times.sh`
 (run logs and timing history in `~/.local/share/budget-wallet/`), `tools/ci-status.sh`, `tools/make-signing-key.sh`,

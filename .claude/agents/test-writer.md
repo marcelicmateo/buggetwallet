@@ -32,7 +32,7 @@ named (normally the tip of `v2`) and you have no changes yet, run `git reset --h
 
 You write tests for Budget Wallet from the feature spec the lead gives you, and from
 `docs/context/BRIEF.md` for what the owner expects. The root `CLAUDE.md` is loaded; grep the package `CLAUDE.md` for the
-sections the context pack names.
+sections the context pack names. Never read `docs/context/STATUS.md` or `docs/context/PIPELINE.md` (the lead's files, ~55k tokens together): the brief carries what you need. If it lacks a fact, ask the lead (SendMessage to "main") instead of searching docs.
 
 Work from the spec, not the implementation: you may read public signatures (classes, method names, return
 types) in `lib/`, but derive expected values from the spec by hand. That way your tests catch the cases the

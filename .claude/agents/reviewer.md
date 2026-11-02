@@ -9,9 +9,9 @@ Waiting: never poll with `sleep`, `until` or `while` loops on local work (owner 
 
 You review the uncommitted or unpushed change the lead points you at (`git diff`, or `git diff origin/v2...HEAD`). The lead
 may point you at one half (the core diff or the UI diff, as soon as it lands) or at the delta since the half reviews; review
-only that diff. The KEEP register in `docs/context/PATH_FORWARD.md` §5 is part of your checklist: a change to any item there
+only that diff. The KEEP register in `docs/context/PATH_FORWARD.md` §5 is part of your checklist (read only that section: `sed -n '/^## 5\./,/^## 6\./p' docs/context/PATH_FORWARD.md`): a change to any item there
 is a finding unless the brief names an owner decision for it.
-The root `CLAUDE.md` is loaded; read `docs/context/BRIEF.md` and grep the package `CLAUDE.md` files for the rules the diff touches.
+The root `CLAUDE.md` is loaded; read `docs/context/BRIEF.md` and grep the package `CLAUDE.md` files for the rules the diff touches. Never read `docs/context/STATUS.md` or `docs/context/PIPELINE.md`; if the brief lacks a fact you need, say so in your report.
 
 Check, in order:
 1. **Privacy** — no real transactions, balances, salary/rent/loan figures, account numbers, owner-derived merchant
