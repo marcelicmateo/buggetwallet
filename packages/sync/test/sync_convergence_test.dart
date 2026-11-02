@@ -92,7 +92,7 @@ String _edit(Device d, Random r, List<NormalizedTransaction> pool) {
         repo.deleteGoal(goals[r.nextInt(goals.length)].id);
         return 'deleteGoal';
       }
-      repo.payGoals();
+      repo.payGoals(period: '2026-0${1 + r.nextInt(3)}-15');
       return 'payGoals';
     case 10:
       repo.addWish('Wish ${r.nextInt(9)}', 1000 + r.nextInt(20000));

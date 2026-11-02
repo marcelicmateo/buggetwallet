@@ -856,17 +856,88 @@ class WalletRepo {
     logEvent(_log, Level.INFO, 'repo.undelete', {'entity': 'goal'});
   }
 
-  /// The payday transfer: adds each goal's monthly amount to its saved total, as a contribution. For a pay
-  /// [period] the row id is fixed per goal and period, so paying the same period on two devices (or twice) counts
-  /// once. With no period each call adds a new row: never default to the `periodStart` setting, which can be stale
-  /// (the app only sets it when missing), so two paydays would share one id and the second would pay nothing.
-  void payGoals({String? period}) {
-    final p = period;
-    _write([
+  /// PS: the payday auto-save for pay [period] (`PeriodBudget.start`). Writes `pay:<goalId>:<period>` = the goal's
+  /// monthly amount for each live goal with `monthly > 0` that has no such row yet (a deleted one counts as there), so
+  /// two devices or two calls pay a period once and an owner's skip or lower ([setGoalPeriodAmount]) is never undone.
+  void payGoals({required String period}) {
+    final due = [
       for (final g in goals())
-        if (g.monthly != 0)
-          _contribution(g.id, g.monthly.clamp(-Goal.maxContribution, Goal.maxContribution), id: p == null ? null : 'pay:${g.id}:$p'),
+        if (g.monthly > 0 && _contribAmount(_payId(g.id, period)) == null) _contribution(g.id, _payAmount(g), id: _payId(g.id, period)),
+    ];
+    if (due.isNotEmpty) _write(due);
+  }
+
+  static String _payId(String goalId, String period) => 'pay:$goalId:$period';
+  static int _payAmount(Goal g) => g.monthly.clamp(0, Goal.maxContribution);
+
+  /// The live amount of contribution [id]: null when there is no such row, 0 when it is deleted or has no valid amount.
+  int? _contribAmount(String id) {
+    final rs = db.select('SELECT amount, deleted FROM goal_contrib WHERE id = ?', [id]);
+    if (rs.isEmpty) return null;
+    return rs.first['deleted'] == 0 ? switch (rs.first['amount']) { final int a => a, _ => 0 } : 0;
+  }
+
+  /// PS: sets goal [goalId]'s amount for pay [period] to [cents] (0 = skip this period). Writes the pay row first if it
+  /// is missing, then `adj:<goalId>:<period>` = [cents] − the pay row's amount (a second call overwrites it, so the last
+  /// one wins). The difference goes back to the period's spending money ([goalPeriodAmounts] feeds `computePeriod`).
+  /// Throws [ArgumentError] for a negative amount, one over [Goal.maxContribution], a goal that is unknown or deleted,
+  /// or when the goal's saved total would go below zero.
+  void setGoalPeriodAmount(String goalId, String period, int cents) {
+    if (cents < 0) throw ArgumentError('The amount cannot be negative.');
+    if (cents > Goal.maxContribution) throw ArgumentError('The amount is too large.');
+    final g = goals().where((g) => g.id == goalId).firstOrNull;
+    if (g == null) throw ArgumentError('No such goal.');
+    final payId = _payId(goalId, period), adjId = 'adj:$goalId:$period';
+    final paid = _contribAmount(payId);
+    final pay = paid ?? _payAmount(g);
+    final adj = _contribAmount(adjId) ?? 0;
+    final want = (cents - pay).clamp(-Goal.maxContribution, Goal.maxContribution);
+    final delta = (paid == null ? pay : 0) + want - adj;
+    final (raw, _) = _goalSaved(goalId)!;
+    if (delta < 0 && raw + delta < 0) throw ArgumentError('The goal has less saved than that.');
+    _write([
+      if (paid == null) _contribution(goalId, pay, id: payId),
+      _contribution(goalId, want, id: adjId),
     ]);
+    logEvent(_log, Level.INFO, 'goal.periodAmount', {'skip': cents == 0});
+  }
+
+  /// PS: this pay period's savings per live goal: the pay row plus the adjustment when the pay row exists, else the
+  /// goal's monthly amount plus the adjustment. Pass it as `computePeriod(goalAmounts:)`.
+  Map<String, int> goalPeriodAmounts(String period) => {
+        for (final g in goals()) g.id: (_contribAmount(_payId(g.id, period)) ?? g.monthly) + (_contribAmount('adj:${g.id}:$period') ?? 0),
+      };
+
+  /// PS: takes [cents] (> 0, at most the saved total) out of goal [goalId], dated [date]. Without [toGoalId] it becomes
+  /// spending money of the period holding [date] (row `out:…`, [goalTakenOutBetween]); with one it moves to that goal in
+  /// one write (`mv:…` and `mv:…:in`), spending money unchanged. Returns the (first) row id. Throws [ArgumentError] for
+  /// a bad amount or date, an unknown or deleted goal, or the same goal as destination.
+  String takeOutOfGoal(String goalId, int cents, {required String date, String? toGoalId}) {
+    requireIsoDate(date);
+    final live = {for (final g in goals()) g.id: g};
+    final g = live[goalId];
+    if (g == null || (toGoalId != null && !live.containsKey(toGoalId))) throw ArgumentError('No such goal.');
+    if (toGoalId == goalId) throw ArgumentError('Pick another goal.');
+    if (cents <= 0) throw ArgumentError('The amount must be above zero.');
+    if (cents > g.saved) throw ArgumentError('The goal has less saved than that.');
+    final id = _newId(toGoalId == null ? 'out:' : 'mv:');
+    _write([
+      _contribution(goalId, -cents, date: date, id: id),
+      if (toGoalId != null) _contribution(toGoalId, cents, date: date, id: '$id:in'),
+    ]);
+    logEvent(_log, Level.INFO, 'goal.takeOut', {'to': toGoalId == null ? 'spending' : 'goal'});
+    return id;
+  }
+
+  /// PS: the money taken out of goals into spending ([takeOutOfGoal] without a destination) dated in
+  /// [[start], [endExclusive]), positive. Rows of deleted goals count too: that money became spending money.
+  int goalTakenOutBetween(String start, String endExclusive) {
+    var sum = 0;
+    for (final r in db.select(
+        "SELECT amount FROM goal_contrib WHERE id LIKE 'out:%' AND deleted = 0 AND date >= ? AND date < ?", [start, endExclusive])) {
+      if (r['amount'] case final int a) sum -= a.clamp(-Goal.maxContribution, Goal.maxContribution);
+    }
+    return sum;
   }
 
   String addWish(String name, int price) {

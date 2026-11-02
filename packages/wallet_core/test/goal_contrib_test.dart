@@ -205,17 +205,18 @@ void main() {
       r.payGoals(period: '2026-02-15');
       expect(_savedOf(r, a), 11000);
       expect(_pending(r, 'goal'), isEmpty);
-      r.updateSettings({'periodStart': '2026-03-15'});
-      r.payGoals();
-      r.payGoals();
-      expect(_savedOf(r, a), 21000, reason: 'no period given: a new row per call, never the periodStart setting');
     });
 
-    test('payGoals with no period known adds a row per call', () {
-      final a = r.saveGoal(name: 'Fund A', target: 100000, saved: 0, monthly: 5000, sort: 1);
-      r.payGoals();
-      r.payGoals();
-      expect(_savedOf(r, a), 10000);
+    test('PS: payGoals never rewrites an existing pay row (a skip stays), and writes nothing when all are paid', () {
+      final a = r.saveGoal(name: 'Fund A', target: 100000, saved: 1000, monthly: 5000, sort: 1);
+      r.payGoals(period: '2026-01-15');
+      r.saveGoal(id: a, name: 'Fund A', target: 100000, saved: 6000, monthly: 9000, sort: 1);
+      r.setGoalPeriodAmount(a, '2026-01-15', 0);
+      final before = r.pendingOps().length;
+      r.payGoals(period: '2026-01-15');
+      expect(r.pendingOps().length, before, reason: 'nothing to pay: no write');
+      expect(_savedOf(r, a), 1000);
+      expect(r.goalPeriodAmounts('2026-01-15'), {a: 0});
     });
 
     test('the budget engine: goal monthly counts in the plan, contributions do not; months-to-goal uses the total', () {
