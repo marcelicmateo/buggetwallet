@@ -24,8 +24,20 @@ String exploreBucketLabel(DateRange r, Bucket b) {
   };
 }
 
-/// A value of [m] as the table and tooltip write it: exact money, or a plain count.
-String measureValue(Measure m, int v, String currency) => m == Measure.count ? groupInt(v) : moneyExact(v, currency);
+/// A value of [m] as the table and tooltip write it: exact money, or a plain count. Never a negative number: kept below zero is its
+/// absolute value with the word "lost" ("12.50 € lost", as Spending's "N saved · N lost").
+String measureValue(Measure m, int v, String currency) {
+  if (m == Measure.count) return groupInt(v);
+  if (m == Measure.kept && v < 0) return '${moneyExact(-v, currency)} lost';
+  return moneyExact(v, currency);
+}
+
+/// An axis tick: whole units, the same rule for kept ("100 € lost" under the zero line).
+String axisValue(Measure m, int v, String currency) {
+  if (m == Measure.count) return groupInt(v);
+  if (m == Measure.kept && v < 0) return '${money(-v, currency, decimals: 0)} lost';
+  return money(v, currency, decimals: 0);
+}
 
 /// Pearson r in permille as "0.62" (or "−0.62"), two decimals, rounded half away from zero, in the number style.
 String strengthText(int permille) {

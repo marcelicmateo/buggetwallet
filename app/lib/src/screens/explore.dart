@@ -346,7 +346,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
     ];
     String bucketText(int i) => exploreBucketLabel(buckets[i], q.bucket);
     String value(int v) => measureValue(_measure, v, cur);
-    String axis(int v) => _measure == Measure.count ? groupInt(v) : money(v, cur, decimals: 0);
+    String axis(int v) => axisValue(_measure, v, cur);
     final spoken =
         '${measureName(_measure)} on ${series.map((s) => s.name).join(', ')} by ${q.bucket.name}, ${shortDate(q.window.start)} to ${shortDate(q.window.end)}. The table below has the exact values.';
     final many = series.length > maxLines;
@@ -479,18 +479,20 @@ class _ExploreScreenState extends State<ExploreScreen> {
           for (final m in 'JFMAMJJASOND'.split('')) Expanded(child: Center(child: Text(m, style: TextStyle(fontSize: 10, color: c.muted)))),
         ]),
         for (final y in byYear.keys.toList()..sort())
-          Padding(
-            padding: const EdgeInsets.only(top: 3),
-            child: Row(children: [
-              SizedBox(width: 40, child: Text('$y', style: monoSmall(c))),
+          // One spoken label per year row (every month's value); the cells are 22 dp to look at but the whole 48 dp band is the target.
+          Semantics(
+            container: true,
+            label: '$y: ${[
               for (var m = 1; m <= 12; m++)
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 1.5),
-                    child: _heatCell(c, y, m, byYear[y]![m], cur, pick),
-                  ),
-                ),
-            ]),
+                if (byYear[y]![m] case final h?)
+                  '${monthShort('$y-${m.toString().padLeft(2, '0')}')} ${measureValue(_measure, h.cents, cur)}'
+            ].join(', ')}',
+            child: ExcludeSemantics(
+              child: Row(children: [
+                SizedBox(width: 40, child: Text('$y', style: monoSmall(c))),
+                for (var m = 1; m <= 12; m++) Expanded(child: _heatCell(c, y, m, byYear[y]![m], pick)),
+              ]),
+            ),
           ),
       ]),
       SplitRow(
@@ -517,28 +519,23 @@ class _ExploreScreenState extends State<ExploreScreen> {
     ]);
   }
 
-  Widget _heatCell(WalletColors c, int y, int m, HeatCell? h, String cur, HeatCell? pick) {
-    if (h == null) {
-      return Container(height: 22, decoration: BoxDecoration(borderRadius: BorderRadius.circular(3), border: Border.all(color: c.line)));
-    }
-    return Semantics(
-      label: '${monthYear(y, m)}, ${measureValue(_measure, h.cents, cur)}',
-      button: true,
-      child: ExcludeSemantics(
-        child: InkWell(
-          key: ValueKey('heat:$y-${m.toString().padLeft(2, '0')}'),
-          borderRadius: BorderRadius.circular(3),
-          onTap: () => setState(() => _heatPick = h),
-          child: Container(
-            height: 22,
-            decoration: BoxDecoration(
-              color: c.heat[h.level],
-              borderRadius: BorderRadius.circular(3),
-              border: pick == h ? Border.all(color: c.ink, width: 1.5) : null,
-            ),
-          ),
-        ),
+  Widget _heatCell(WalletColors c, int y, int m, HeatCell? h, HeatCell? pick) {
+    final box = Container(
+      height: 22,
+      margin: const EdgeInsets.symmetric(horizontal: 1.5),
+      decoration: BoxDecoration(
+        color: h == null ? null : c.heat[h.level],
+        borderRadius: BorderRadius.circular(3),
+        border: h == null ? Border.all(color: c.line) : (pick == h ? Border.all(color: c.ink, width: 1.5) : null),
       ),
+    );
+    final band = SizedBox(height: touchMin, child: Center(child: box));
+    if (h == null) return band;
+    return InkWell(
+      key: ValueKey('heat:$y-${m.toString().padLeft(2, '0')}'),
+      borderRadius: BorderRadius.circular(3),
+      onTap: () => setState(() => _heatPick = h),
+      child: band,
     );
   }
 

@@ -135,6 +135,16 @@ void main() {
       expect(topMonthSentence([...tie, ...year(2022, 12), ...year(2023, 12)], 2026, Measure.spent), isNull);
     });
 
+    test('kept below zero is an absolute value with the word lost, never a minus', () {
+      expect(measureValue(Measure.kept, -1250, 'EUR'), '${moneyExact(1250, 'EUR')} lost');
+      expect(measureValue(Measure.kept, 1250, 'EUR'), moneyExact(1250, 'EUR'));
+      expect(measureValue(Measure.kept, 0, 'EUR'), moneyExact(0, 'EUR'));
+      expect(axisValue(Measure.kept, -10000, 'EUR'), '${money(10000, 'EUR', decimals: 0)} lost');
+      expect(axisValue(Measure.spent, 10000, 'EUR'), money(10000, 'EUR', decimals: 0));
+      expect(measureValue(Measure.kept, -1250, 'EUR'), isNot(contains('−')));
+      expect(measureValue(Measure.count, 7, 'EUR'), '7');
+    });
+
     test('share and hours', () {
       expect(permilleText(72), '7.2 %');
       expect(hoursText(8320), '832 h');
@@ -231,6 +241,21 @@ void main() {
       expect(find.byKey(const ValueKey('exploreChartArea')), findsOneWidget);
     }, timeout: _timeout);
 
+    testWidgets('kept: table and tooltip say lost, no minus sign anywhere', (tester) async {
+      final w = await exploreWallet();
+      await pumpScreen(tester, ExploreScreen(wc: w.wc));
+      await tapKey(tester, 'exploreMeasure');
+      await tester.tap(k('measure:kept'));
+      await tester.pump(const Duration(milliseconds: 400));
+      final first = _rowStarts(tester).first;
+      expect(_cell(tester, 'exploreCell:$first:0'), endsWith(' lost'));
+      final texts = tester.widgetList<Text>(find.descendant(of: k('exploreTable'), matching: find.byType(Text))).map((t) => t.data ?? '');
+      expect(texts.where((t) => t.contains('−') || t.contains('-')), isEmpty);
+      await tester.tapAt(tester.getTopLeft(k('exploreChartArea')) + const Offset(500, 120));
+      await tester.pump();
+      expect((tester.widget(k('exploreTipValue:0')) as Text).data, endsWith(' lost'));
+    }, timeout: _timeout);
+
     testWidgets('a tag series with an overlap: together is counted once and the column says so', (tester) async {
       final w = await exploreWallet();
       final wc = w.wc;
@@ -257,7 +282,17 @@ void main() {
       final first = w.wc.exploreDefaultKeys().first;
       final cells = w.wc.exploreHeat(first, Measure.spent);
       expect(find.byKey(const ValueKey('exploreHeat')), findsOneWidget);
-      await tapKey(tester, 'heat:2025-12');
+      final sem = tester.ensureSemantics();
+      expect(find.bySemanticsLabel(RegExp(r'^2025: Jan .*, Dec ')), findsOneWidget,
+          reason: 'one spoken label per year row, every month in it');
+      sem.dispose();
+      // each cell is a band at least 48 dp tall; a tap at the band's edge, away from the 22 dp square, still picks the cell
+      final cell = k('heat:2025-12');
+      await tester.ensureVisible(cell);
+      expect(tester.getSize(cell).height, greaterThanOrEqualTo(48));
+      await tester.tapAt(tester.getCenter(cell) + const Offset(0, 21));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(const ValueKey('heatReadout')), findsOneWidget);
       final c = cells.firstWhere((c) => c.year == 2025 && c.month == 12);
       expect((tester.widget(k('heatReadout')) as Text).data, 'December 2025 · ${moneyExact(c.cents, w.wc.currency)}');
       // remove the other series so Eating out is the heatmap's series: December is the top month in all complete years

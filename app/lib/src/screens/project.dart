@@ -250,6 +250,8 @@ class _ProjectScreenState extends State<ProjectScreen> {
                       TextButton(
                           key: ValueKey('projectSkip:${t.id}'),
                           style: TextButton.styleFrom(minimumSize: const Size(0, touchMin)),
+                          // shortcut: Skip only hides the row for this visit; the decision is "not this project" and should be saved as an off link,
+                          // which needs core's setTxTag(off) to write one when no link exists. Switch to tagPayments(.., on: false) then.
                           onPressed: () => setState(() => _skipped.add(t.id)),
                           child: const Text('Skip')),
                     ]),
