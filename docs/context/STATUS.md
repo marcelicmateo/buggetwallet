@@ -7,6 +7,8 @@ sync (works on Android, Linux and web) → **M6 live test** by the owner. Platfo
 
 **Sync:** relay (stage R, 2026-10-22); Syncthing is no longer used. Hosting: owner chose a Hetzner Cloud server (2026-10-24, guide docs/setup.md §6; not set up yet), home server (§5) stays documented.
 
+**2026-11-02 (v2 pushed at a9afb14, schema 20):** Stage UX accounts + daily rates done. Each payment belongs to one account ("Which account is this?" asked once per bank export account at import, before anything is written; Skip this file; a payment's Account field); ECB reference rates per payment date (whole history file, never a per-date request; automatic at most once a day, never on mobile data on Android; "Get rates now"; every rate shows its source; your own rate wins; a foreign account's value = each row at its own day's rate, "Rate missing" when one is missing). Two core and one UI review round fixed (1 high: a new account from the question was opened today, so the file's rows counted nowhere). Stage run green (format fix only). **Update relay, phone and laptop together.** Owner checks: below, "after UX-ACC + UX-FX". go3 needs this v2 merged before it goes back into v2. Next: UX-B, F2, UX-C2.
+
 **2026-11-01 evening (Stage GO, v2 not pushed; only branch `go3` pushed for the owner's CI run):** the build tools
 run on `wallet-build` (Go, `tools/wallet-build/`, root `Makefile`): `tools/build.sh` hands every command with a green
 bash-vs-Go parity case to it, `live.sh` all, `emulator.sh` all but `reset`; CI stays bash until `go3` is proven.

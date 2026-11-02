@@ -115,7 +115,7 @@ STAGE_GO_DESIGN (owner answers recorded).
    worktree on deedf31) running; GO bug: TestDesktopTestParallelShards flaked once (test assumed both workers get units) → fixed 0777940, merged 04b473b.
 2. DONE 2026-11-01: UI 7b7e14f + review fixes f02a3c1 (1 high: new account from the question opened today → file rows in no balance; 1 medium: answers written before the preview; 7 low) + core `ecbCacheHas` e3fffa3; app 2597+. Was: UX-ACC + UX-FX UI (ask "Which account is this?" before importBatch, ECB fetch + "Get rates now" + rate source
    shown, pass accounts: everywhere).
-3. Stage run on e3fffa3: desktop, web, emulator screens, perf green; test failed only on dart format (repo_fx.dart) → fixed 3c2c61d, full test green; ECB row names its currency. Waiting for the owner's OK to push schema 20. Was: Stage run (`tools/build.sh -q stage || cat dist/logs/last-failed.txt`, haiku watcher), screenshots, push, STATUS.
+3. Stage run on e3fffa3: desktop, web, emulator screens, perf green; test failed only on dart format (repo_fx.dart) → fixed 3c2c61d, full test green; ECB row names its currency. Pushed a9afb14 (2026-11-02, owner OK); STATUS updated. Was: Stage run (`tools/build.sh -q stage || cat dist/logs/last-failed.txt`, haiku watcher), screenshots, push, STATUS.
 4. UX-B (Plan window, Tags window with recommendations, Settings = setup, Today tiles + equal-height rows fix), F2,
    UX-C2 (tightening pass: attention-tile outlines, Rules wording, "Built in" repeated). Then Stage GO.
 
