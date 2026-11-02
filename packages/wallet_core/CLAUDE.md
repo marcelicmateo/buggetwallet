@@ -675,15 +675,16 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
 - `explore.dart` (`part of` series.dart) + `repo_views.dart` — Explore (ENG §6.3). `SeriesQuery {measure, keys, bucket,
   window}` (`toJson`/`fromJson`, which throws on anything else), `Measure` spent | cameIn (income + extra, as
   `monthSummary`) | kept (cameIn − spent) | count (spending rows with amount < 0), `SeriesKey(SeriesKind mainTag |
-  tag | payee (`merchantGroupKey`) | account (`tx.account` only, no RowAccounts fallback), id)`. `runQuery(ix, q,
+  tag | payee (`merchantGroupKey`) | account, id)`; account = `RowAccounts` when `DayIndex(accounts:)` is given, else the
+  stored `tx.account`; an account series is money in/out by the measures, not a balance (transfers and opening dates left out). `runQuery(ix, q,
   today:)` → `QueryRow {bucket, partial, cents per key, together}` (together = rows matching any key, once); one key's
   spending is `_spentPrefix` itself, so it equals `spendingSeries`/`tagTrend`/`merchantTrend`; other prefixes are
   cached on the `DayIndex` (which now keeps the income/extra rows). `heatmap(ix, key, today:, measure:)` → `HeatCell
   {year, month, cents, level}` from January of the first indexed year to today's month; level 0 for ≤ 0, else 1 +
-  4·(cells above zero below it) ÷ their count. `moveTogether(ix, a, b, window)` → `MoveTogether {strength permille,
+  4·(cells above zero below it) ÷ their count. `moveTogether(ix, a, b, window)` (window widened to whole months) → `MoveTogether {strength permille,
   months, from, to}` over the calendar months where both spent, null when flat (`pearsonPermille` in findings.dart,
   shared with movesTogether; exact BigInt, one rounding). Synced entity `view` (schema 21, `ViewCols`, table `views`,
-  id `v` + 12 hex: name 1..60, query JSON checked by `seriesQueryProblem`, pinned, sort, deleted): `addView`,
+  id `v` + 12 hex: name 1..60, query JSON checked by `seriesQueryProblem` (parses and its window fits its bucket), pinned, sort, deleted): `addView`,
   `patchView` (or `patch`), `deleteView`/`undeleteView`, `views()` (`SavedView`, `parsed` = null for a query this
   build cannot read). Tests: `test/eng_explore_test.dart` (incl. two devices, backup, schema 20 replay, perf),
   `test/eng_explore_spec_test.dart`.

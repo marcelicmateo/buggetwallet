@@ -355,6 +355,7 @@ export 'src/series.dart'
         SeriesKey,
         SeriesKind,
         SeriesQuery,
+        seriesQueryProblem,
         spendingSeries,
         ViewCols;
 export 'src/splits.dart' show decodeSplitParts, encodeSplitParts, SplitCols, SplitPart, splitFits;

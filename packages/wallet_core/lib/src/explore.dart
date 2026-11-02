@@ -8,8 +8,9 @@ part of 'series.dart';
 enum Measure { spent, cameIn, kept, count }
 
 /// What one series filters on: the row's main tag (its category), an extra tag, a payee (`merchantGroupKey`) or an
-/// account (the [RowAccounts] counting rule when the [DayIndex] was given the accounts, else `tx.account`; opening dates
-/// are not applied: Explore shows money moved, not balances).
+/// account (the [RowAccounts] counting rule when the [DayIndex] was given the accounts, else `tx.account`). An account
+/// series is money in and out by the measures above, **not a balance**: transfers, IOU-linked rows and other currencies
+/// are left out, and the account's opening date is not applied.
 enum SeriesKind { mainTag, tag, payee, account }
 
 class SeriesKey {
@@ -57,13 +58,17 @@ class SeriesQuery {
   }
 }
 
-/// [ViewCols.query]'s check: null when [text] is a query [SeriesQuery.fromJson] reads.
-String? seriesQueryProblem(String text) {
+/// [ViewCols.query]'s check: null when [text] is a query [SeriesQuery.fromJson] reads and [runQuery] can run.
+String? seriesQueryProblem(String text) => _readQuery(text) == null ? 'Not a query that can run.' : null;
+
+/// [text] as a query [runQuery] accepts (its window fits its bucket: day, week and month under 5 years), else null.
+SeriesQuery? _readQuery(String text) {
   try {
-    SeriesQuery.fromJson(jsonDecode(text) as Map<String, dynamic>);
-    return null;
+    final q = SeriesQuery.fromJson(jsonDecode(text) as Map<String, dynamic>);
+    _window(q.window, q.bucket);
+    return q;
   } catch (_) {
-    return 'Not a saved query.';
+    return null; // a validity check: the reason is the null
   }
 }
 
@@ -151,11 +156,12 @@ class MoveTogether {
   const MoveTogether({required this.strength, required this.months, required this.from, required this.to});
 }
 
-/// Spending of [a] and [b] per calendar month of [window] (clipped at its edges; no length limit), over the months
+/// Spending of [a] and [b] per calendar month of [window] (widened to whole months, as findings; no length limit), over the months
 /// where both are nonzero, as findings' movesTogether (`pearsonPermille`). Null when either side is flat there.
 MoveTogether? moveTogether(DayIndex ix, SeriesKey a, SeriesKey b, DateRange window) {
   final xs = <int>[], ys = <int>[], spans = <(int, int)>[];
-  _spans(_epoch(window.start), _epoch(window.end), Bucket.month, (s, e, fs, fe) {
+  final lo = _bucketAt(_epoch(window.start), Bucket.month).$1, hi = _bucketAt(_epoch(window.end), Bucket.month).$2;
+  _spans(lo, hi, Bucket.month, (s, e, fs, fe) {
     final x = ix._value(Measure.spent, [a], s, e), y = ix._value(Measure.spent, [b], s, e);
     if (x == 0 || y == 0) return;
     xs.add(x);
@@ -232,8 +238,8 @@ class SavedView {
   final String query;
   final bool pinned;
   final int? sort;
-  const SavedView({required this.id, required this.name, required this.query, required this.pinned, this.sort});
+  SavedView({required this.id, required this.name, required this.query, required this.pinned, this.sort});
 
-  /// The query, or null when this build cannot read it (written by a newer one).
-  SeriesQuery? get parsed => seriesQueryProblem(query) == null ? SeriesQuery.fromJson(jsonDecode(query) as Map<String, dynamic>) : null;
+  /// The query, or null when this build cannot read or run it (written by a newer one).
+  late final SeriesQuery? parsed = _readQuery(query);
 }

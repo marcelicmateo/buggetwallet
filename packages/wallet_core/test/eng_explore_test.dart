@@ -132,7 +132,7 @@ void main() {
     expect(runQuery(ix, q(Measure.spent, const [], Bucket.month, w), today: today).single.together, 0);
   });
 
-  test('account series follow RowAccounts: a main account counts its rows without tx.account, as its balance does', () {
+  test('account series follow RowAccounts (a main account counts its rows without tx.account); kept is money in/out, not a balance', () {
     Account acc(String id, String source, {String? matchKey}) => Account(
         id: id, name: 'A $id', source: source, currency: 'EUR', opening: 0, openingDate: '2025-12-31', deleted: false, matchKey: matchKey);
     CategorizedTx on(String date, int cents, String category, String account) {
@@ -149,6 +149,7 @@ void main() {
       on('2026-02-14', -7000, 'Shopping', 'keyed'),
       row('2026-02-15', -3000, 'Groceries', source: 'revolut'),
       row('2026-07-01', -100, 'Groceries'), // after the window
+      row('2026-03-25', -50000, 'Internal transfer'), // moves the balance, never in kept
     ];
     final w = dr('2026-01-01', '2026-06-30');
     const main = SeriesKey(SeriesKind.account, 'main'), keyed = SeriesKey(SeriesKind.account, 'keyed');
@@ -158,9 +159,11 @@ void main() {
           for (final t in rows)
             if (t.date.compareTo(day) <= 0) t.tx
         ]).firstWhere((b) => b.account.id == id).balance;
-    for (final (k, id) in [(main, 'main'), (keyed, 'keyed')]) {
-      expect(res.fold<int>(0, (s, r) => s + r.cents[k]!), balanceOn(id, w.end) - balanceOn(id, '2025-12-31'), reason: id);
-    }
+    int kept(SeriesKey k) => res.fold<int>(0, (s, r) => s + r.cents[k]!);
+    int moved(String id) => balanceOn(id, w.end) - balanceOn(id, '2025-12-31');
+    expect(kept(keyed), moved('keyed'));
+    expect(kept(main), isNot(moved('main')), reason: 'not a balance: the transfer is left out');
+    expect(kept(main), moved('main') + 50000);
     expect(res.first.cents[main], 200000 - 4500 + 1200 - 9900);
     expect(
         runQuery(ix, q(Measure.spent, [const SeriesKey(SeriesKind.account, 'rev')], Bucket.quarter, w), today: today)
@@ -188,6 +191,11 @@ void main() {
       expect(moveTogether(ix([100, 200, 300], [600, 400, 200]), a, b, w)!.strength, -1000);
       final m = moveTogether(ix([100, 200, 300, 400], [100, 300, 200, 400]), a, b, w)!; // r = 0.8
       expect((m.strength, m.months, m.from, m.to), (800, 4, '2016-01-01', '2016-04-30'));
+    });
+
+    test('the window is widened to whole calendar months, as findings', () {
+      final m = moveTogether(ix([100, 200, 300], [200, 400, 600]), a, b, dr('2016-01-20', '2016-03-05'))!;
+      expect((m.strength, m.months, m.from, m.to), (1000, 3, '2016-01-01', '2016-03-31'));
     });
 
     test('only months where both spent; flat or too few is null', () {
@@ -251,10 +259,14 @@ void main() {
       expect(() => r.patch(ViewCols.entity, a, {ViewCols.deleted: true}), throwsArgumentError);
       expect(() => r.patchView(a, name: '   '), throwsArgumentError);
       expect(() => r.addView(name: 'x' * 61, query: json), throwsArgumentError);
+      final monthsAll = jsonEncode(q(Measure.spent, const [], Bucket.month, dr('2016-01-01', today)).toJson());
+      expect(seriesQueryProblem(monthsAll), isNotNull, reason: 'month buckets over 5 years cannot run');
+      expect(() => r.addView(name: 'All', query: monthsAll), throwsArgumentError);
+      expect(() => r.patchView(a, query: monthsAll), throwsArgumentError);
       r.deleteView(a);
       expect(() => r.patchView(a, pinned: true), throwsArgumentError, reason: 'a deleted view is not edited');
       expect(() => r.deleteView('nope'), throwsArgumentError);
-      expect(const SavedView(id: 'v', name: 'n', query: '{"measure":"later"}', pinned: false).parsed, isNull);
+      expect(SavedView(id: 'v', name: 'n', query: '{"measure":"later"}', pinned: false).parsed, isNull);
     });
 
     test('two devices: add, rename, pin, delete and undo converge', () async {
