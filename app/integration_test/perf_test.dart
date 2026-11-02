@@ -136,6 +136,36 @@ void main() {
       await t.pumpAndSettle();
     }, reportKey: '${perfPrefix}insights_pan');
 
+    // Explore "All" (ENG E4): the whole ~20k-row history in quarter/year bars, a crosshair swept across the chart, the bar size and
+    // the range changed, the page scrolled. Every value comes from the memoized core query, the chart paints from it.
+    await goTab(t, 'Budget');
+    await binding.traceAction(() async {
+      await t.tap(find.byKey(const ValueKey('budgetExplore')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('exploreRange:All')));
+      await t.pumpAndSettle();
+      final chart = find.byKey(const ValueKey('exploreChartArea'));
+      final left = t.getTopLeft(chart), width = t.getSize(chart).width;
+      for (var i = 1; i < 24; i++) {
+        await t.tapAt(left + Offset(width * i / 24, 100));
+        await t.pump(const Duration(milliseconds: 16));
+      }
+      await t.tap(find.byKey(const ValueKey('exploreBucket')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('bucket:year')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('exploreRange:1y')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('exploreRange:All')));
+      await t.pumpAndSettle();
+      final page = find.byType(ListView).first;
+      for (var i = 0; i < 6; i++) {
+        await t.drag(page, const Offset(0, -300));
+        await t.pump(const Duration(milliseconds: 16));
+      }
+      await t.pumpAndSettle();
+    }, reportKey: '${perfPrefix}explore_all');
+
     // First visit of every tab after the data changed: an expense is added (the shown page rebuilds at once), the app is left idle for a
     // moment (the idle warm-up works out the derived values, then the other pages are built one per frame), then each tab is opened once.
     // Without the warm-up each of these switches builds its page and works its data out in the switch's own frame.

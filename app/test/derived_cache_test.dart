@@ -1,6 +1,6 @@
 // The controller caches derived values per data version, and a tab switch does not rebuild the other tabs.
 import 'package:budget_wallet/main.dart';
-import 'package:budget_wallet/src/screens/spending.dart';
+import 'package:budget_wallet/src/screens/explore.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -28,10 +28,10 @@ void main() {
   testWidgets('switching tabs keeps the other pages as they are', (t) async {
     final wc = demoWallet(clock: pinnedNoon);
     await pumpApp(t, HomeShell(wc: wc));
-    final spending = t.widget<SpendingScreen>(find.byType(SpendingScreen, skipOffstage: false));
+    final spending = t.widget<ExploreScreen>(find.byType(ExploreScreen, skipOffstage: false));
     await t.tap(find.text('Explore').last);
     await t.pump();
-    expect(identical(t.widget<SpendingScreen>(find.byType(SpendingScreen)), spending), isTrue);
+    expect(identical(t.widget<ExploreScreen>(find.byType(ExploreScreen)), spending), isTrue);
     expect(find.byType(TodayScreen), findsNothing);
     await t.tap(find.text('Overview').last);
     await t.pump();

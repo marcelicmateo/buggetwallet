@@ -44,6 +44,15 @@ const _private = [
 /// The same amounts in cents (as whole numbers, so ms and byte counts can't match by accident).
 final _cents = RegExp(r'(?<![\d.])(140000|100000|55000|25000|1299|48000|9876|4321|5432|7123|9999)(?![\d.])');
 
+/// The Budget tab opens on Explore since ENG E4; selects the Spending page when it is there.
+Future<void> showSpending(WidgetTester t) async {
+  final spending = find.byKey(const ValueKey('budgetSpending'));
+  if (spending.evaluate().isNotEmpty) {
+    await t.tap(spending);
+    await t.pumpAndSettle();
+  }
+}
+
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -119,6 +128,15 @@ void main() {
     for (final (i, tab) in ['Budget', 'Bills', 'Save', 'Settings'].indexed) {
       await goTab(tester, tab);
       await binding.takeScreenshot('${i + 2}-${tab.toLowerCase()}');
+      if (tab == 'Budget') {
+        // ENG E4: the Explore page (the Budget tab's first page) and a project (E5).
+        await tester.tap(find.byKey(const ValueKey('budgetExplore')));
+        await tester.pumpAndSettle();
+        await binding.takeScreenshot('2-explore');
+        await tester.tap(find.byKey(const ValueKey('exploreRange:All')));
+        await tester.pumpAndSettle();
+        await binding.takeScreenshot('2-explore-all');
+      }
     }
     // ENG E1: Plan has two pages, Payday plan and Saving (the choice is remembered).
     await goTab(tester, 'Plan');
@@ -331,6 +349,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
     await tester.pumpAndSettle();
+    await showSpending(tester); // the Budget tab opens on Explore (E4); these steps look at the Spending page
 
     final catRow =
         find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('categoryRow_'));
@@ -347,10 +366,10 @@ void main() {
     for (final x in newest.take(5)) {
       await wc.setPaymentTag(x.tx.id, tag, true);
     }
-    unawaited(openTag(tester.element(find.byType(Scaffold).first), wc, tag, DateRange(start: addDays(wc.today(), -45), end: wc.today())));
+    unawaited(openTag(tester.element(find.byType(Scaffold).first), wc, tag));
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('tagDetailTotal')), findsOneWidget);
-    await binding.takeScreenshot('9-tag-detail');
+    expect(find.byKey(const ValueKey('projectTotal')), findsOneWidget);
+    await binding.takeScreenshot('9-project');
     await tester.tap(find.byTooltip('Close'));
     await tester.pumpAndSettle();
 
@@ -371,6 +390,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
     await tester.pumpAndSettle();
+    await showSpending(tester); // the Budget tab opens on Explore (E4); these steps look at the Spending page
     final spendingSwitch = find.byKey(const ValueKey('budgetSpending')); // Spending may be scrolled down
     if (spendingSwitch.evaluate().isNotEmpty) await tester.tap(spendingSwitch);
     await tester.pumpAndSettle();

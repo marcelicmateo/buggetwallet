@@ -7,7 +7,7 @@ import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/insights_api.dart';
 import 'package:budget_wallet/src/screens/insights.dart';
-import 'package:budget_wallet/src/screens/tag_detail.dart';
+import 'package:budget_wallet/src/screens/project.dart';
 import 'package:budget_wallet/src/screens/tags_panel.dart';
 import 'package:budget_wallet/src/theme.dart';
 import 'package:budget_wallet/src/widgets/category_picker.dart';
@@ -18,7 +18,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
-import 'support/detail.dart';
 import 'support/tags_window.dart';
 import 'support/wallet.dart';
 
@@ -657,26 +656,18 @@ void main() {
       wc.dispose();
     }, timeout: _timeout);
 
-    testWidgets('a tag opens its payments and per-month bars; the total equals the rows', (t) async {
+    testWidgets('a tag opens its project; the total equals the rows', (t) async {
       final (:wc, :holiday, kids: _) = await tagged();
       await showPanel(t, wc);
       await tapKey(t, 'tagRow_$holiday');
-      expect(find.byType(TagDetailScreen), findsOneWidget);
+      expect(find.byType(ProjectScreen), findsOneWidget);
       final r = wc.monthRange('2026-10');
       final rows = wc.rowsOfTag(holiday, r);
       expect(rows, hasLength(2));
       final sum = -rows.fold<int>(0, (a, x) => a + x.amount);
       expect(sum, 2790);
-      expect(heroText(t, 'tagDetailTotal'), moneyExact(sum, 'EUR'));
-      expect(wc.tagTotalFor(holiday, r), (spent: sum, count: 2), reason: 'the hero total and count are the controller\'s (core slice)');
-      expect(find.text('A payment can have other tags too.'), findsNothing, reason: 'help sits behind the (i)');
-      await t.ensureVisible(k('paymentsInfo'));
-      await t.tap(k('paymentsInfo'));
-      await t.pump(const Duration(milliseconds: 400));
-      expect(find.textContaining('other tags too'), findsOneWidget);
-      expect(find.descendant(of: k('tagRows'), matching: find.byType(TxTile)), findsNWidgets(2));
-      expect(wc.tagBars(holiday, r).fold<int>(0, (a, b) => a + b.spent), sum, reason: 'the per-month bars add up to the same total');
-      expect(k('tagDetailBars'), findsOneWidget);
+      expect((t.widget(k('projectTotal')) as Text).data, moneyExact(sum, 'EUR'));
+      expect(wc.projectOf(holiday).total, sum);
       await settle(t);
       wc.dispose();
     }, timeout: _timeout);

@@ -205,7 +205,7 @@ class InsightPanel extends StatelessWidget {
         currency: cur,
         onOpen: (tag) {
           logNav('insights.tag', {'graph': id});
-          openTag(context, wc, tag, r);
+          openTag(context, wc, tag);
         },
       ),
       if (share.slices.isNotEmpty || share.untaggedSpent > 0)

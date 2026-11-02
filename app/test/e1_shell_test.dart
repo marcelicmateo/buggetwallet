@@ -2,7 +2,7 @@
 import 'dart:ui' as ui;
 
 import 'package:budget_wallet/src/controller.dart';
-import 'package:budget_wallet/src/screens/spending.dart';
+import 'package:budget_wallet/src/screens/explore.dart';
 import 'package:budget_wallet/src/tabs.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -39,7 +39,7 @@ void main() {
     await t.pump();
     await _ctrl(t, LogicalKeyboardKey.keyK);
     await t.pump(const Duration(milliseconds: 300));
-    expect(find.byType(SpendingScreen), findsOneWidget);
+    expect(find.byType(ExploreScreen), findsOneWidget);
     expect(_key('searchField'), findsOneWidget);
     await t.pump(const Duration(seconds: 4));
   });

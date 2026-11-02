@@ -2,9 +2,9 @@
 // content width, no overflow on any tab, page State kept across tab switches and resizes, Today's columns, sheets as
 // dialogs and the keyboard shortcuts. More edge cases: adaptive_edge_test.dart. All data is SYNTHETIC.
 import 'package:budget_wallet/src/layout.dart';
+import 'package:budget_wallet/src/screens/explore.dart';
 import 'package:budget_wallet/src/screens/plan_screen.dart';
 import 'package:budget_wallet/src/screens/settings.dart';
-import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/widgets/dash.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
@@ -73,7 +73,7 @@ void main() {
       testWidgets('$name: a tap shows the page and the other pages keep their State', (tester) async {
         await pumpFull(tester, demoWallet(clock: pinnedNoon), scale, size: size);
         final plan = tester.state(find.byType(SettingsScreen, skipOffstage: false));
-        final spending = tester.state(find.byType(SpendingScreen, skipOffstage: false));
+        final spending = tester.state(find.byType(ExploreScreen, skipOffstage: false));
         for (final tab in ['Settings', 'Budget', 'Settings', 'Today']) {
           await tapTab(tester, tab);
         }
@@ -82,7 +82,7 @@ void main() {
         expect(find.byType(SettingsScreen), findsOneWidget);
         expect(find.byType(TodayScreen), findsNothing);
         expect(identical(tester.state(find.byType(SettingsScreen, skipOffstage: false)), plan), isTrue);
-        expect(identical(tester.state(find.byType(SpendingScreen, skipOffstage: false)), spending), isTrue);
+        expect(identical(tester.state(find.byType(ExploreScreen, skipOffstage: false)), spending), isTrue);
       });
     }
   }
@@ -90,13 +90,13 @@ void main() {
   testWidgets('resizing 360 -> 1280 -> 360 keeps the pages and their State', (tester) async {
     await pumpFull(tester, demoWallet(clock: pinnedNoon), 1.0, size: const Size(360, 800));
     final plan = tester.state(find.byType(SettingsScreen, skipOffstage: false));
-    final spending = tester.state(find.byType(SpendingScreen, skipOffstage: false));
+    final spending = tester.state(find.byType(ExploreScreen, skipOffstage: false));
     final todayWidget = tester.widget(find.byType(TodayScreen, skipOffstage: false));
     for (final s in const [Size(1280, 800), Size(800, 1280), Size(360, 800)]) {
       tester.view.physicalSize = s;
       await tester.pump();
       expect(identical(tester.state(find.byType(SettingsScreen, skipOffstage: false)), plan), isTrue, reason: 'Settings at $s');
-      expect(identical(tester.state(find.byType(SpendingScreen, skipOffstage: false)), spending), isTrue, reason: 'Spending at $s');
+      expect(identical(tester.state(find.byType(ExploreScreen, skipOffstage: false)), spending), isTrue, reason: 'Spending at $s');
       expect(identical(tester.widget(find.byType(TodayScreen, skipOffstage: false)), todayWidget), isTrue, reason: 'Today at $s');
     }
     expect(tester.takeException(), isNull);
@@ -187,7 +187,7 @@ void main() {
       await ctrl(tester, LogicalKeyboardKey.digit4);
       expect(find.byType(PlanScreen), findsOneWidget);
       await ctrl(tester, LogicalKeyboardKey.digit3);
-      expect(find.byType(SpendingScreen), findsOneWidget);
+      expect(find.byType(ExploreScreen), findsOneWidget);
       await ctrl(tester, LogicalKeyboardKey.comma);
       expect(find.byType(SettingsScreen), findsOneWidget);
       await ctrl(tester, LogicalKeyboardKey.digit1);
