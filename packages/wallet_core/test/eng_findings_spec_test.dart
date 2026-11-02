@@ -51,7 +51,9 @@ const x70 = [6, 2, 1, 4, 6, 3, 1, 5, 3, 2, 5, 2], y70 = [4, 1, 1, 5, 4, 4, 1, 6,
 /// Two categories whose monthly totals (in thousand cents) are [a] and [b], over the months from 2025-10 (12 = up to 2026-09, the last full month).
 List<CategorizedTx> pair(List<int> a, List<int> b, {String ca = 'Groceries', String cb = 'Shopping'}) {
   final ms = months('2025-10', a.length);
-  return [for (var i = 0; i < a.length; i++) ...[pay(ms[i], a[i] * 1000, ca), pay(ms[i], b[i] * 1000, cb)]];
+  return [
+    for (var i = 0; i < a.length; i++) ...[pay(ms[i], a[i] * 1000, ca), pay(ms[i], b[i] * 1000, cb)]
+  ];
 }
 
 List<Finding> moves(List<CategorizedTx> rows) => kindOf_(fin(rows), FindingKind.movesTogether);
@@ -135,11 +137,17 @@ void main() {
       expect(fs.single.series.map((e) => e.$1).toList(), ['1', '2', '3', '4', '5', '6', '7']);
     });
     test('fewer than 6 tracked months in the window: quiet', () {
-      final r = [for (final f in daily(1000, 3000)) if (f.date.compareTo('2026-05-01') >= 0) f];
+      final r = [
+        for (final f in daily(1000, 3000))
+          if (f.date.compareTo('2026-05-01') >= 0) f
+      ];
       expect(rhythm(r), isEmpty);
     });
     test('a quiet weekday with no spending at all fires with no ratio (null)', () {
-      final r = [for (final f in daily(1000, 3000)) if (DateTime.parse(f.date).weekday == DateTime.saturday) f];
+      final r = [
+        for (final f in daily(1000, 3000))
+          if (DateTime.parse(f.date).weekday == DateTime.saturday) f
+      ];
       final fs = rhythm(r);
       expect(fs, hasLength(1));
       expect(fs.single.ratioPermille, isNull);
@@ -252,8 +260,7 @@ void main() {
     CategorizedTx sub(String month, int cents) => pay(month, cents, 'Bills & subscriptions', desc: 'POS NETFLIX.COM');
     // Earliest month 2025-09 at 1000; the latest full month with a payment is 2026-09 (12 months later); this month is quiet.
     List<CategorizedTx> rows(int latest, {String first = '2025-09'}) => [sub(first, 1000), sub('2026-09', latest), sub('2026-10', 1000)];
-    List<Finding> creep(List<CategorizedTx> r, {RecurringBill? b}) =>
-        kindOf_(fin(r, bills: [b ?? bill(r.first)]), FindingKind.slowCreep);
+    List<Finding> creep(List<CategorizedTx> r, {RecurringBill? b}) => kindOf_(fin(r, bills: [b ?? bill(r.first)]), FindingKind.slowCreep);
 
     test('exactly +25 % fires; subjectKey is the bill id', () {
       final fs = creep(rows(1250));
