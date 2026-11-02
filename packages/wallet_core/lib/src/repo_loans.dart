@@ -156,83 +156,161 @@ extension WalletRepoLoans on WalletRepo {
     return Loan.legacyId;
   }
 
-  /// Loan id → its candidate rows (`loanPayments`) split by the owner's answers ([loanMatches], `loan_pays`), for each
-  /// live loan with a payee key or reference (closed ones too: their past payments stay matched).
-  Map<String, LoanMatches> _loanMatches() {
-    final ls = [
-      for (final l in loans())
-        if ((l.payeeKey ?? '').isNotEmpty || (l.reference ?? '').trim().isNotEmpty) l
-    ];
-    if (ls.isEmpty) return const {};
-    final answers = <String, Map<String, bool>>{}, onFor = <String, Set<String>>{};
-    for (final r in db.select("SELECT loan_id, tx, state FROM loan_pays WHERE state IN ('on', 'off')")) {
-      final (loan, tx, on) = (r['loan_id'] as String, r['tx'] as String, r['state'] == 'on');
-      (answers[loan] ??= {})[tx] = on;
-      if (on) (onFor[tx] ??= {}).add(loan);
-    }
-    final currency = _readSettings(db).currency;
-    // shortcut: reads every row and its payee key on each call (categorizer builds too); keep the result per dataVersion
-    // if a wallet with loans gets slow.
-    final rows = transactions();
-    return {
-      for (final l in ls)
-        l.id: loanMatches(loanPayments(l, loanRates(l.id), loanChecks(l.id), rows, currency: currency), answers[l.id] ?? const {}, taken: {
-          for (final MapEntry(key: tx, value: on) in onFor.entries)
-            if (on.any((id) => id != l.id)) tx
-        }),
-    };
+  /// The loan payment decisions of the wallet as it is ([_LoanCache]): computed once per [dataVersion] (never cached
+  /// inside a write, whose rows may still roll back).
+  _LoanCache _loanState() {
+    if (!db.autocommit) return _computeLoanState();
+    if (_loanCache case (final int v, final _LoanCache c) when v == dataVersion) return c;
+    final c = _computeLoanState();
+    _loanCache = (dataVersion, c);
+    return c;
   }
 
-  /// The bank rows matched to a loan (`Categorizer.loanTx`: main tag "Loan", fixed).
-  Set<String> loanLinkedTx() => {
-        for (final m in _loanMatches().values)
-          for (final p in m.matched) p.txId
-      };
+  _LoanCache _computeLoanState() {
+    final ls = [
+      for (final l in loans())
+        if ((l.payeeKey ?? '').isNotEmpty || foldText(l.reference?.trim() ?? '').runes.length >= loanReferenceMinLength) l
+    ];
+    if (ls.isEmpty) return _LoanCache.none;
+    final t = PerfTimer('repo.loanPayments');
+    final currency = _readSettings(db).currency;
+    final keys = {
+      for (final l in ls)
+        if ((l.payeeKey ?? '').isNotEmpty) l.payeeKey!
+    };
+    final refs = {
+      for (final l in ls)
+        if (foldText(l.reference?.trim() ?? '') case final r when r.runes.length >= loanReferenceMinLength) r
+    };
+    final hits = [
+      for (final MapEntry(key: d, value: key) in _loanDescriptions().entries)
+        if (keys.contains(key) || (refs.isNotEmpty && refs.any((_loanFolds[d] ??= foldText(d)).contains))) d
+    ];
+    final rows = <Tx>[];
+    for (var i = 0; i < hits.length; i += 500) {
+      final part = hits.sublist(i, i + 500 > hits.length ? hits.length : i + 500);
+      rows.addAll([
+        for (final r in db.select('${WalletRepo._txSelect} WHERE tx.description IN (${List.filled(part.length, '?').join(', ')})', part))
+          Tx.fromRow(r)
+      ]);
+    }
+    final answers = <String, Map<String, bool>>{};
+    for (final r in db.select("SELECT loan_id, tx, state FROM loan_pays WHERE state IN ('on', 'off')")) {
+      (answers[r['loan_id'] as String] ??= {})[r['tx'] as String] = r['state'] == 'on';
+    }
+    final table = categoryTable();
+    final split = splits();
+    final byId = {for (final l in ls) l.id: l};
+    final schedules = {for (final l in ls) l.id: (loanRates(l.id), loanChecks(l.id))};
+    final d = loanPaymentDecisions(
+      {
+        for (final l in ls)
+          l.id: loanPayments(l, schedules[l.id]!.$1, schedules[l.id]!.$2, rows, currency: currency, keys: _loanKeys, folded: _loanFolds)
+      },
+      answers,
+      askOnly: {
+        for (final r in rows)
+          if ((r.category != null && table.isLive(r.category!)) || split.containsKey(r.id)) r.id
+      },
+    );
+    // A matched row is "Loan" (fixed) only while its loan has a plan line on the row's date (open, payment known and
+    // above 0): otherwise neither the plan nor spending would count it.
+    final loanTx = <String>{};
+    for (final MapEntry(key: id, value: list) in d.matched.entries) {
+      final l = byId[id]!;
+      if (!l.open) continue;
+      for (final p in list) {
+        if ((loanPaymentOn(l, schedules[id]!.$1, schedules[id]!.$2, p.date) ?? 0) > 0) loanTx.add(p.txId);
+      }
+    }
+    t.done({'loans': ls.length, 'descriptions': hits.length, 'rows': rows.length, 'matched': loanTx.length, 'asks': d.asks.length});
+    return _LoanCache(d, loanTx);
+  }
 
-  /// The "Loan payment?" asks (§5.5 step 4): rows found by a loan's payee key or reference that the owner has not
-  /// answered and no confirmed row of the same evidence covers, oldest first. Yes: [confirmLoanPayment]; no:
-  /// [unlinkLoanPayment].
-  List<({Loan loan, LoanPaymentMatch payment})> pendingLoanPayments() {
+  /// The descriptions of the bank outflows (description → payee key), kept in [_loanKeys] across data versions so a data
+  /// change costs only its new rows: rows are found by rowid (a row's description and kind never change once it has a
+  /// date; a row made by an op that arrived before its creation op, without a date yet, is looked at again). The set
+  /// only grows (a deleted row's description stays): `loanPayments` filters the rows read for it. Inside a write
+  /// (which may roll back and hand its rowids out again) the new rows are added to a copy, nothing is kept.
+  Map<String, String> _loanDescriptions() {
+    final keep = db.autocommit;
+    final out = keep ? _loanKeys : {..._loanKeys};
+    var last = _loanScanRowid;
+    final again = _loanRecheck.toList(), recheck = <int>{};
+    for (final r in db.select(
+        'SELECT rowid AS r, description, date, manual, amount FROM tx WHERE rowid > ?'
+        '${again.isEmpty ? '' : ' OR rowid IN (${again.join(', ')})'}',
+        [_loanScanRowid])) {
+      final rowid = r['r'] as int;
+      if (rowid > last) last = rowid;
+      if (r['date'] == '') {
+        recheck.add(rowid);
+      } else if (r['manual'] == 0 && (r['amount'] as int) < 0) {
+        final d = r['description'] as String;
+        out[d] ??= merchantKey(Tx(id: '', source: 'bank', date: '', amount: 0, description: d));
+      }
+    }
+    if (keep) {
+      _loanScanRowid = last;
+      _loanRecheck
+        ..clear()
+        ..addAll(recheck);
+    }
+    return out;
+  }
+
+  /// The bank rows that count as a loan payment (`Categorizer.loanTx`: main tag "Loan", fixed): matched rows of an open
+  /// loan with a plan line above 0 on the row's date.
+  Set<String> loanLinkedTx() => _loanState().loanTx;
+
+  /// The "Loan payment?" asks (§5.5 step 4), oldest first, each row once with every loan that may take it: rows a
+  /// loan's payee key or reference finds that the owner has not answered and that are not matched silently (several
+  /// loans may take it, the owner set its main tag or split it, or no confirmed row of the same evidence vouches for
+  /// it). Yes: [confirmLoanPayment] with the loan picked; no: [unlinkLoanPayment] for each loan.
+  List<({LoanPaymentMatch payment, List<Loan> loans})> pendingLoanPayments() {
+    final asks = _loanState().decisions.asks;
+    if (asks.isEmpty) return const [];
     final byId = {for (final l in loans()) l.id: l};
     return [
-      for (final MapEntry(key: id, value: m) in _loanMatches().entries)
-        for (final p in m.pending) (loan: byId[id]!, payment: p)
-    ]..sort(
-        (a, b) => a.payment.date != b.payment.date ? a.payment.date.compareTo(b.payment.date) : a.payment.txId.compareTo(b.payment.txId));
+      for (final a in asks) (payment: a.payment, loans: [for (final id in a.loanIds) byId[id]!])
+    ];
   }
 
   /// The rows matched to loan [loanId], oldest first ([LoanPaymentMatch.amountChanged] flags a payment that differs
-  /// from the schedule). Unknown or deleted loan: empty.
-  List<LoanPaymentMatch> loanMatchedPayments(String loanId) => _loanMatches()[loanId]?.matched ?? const [];
+  /// from the schedule), also those without a plan line (they count as spending). Unknown or deleted loan: empty.
+  List<LoanPaymentMatch> loanMatchedPayments(String loanId) => _loanState().decisions.matched[loanId] ?? const [];
 
   /// The dates of [loanMatchedPayments], for `loanState`.
   List<String> loanMatchedDates(String loanId) => [for (final p in loanMatchedPayments(loanId)) p.date];
 
-  /// "Loan payment?" yes, or Undo of [unlinkLoanPayment]: row [txId] pays loan [loanId], and later rows found by the same
-  /// evidence match silently. The row must be one the loan's payee key or reference finds (never by amount): else, or
-  /// for an unknown or deleted loan, [ArgumentError].
+  /// "Loan payment?" yes, or Undo of [unlinkLoanPayment]: row [txId] pays loan [loanId] (and no other loan: one write
+  /// also answers no for a loan it was confirmed for before), and later rows found by the same evidence match silently.
+  /// The row must be one the loan's payee key or reference finds (never by amount): else, or for an unknown or deleted
+  /// loan, [ArgumentError].
   void confirmLoanPayment(String loanId, String txId) {
     final l = loans().where((l) => l.id == loanId).firstOrNull;
     if (l == null) throw ArgumentError('No such loan.');
     final found = loanPayments(l, loanRates(loanId), loanChecks(loanId), [if (transaction(txId) case final t?) t],
         currency: _readSettings(db).currency);
     if (found.isEmpty) throw ArgumentError('This payment is not from the loan\'s lender or reference.');
-    _setLoanPay(loanId, txId, true);
+    final others = [
+      for (final r in db.select("SELECT loan_id FROM loan_pays WHERE tx = ? AND state = 'on' AND loan_id != ?", [txId, loanId]))
+        r['loan_id'] as String
+    ];
+    _write([_loanPay(loanId, txId, true), for (final o in others) _loanPay(o, txId, false)]);
+    logEvent(_log, Level.INFO, 'loan.payment', {'on': true, 'moved': others.length});
   }
 
   /// Unlink (or "Loan payment?" no): row [txId] is not a payment of loan [loanId] and is never matched to it again; its
   /// main tag goes back to what the rules say. Undo: [confirmLoanPayment]. Unknown or deleted loan: [ArgumentError].
   void unlinkLoanPayment(String loanId, String txId) {
     _liveLoan(loanId);
-    _setLoanPay(loanId, txId, false);
+    _write([_loanPay(loanId, txId, false)]);
+    logEvent(_log, Level.INFO, 'loan.payment', {'on': false});
   }
 
-  void _setLoanPay(String loanId, String txId, bool on) {
-    _write([
-      (LoanPayCols.entity, '$loanId|$txId', {'loan_id': loanId, 'tx': txId, 'state': on ? 'on' : 'off'})
-    ]);
-    logEvent(_log, Level.INFO, 'loan.payment', {'on': on});
-  }
+  (String, String, Map<String, Object?>) _loanPay(String loanId, String txId, bool on) =>
+      (LoanPayCols.entity, '$loanId|$txId', {'loan_id': loanId, 'tx': txId, 'state': on ? 'on' : 'off'});
 
   /// The loan a bought goal becomes: one id per goal, so buying on two devices offline makes one loan.
   static String goalLoanId(String goalId) => 'l:goal:$goalId';
@@ -318,4 +396,12 @@ extension WalletRepoLoans on WalletRepo {
     ]);
     logEvent(_log, Level.INFO, 'goal.unbought', {'loans': loanIds.length, 'out': out});
   }
+}
+
+/// One data version's loan payment state ([WalletRepoLoans._loanState]).
+class _LoanCache {
+  final LoanDecisions decisions;
+  final Set<String> loanTx;
+  const _LoanCache(this.decisions, this.loanTx);
+  static const none = _LoanCache(LoanDecisions.none, {});
 }

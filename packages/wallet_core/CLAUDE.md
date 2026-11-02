@@ -521,14 +521,19 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   sums. No migration: the old setting keeps counting (and `loanLeft` reads it) until the owner runs
   `convertLegacyLoan(...)` (one write: row `loan:settings` with payment = the setting, setting → 0; an older build
   setting `loan` again later counts on top). Matched payments (E6c): entity `loanpay` (`LoanPayCols`, table
-  `loan_pays`, id `<loanId>|<txId>`, state on/off, like `txtag`; per pair so two devices' answers never clobber);
-  pure `loanMatches(candidates, answers, taken:)`: on = matched, off = never again, unanswered = matched silently when
-  an on row was found by the same evidence (`LoanPaymentMatch.byKey`/`byRef`), else asked; rows on for another loan
-  are not asked. Repo `pendingLoanPayments()`, `confirmLoanPayment` (the row must be a candidate; also Undo of an
-  unlink), `unlinkLoanPayment`, `loanMatchedPayments`, `loanMatchedDates` (for `loanState`), `loanLinkedTx()` →
-  `Categorizer(loanTx:)`: main tag "Loan" before any other rule (fixed: counts in the plan's loan line, never as
-  flexible spending; `fixedPaid['Loan']`), never split. A deleted row or loan simply stops matching. Tests:
-  `test/eng_loans_test.dart`, `test/eng_loan_pay_test.dart`.
+  `loan_pays`, id `<loanId>|<txId>`, state on/off, like `txtag`; per pair so two devices' answers never clobber).
+  Pure `loanPaymentDecisions(candidatesByLoan, answersByLoan, askOnly:)` → `LoanDecisions {matched, asks}`, per row:
+  on = that loan only (two loans on: smallest id), off = never that loan again; otherwise matched silently only when
+  exactly one loan may take it, it is not in `askOnly` (owner main tag or split) and an on row of that loan shares
+  its evidence (`LoanPaymentMatch.byKey`/`byRef`); else asked once naming every such loan. Repo
+  `pendingLoanPayments()` → `({payment, loans})`, `confirmLoanPayment` (a candidate only; also answers no for a loan
+  it was on for; Undo of an unlink), `unlinkLoanPayment`, `loanMatchedPayments`, `loanMatchedDates` (for
+  `loanState`), `loanLinkedTx()` → `Categorizer(loanTx:)` = matched rows of an open loan whose `loanPaymentOn` the
+  row's date is > 0 (no plan line: the row keeps its tag and counts as spending, still matched): main tag "Loan"
+  before any rule (fixed, `fixedPaid['Loan']`), counted whole (a split shows `splitBroken`; `setSplit` refuses).
+  Cached per `dataVersion` (never inside a write); bank outflow descriptions → payee keys kept across versions and
+  scanned by rowid (`_loanDescriptions`): ≈5 ms per data change on 20k rows, ≈110 ms the first time. A deleted row
+  or loan simply stops matching. Tests: `test/eng_loans_test.dart`, `test/eng_loan_pay_test.dart`.
 - `loan.dart` — `loanLeft(settings, today)` → `LoanLeft {payments, cents, endMonth}` or null (no loan, no `loanEnd`, none left): counts the months from today's month to `loanEnd` inclusive whose payday (`paydayDay`, clamped to the month's last day) is today or later; `cents = payments × loan` (no interest data). Tests: `test/loan_left_test.dart`.
 - `dates.dart` — `YYYY-MM-DD` string helpers; payday rule `paydayIn`/`nextPayday`/`previousPayday` (rule C,
   RX7e, see H2). `hlc.dart` (H7 bounded HLC: `maxClockDrift` 1 h; an owner write (the

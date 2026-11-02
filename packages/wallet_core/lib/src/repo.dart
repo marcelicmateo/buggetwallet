@@ -284,6 +284,14 @@ class WalletRepo {
 
   /// [WalletRepoFx.ecbRates]'s last result and the [dataVersion] it was read at (UX-FX).
   (int, EcbRates)? _ecbCache;
+
+  /// [WalletRepoLoans]' loan payment state and the [dataVersion] it was made at (ENG E6c), and its description → payee
+  /// key / folded text caches over the bank outflows' descriptions, scanned up to rowid [_loanScanRowid] plus rows
+  /// without a date yet ([_loanRecheck]), kept across data versions.
+  (int, _LoanCache)? _loanCache;
+  final _loanKeys = <String, String>{}, _loanFolds = <String, String>{};
+  final _loanRecheck = <int>{};
+  int _loanScanRowid = 0;
   int _digestRuns = 0;
 
   /// The database file and its key when opened by [open] (native): [WalletRepoSyncApply.stateDigestAsync] reads it on

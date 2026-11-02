@@ -442,9 +442,10 @@ class Categorizer {
   /// while account balances (raw rows) still count it. A split on such a row is ignored, as on a transfer. Empty: none.
   final Set<String> iouTx;
 
-  /// Ids of the bank rows matched to a loan (ENG E6, `WalletRepoLoans.loanLinkedTx`, read once): their main tag is the
-  /// fixed "Loan" (before any other rule or the row's own category; Unlink is the way out), so the row counts once, in
-  /// the plan's loan line, never as flexible spending. Never split. Empty: none.
+  /// Ids of the bank rows matched to a loan with a plan line (ENG E6, `WalletRepoLoans.loanLinkedTx`, read once): their
+  /// main tag is the fixed "Loan" (before any other rule; a row with the owner's own main tag or a split is here only
+  /// once the owner answered yes), so the row counts once, in the plan's loan line, never as flexible spending. Counted
+  /// whole: a split on it is shown broken. Empty: none.
   final Set<String> loanTx;
 
   /// [patternRules] (P7, [WalletSettings.patternRules]) are the personal patterns with their match kind and range; when
@@ -689,7 +690,9 @@ class Categorizer {
     final stored = splits[t.id];
     if (stored == null || !t.live) return [categorize(t)];
     final whole = categorize(t);
-    if (t.transferTo != null || whole.kind == BudgetKind.transfer || loanTx.contains(t.id)) return [whole];
+    // A loan payment counts whole (its split, made before the owner confirmed it, shows as broken).
+    if (loanTx.contains(t.id)) return [CategorizedTx(t, whole.category, whole.kind, tags: whole.tags, splitBroken: true, iou: whole.iou)];
+    if (t.transferTo != null || whole.kind == BudgetKind.transfer) return [whole];
     final fallbackOk = table.isLive(whole.category) && whole.kind != BudgetKind.transfer;
     if (!splitFits(t.amount, stored) || (!fallbackOk && stored.any((p) => !table.isLive(p.category)))) {
       return [CategorizedTx(t, whole.category, whole.kind, tags: whole.tags, splitBroken: true, iou: whole.iou)];

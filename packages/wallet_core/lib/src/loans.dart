@@ -342,31 +342,68 @@ class LoanPaymentMatch {
   const LoanPaymentMatch(this.txId, this.date, this.amount, this.amountChanged, {this.byKey = false, this.byRef = false});
 }
 
-/// One loan's candidate rows split by the owner's answers ([loanMatches]): [matched] pay the loan (main tag "Loan"),
-/// [pending] ask "Loan payment?". Both oldest first.
-class LoanMatches {
-  final List<LoanPaymentMatch> matched, pending;
-  const LoanMatches(this.matched, this.pending);
+/// What the owner's answers make of every loan's candidate rows ([loanPaymentDecisions]): [matched] = loan id → the
+/// rows that pay it, oldest first; [asks] = the rows to ask "Loan payment?" about, oldest first, each once with the ids
+/// of the loans that may take it (sorted; its [LoanPaymentMatch] is the first one's).
+class LoanDecisions {
+  final Map<String, List<LoanPaymentMatch>> matched;
+  final List<({LoanPaymentMatch payment, List<String> loanIds})> asks;
+  const LoanDecisions(this.matched, this.asks);
+  static const none = LoanDecisions({}, []);
 }
 
-/// [candidates] of one loan (`loanPayments`) against the owner's [answers] (tx id → true = `on`, false = `off`,
-/// [LoanPayCols]). A row answered on is matched; off is never matched again. An unanswered row is matched silently
-/// when a row answered on was found by the same evidence (payee key or reference, never the amount), else it is asked.
-/// Unanswered rows in [taken] (answered on for another loan) are left out.
-LoanMatches loanMatches(List<LoanPaymentMatch> candidates, Map<String, bool> answers, {Set<String> taken = const {}}) {
-  var key = false, ref = false;
-  for (final c in candidates) {
-    if (answers[c.txId] != true) continue;
-    key |= c.byKey;
-    ref |= c.byRef;
+/// Every loan's [candidates] (loan id → `loanPayments`) against the owner's [answers] (loan id → tx id → true = `on`,
+/// false = `off`, [LoanPayCols]), decided per row, the same on every device:
+/// - a row answered on pays that loan only (two loans answered on: the smallest id), and no other loan sees it;
+/// - a row answered off for a loan is never matched to it again;
+/// - otherwise it is matched silently only when exactly one loan may still take it, it is not in [askOnly] (the owner
+///   set its main tag, or split it) and a row answered on for that loan was found by the same evidence (payee key or
+///   reference, never the amount); every other such row is asked, once, naming every loan that may take it.
+LoanDecisions loanPaymentDecisions(Map<String, List<LoanPaymentMatch>> candidates, Map<String, Map<String, bool>> answers,
+    {Set<String> askOnly = const {}}) {
+  final byTx = <String, Map<String, LoanPaymentMatch>>{};
+  for (final MapEntry(key: loan, value: list) in candidates.entries) {
+    for (final c in list) {
+      (byTx[c.txId] ??= {})[loan] = c;
+    }
   }
-  final matched = <LoanPaymentMatch>[], pending = <LoanPaymentMatch>[];
-  for (final c in candidates) {
-    final a = answers[c.txId];
-    if (a == false || (a == null && taken.contains(c.txId))) continue;
-    (a == true || (key && c.byKey) || (ref && c.byRef) ? matched : pending).add(c);
+  final owner = <String, String>{};
+  final byKey = <String>{}, byRef = <String>{};
+  for (final MapEntry(key: tx, value: finders) in byTx.entries) {
+    final on = [
+      for (final l in finders.keys)
+        if (answers[l]?[tx] == true) l
+    ]..sort();
+    if (on.isEmpty) continue;
+    final c = finders[owner[tx] = on.first]!;
+    if (c.byKey) byKey.add(on.first);
+    if (c.byRef) byRef.add(on.first);
   }
-  return LoanMatches(matched, pending);
+  final matched = {for (final l in candidates.keys) l: <LoanPaymentMatch>[]};
+  final asks = <({LoanPaymentMatch payment, List<String> loanIds})>[];
+  for (final MapEntry(key: tx, value: finders) in byTx.entries) {
+    if (owner[tx] case final l?) {
+      matched[l]!.add(finders[l]!);
+      continue;
+    }
+    final open = [
+      for (final l in finders.keys)
+        if (answers[l]?[tx] != false) l
+    ]..sort();
+    if (open.isEmpty) continue;
+    final c = finders[open.first]!;
+    if (open.length == 1 && !askOnly.contains(tx) && ((c.byKey && byKey.contains(open.first)) || (c.byRef && byRef.contains(open.first)))) {
+      matched[open.first]!.add(c);
+    } else {
+      asks.add((payment: c, loanIds: open));
+    }
+  }
+  int order(LoanPaymentMatch a, LoanPaymentMatch b) => a.date != b.date ? a.date.compareTo(b.date) : a.txId.compareTo(b.txId);
+  for (final list in matched.values) {
+    list.sort(order);
+  }
+  asks.sort((a, b) => order(a.payment, b.payment));
+  return LoanDecisions(matched, asks);
 }
 
 /// The minimum length of [Loan.reference] (shorter text would match unrelated rows).
@@ -375,8 +412,10 @@ const loanReferenceMinLength = 4;
 /// The rows that pay [l], oldest first: live bank outflows (not hand-added, no own transfer) in [currency], from 15
 /// days before the first due date (when known) up to the closing date, whose payee key is [Loan.payeeKey] or whose
 /// description holds [Loan.reference] (at least [loanReferenceMinLength] characters; case and accents ignored). Never
-/// by amount: a row of another payee with the loan's amount is not a payment.
-List<LoanPaymentMatch> loanPayments(Loan l, List<LoanRate> rates, List<LoanCheck> checks, Iterable<Tx> rows, {required String currency}) {
+/// by amount: a row of another payee with the loan's amount is not a payment. [keys] / [folded]: optional caches,
+/// description → its payee key / folded text (a bank row's key depends on its description only).
+List<LoanPaymentMatch> loanPayments(Loan l, List<LoanRate> rates, List<LoanCheck> checks, Iterable<Tx> rows,
+    {required String currency, Map<String, String>? keys, Map<String, String>? folded}) {
   final key = l.payeeKey ?? '';
   final rawRef = foldText(l.reference?.trim() ?? '');
   final ref = rawRef.runes.length >= loanReferenceMinLength ? rawRef : '';
@@ -387,7 +426,9 @@ List<LoanPaymentMatch> loanPayments(Loan l, List<LoanRate> rates, List<LoanCheck
   for (final t in rows) {
     if (!t.live || t.manual || t.amount >= 0 || t.currency != currency || t.transferTo != null) continue;
     if ((from != null && t.date.compareTo(from) < 0) || (l.closedAt != null && t.date.compareTo(l.closedAt!) > 0)) continue;
-    final byKey = key.isNotEmpty && merchantKey(t) == key, byRef = ref.isNotEmpty && foldText(t.description).contains(ref);
+    final byKey = key.isNotEmpty && (keys == null ? merchantKey(t) : keys[t.description] ??= merchantKey(t)) == key;
+    final byRef =
+        ref.isNotEmpty && (folded == null ? foldText(t.description) : folded[t.description] ??= foldText(t.description)).contains(ref);
     if (!byKey && !byRef) continue;
     final (expected, last) = _paymentOn(l, rates, schedule, t.date);
     out.add(LoanPaymentMatch(t.id, t.date, -t.amount, !last && expected != null && -t.amount != expected, byKey: byKey, byRef: byRef));

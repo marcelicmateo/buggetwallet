@@ -156,6 +156,138 @@ void main() {
         isEmpty
       ]);
     });
+
+    test('two loans at one lender: every row is asked once naming both, never matched silently; each month counts once per loan', () {
+      final aId = loanByKey();
+      final augA = repo.transactions().single.id;
+      final key = _keyOf(repo, augA);
+      final bId = repo.addLoan(Loan(id: '', name: 'Boat', payment: 30000, payeeKey: key));
+      final augB = _import(repo, '2026-08-16', -30000, _payee);
+      final sepA = _import(repo, '2026-09-15', -20000, _payee), sepB = _import(repo, '2026-09-16', -30000, _payee);
+      final both = ([aId, bId]..sort());
+      expect([
+        for (final p in repo.pendingLoanPayments()) [p.payment.txId, for (final l in p.loans) l.id]
+      ], [
+        for (final t in [augA, augB, sepA, sepB]) [t, ...both]
+      ]);
+      repo.confirmLoanPayment(aId, augA);
+      repo.confirmLoanPayment(bId, augB);
+      expect(_pending(repo), [sepA, sepB], reason: 'two loans may take them: asked, never matched silently');
+      repo.confirmLoanPayment(bId, sepA); // a wrong pick, then moved
+      repo.confirmLoanPayment(aId, sepA);
+      repo.confirmLoanPayment(bId, sepB);
+      expect([
+        repo.loanMatchedDates(aId),
+        repo.loanMatchedDates(bId),
+        _pending(repo)
+      ], [
+        ['2026-08-15', '2026-09-15'],
+        ['2026-08-16', '2026-09-16'],
+        isEmpty
+      ]);
+      for (final t in [augA, augB, sepA, sepB]) {
+        expect(_tag(repo, t), 'Loan');
+      }
+    });
+
+    test('no hidden payments: a loan without a known payment matches but its row stays spending', () {
+      final probe = _import(repo, '2026-08-15', -20000, _payee);
+      final id = repo.addLoan(Loan(id: '', name: 'Car', payeeKey: _keyOf(repo, probe)));
+      repo.confirmLoanPayment(id, probe);
+      expect([
+        repo.loanMatchedDates(id),
+        repo.categorizer().loanTx,
+        _tag(repo, probe)
+      ], [
+        ['2026-08-15'],
+        isEmpty,
+        'Bills & one-offs'
+      ]);
+      repo.patch(LoanCols.entity, id, <Col, Object?>{LoanCols.payment: 20000});
+      expect(_tag(repo, probe), 'Loan', reason: 'once the plan has its line');
+    });
+
+    test('no hidden payments: the last payment in the period the loan closes counts as spending', () {
+      repo.updateSettings({'salary': 300000, 'paydayDay': 15, 'periodStart': '2026-10-15'});
+      final probe = _import(repo, '2026-08-15', -20000, _payee);
+      final id = repo.addLoan(Loan(id: '', name: 'Car', payment: 20000, payeeKey: _keyOf(repo, probe)));
+      final oct = _import(repo, '2026-10-20', -20000, _payee);
+      repo.confirmLoanPayment(id, oct);
+      PeriodBudget period() => computePeriod(repo.categorizer().expandAll(repo.transactions()), repo.settings(), repo.goals(), _today,
+          table: repo.categoryTable());
+      expect([period().spent, period().flexBudget], [0, 280000]);
+      repo.closeLoan(id, '2026-11-01');
+      final p = period();
+      expect([p.flexBudget, p.spent, p.remaining], [300000, 20000, 280000], reason: 'the plan line ended: the payment is spending');
+      expect([_tag(repo, oct), repo.loanMatchedDates(id).last], ['Bills & one-offs', '2026-10-20'], reason: 'still matched for loanState');
+    });
+
+    test('the owner\'s main tag wins: an extra repayment tagged Savings stays Savings until the owner answers yes', () async {
+      final id = loanByKey();
+      repo.confirmLoanPayment(id, repo.transactions().single.id);
+      final savings = await repo.addCategory(name: 'Savings', kind: BudgetKind.flex);
+      final extra = _import(repo, '2026-09-20', -50000, _payee);
+      repo.setCategory(extra, savings);
+      expect([
+        _pending(repo),
+        _tag(repo, extra)
+      ], [
+        [extra],
+        savings
+      ], reason: 'asked, never matched silently');
+      repo.confirmLoanPayment(id, extra);
+      expect([
+        _pending(repo),
+        _tag(repo, extra),
+        repo.loanMatchedDates(id)
+      ], [
+        isEmpty,
+        'Loan',
+        ['2026-08-15', '2026-09-20']
+      ]);
+    });
+
+    test('a split row is asked; once confirmed it counts whole as Loan and its split shows broken', () {
+      final id = loanByKey();
+      final aug = repo.transactions().single.id;
+      final sep = _import(repo, '2026-09-15', -20000, _payee);
+      repo.setSplit(sep, const [SplitPart(amount: -10000, category: 'Shopping'), SplitPart(amount: -10000, category: 'Groceries')]);
+      repo.confirmLoanPayment(id, aug);
+      expect(_pending(repo), [sep]);
+      expect(repo.categorizer().expand(repo.transaction(sep)!), hasLength(2), reason: 'unanswered: the split counts');
+      repo.confirmLoanPayment(id, sep);
+      final rows = repo.categorizer().expand(repo.transaction(sep)!);
+      expect([rows.length, rows.single.category, rows.single.amount, rows.single.splitBroken], [1, 'Loan', -20000, true]);
+    });
+
+    test('perf: 20k rows, loan payments worked out once per data version', () {
+      const rowCount = 20000;
+      repo.importBatch(ImportBatch(source: 'pbz', transactions: [
+        for (var i = 0; i < rowCount; i++)
+          n('2025-${(i % 12 + 1).toString().padLeft(2, '0')}-${(i % 28 + 1).toString().padLeft(2, '0')}', -(100 + i), 'Nalog',
+              'SYNTH SHOP ${String.fromCharCode(97 + i % 26)}${String.fromCharCode(97 + i ~/ 26 % 26)} $i'),
+        for (var m = 1; m <= 12; m++) n('2025-${m.toString().padLeft(2, '0')}-15', -20000, 'Nalog', _payee),
+      ]));
+      int ms(void Function() f) {
+        final sw = Stopwatch()..start();
+        f();
+        return sw.elapsedMicroseconds;
+      }
+
+      final base = [for (var i = 0; i < 5; i++) ms(() => repo.categorizer())]..sort();
+      final probe = repo.transactions().firstWhere((t) => t.description == _payee);
+      final id = repo.addLoan(Loan(id: '', name: 'Car', payment: 20000, payeeKey: merchantKey(probe)));
+      final cold = ms(() => repo.categorizer());
+      repo.confirmLoanPayment(id, probe.id);
+      final recompute = ms(() => repo.categorizer());
+      final cached = [for (var i = 0; i < 5; i++) ms(() => repo.categorizer())]..sort();
+      expect(repo.loanMatchedDates(id), hasLength(12));
+      // ignore: avoid_print
+      print('loan payments, ${rowCount + 12} rows: categorizer ${base[2]} us without loans, first $cold us, after a data change '
+          '$recompute us, cached ${cached[2]} us');
+      expect(cached[2] - base[2], lessThan(10000), reason: 'cached per data version: about nothing added');
+      expect(recompute - base[2], lessThan(50000), reason: 'loose bound for a shared laptop; about 5 ms here');
+    });
   });
 
   group('two devices', () {
