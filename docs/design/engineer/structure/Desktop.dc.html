@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Desktop — Today</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+.r{font-family:'Geist',system-ui,sans-serif;color:#16181D;background:#F5F5F2;position:relative;overflow:hidden;box-sizing:border-box}
+.r *{box-sizing:border-box}
+.m{font-family:'Geist Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.card{background:#FFFFFF;border:1px solid #E2E3DE;border-radius:16px}
+.ey{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#5B606B}
+.mu{color:#5B606B}
+.nv{display:flex;align-items:center;gap:12px;min-height:44px;padding:0 12px;border-radius:10px;color:#3F444D;text-decoration:none;font-size:15px;font-weight:500}
+.nv.on{background:#FFFFFF;color:#16181D;font-weight:600;border:1px solid #E2E3DE}
+.kbd{margin-left:auto;font:500 11px 'Geist Mono',monospace;color:#5B606B}
+.row{display:flex;align-items:center;gap:12px;min-height:48px;padding:6px 16px;border-top:1px solid #EEEFEA;font-size:14px}
+.tag{font-size:12px;font-weight:500;color:#3F444D;background:#EEEFEA;border-radius:6px;padding:1px 6px}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:0 14px;border-radius:10px;border:0;background:#16181D;color:#FFFFFF;font:600 14px 'Geist',sans-serif;cursor:pointer;text-decoration:none}
+.btn2{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:0 14px;border-radius:10px;border:1px solid #CFD1CB;background:#FFFFFF;color:#16181D;font:600 14px 'Geist',sans-serif;cursor:pointer}
+svg{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+a{color:#0D6B58}a:hover{color:#0A5546}
+</style>
+</helmet>
+<div class="r" style="width: 1440px; height: 900px; display: grid; grid-template-columns: 240px minmax(0, 1fr) 380px">
+  <aside style="padding: 20px 14px; display: flex; flex-direction: column; gap: 6px; border-right: 1px solid #E2E3DE">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 0 8px 14px">
+      <span style="width: 32px; height: 32px; border-radius: 10px; background: #0D6B58; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="3"></rect><path d="M3 10h18"></path></svg></span>
+      <span style="font-size: 16px; font-weight: 700">Budget Wallet</span>
+    </div>
+    <a class="btn" href="Add.dc.html" style="background: #0D6B58; justify-content: flex-start; gap: 10px; min-height: 44px; margin-bottom: 10px"><svg width="18" height="18" viewBox="0 0 24 24" style="stroke-width: 2.2" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Add<span class="kbd" style="color: #CFE9E0">Ctrl N</span></a>
+    <nav aria-label="Main" style="display: flex; flex-direction: column; gap: 2px">
+      <a class="nv on" href="Today.dc.html" aria-current="page">Today<span class="kbd">1</span></a>
+      <a class="nv" href="Money.dc.html">Money<span class="kbd">2</span></a>
+      <a class="nv" href="Insights.dc.html">Insights<span class="kbd">3</span></a>
+      <a class="nv" href="Plan.dc.html">Plan<span class="kbd">4</span></a>
+    </nav>
+    <div style="margin-top: auto; display: flex; flex-direction: column; gap: 2px">
+      <span class="mu" style="font-size: 12px; padding: 0 12px 6px">Synced 3 min ago · 2 devices</span>
+      <a class="nv" href="Settings.dc.html">Settings<span class="kbd">Ctrl ,</span></a>
+    </div>
+  </aside>
+
+  <main style="padding: 24px 28px; display: flex; flex-direction: column; gap: 16px; min-width: 0">
+    <header style="display: flex; justify-content: space-between; align-items: center">
+      <div><h1 style="margin: 0; font-size: 26px; font-weight: 700">Monday, 2 Nov</h1><a href="Payday.dc.html" class="mu" style="font-size: 14px; text-decoration: none">Pay period 15 Oct – 14 Nov · day 18 of 31</a></div>
+      <label style="display: flex; align-items: center; gap: 8px; min-height: 40px; width: 320px; padding: 0 12px; border: 1px solid #CFD1CB; border-radius: 10px; background: #FFFFFF"><svg width="18" height="18" viewBox="0 0 24 24" class="mu" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 4 4"></path></svg><input placeholder="Search payments, payees, amounts" aria-label="Search" style="border: 0; outline: none; flex: 1; font: 400 14px 'Geist', sans-serif; background: transparent"><span class="kbd">Ctrl F</span></label>
+    </header>
+
+    <div style="display: grid; grid-template-columns: 1.15fr 1fr; gap: 16px">
+      <section class="card" style="padding: 22px; display: flex; flex-direction: column; gap: 12px">
+        <div class="ey">Safe to spend today</div>
+        <div style="display: flex; align-items: baseline; gap: 10px"><span class="m" style="font-size: 64px; line-height: 64px; font-weight: 600; letter-spacing: -0.03em">23.40</span><span class="m" style="font-size: 28px">€</span></div>
+        <div style="font-size: 15px">Spend nothing more and tomorrow is <span class="m" style="font-weight: 600">26.10 €</span>.</div>
+        <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+          <div><div class="mu" style="font-size: 12px">Spent today</div><div class="m" style="font-weight: 600">8.60 €</div></div>
+          <div><div class="mu" style="font-size: 12px">Per day plan</div><div class="m" style="font-weight: 600">24.00 €</div></div>
+          <div><div class="mu" style="font-size: 12px">Pace</div><div style="font-weight: 600; color: #0D6B58">31 € ahead</div></div>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px" role="img" aria-label="31 days: 14 within plan, 3 over, today, 13 to come">
+          <sc-for list="{{days}}" as="d" hint-placeholder-count="31"><span style="{{d.style}}"></span></sc-for>
+        </div>
+      </section>
+      <section class="card" style="padding: 0; overflow: hidden">
+        <div style="display: flex; justify-content: space-between; padding: 16px"><span style="font-size: 16px; font-weight: 700">Before payday</span><span class="m" style="font-weight: 600">412.00 € held</span></div>
+        <div class="row"><span class="m mu" style="width: 52px">9 Nov</span><span style="flex: 1">Rent <span class="tag">fixed</span></span><span class="m">350.00 €</span></div>
+        <div class="row"><span class="m mu" style="width: 52px">12 Nov</span><span style="flex: 1">Phone <span class="tag">recurring</span></span><span class="m">22.00 €</span></div>
+        <div class="row"><span class="m mu" style="width: 52px">14 Nov</span><span style="flex: 1">Dentist <span class="tag">calendar</span></span><span class="m">40.00 €</span></div>
+        <div class="row" style="background: #FBEBE2; border-top-color: #F1CDB9"><span style="flex: 1; color: #8A3312"><b>Current account</b> below zero around 9 Nov</span></div>
+      </section>
+    </div>
+
+    <section class="card" style="padding: 0; overflow: hidden">
+      <div style="display: flex; justify-content: space-between; padding: 16px"><span style="font-size: 16px; font-weight: 700">Recent</span><a href="Money.dc.html" style="font-size: 14px; font-weight: 600; text-decoration: none">All payments ›</a></div>
+      <div class="row" style="font-weight: 600; color: #5B606B; font-size: 12px; min-height: 36px"><span style="width: 90px">Date</span><span style="flex: 1">Payee</span><span style="width: 160px">Tag</span><span style="width: 120px">Account</span><span style="width: 110px; text-align: right">Amount</span></div>
+      <div class="row"><span class="mu" style="width: 90px">Today</span><span style="flex: 1">Corner bakery</span><span style="width: 160px"><span class="tag">Food</span></span><span class="mu" style="width: 120px">Cash</span><span class="m" style="width: 110px; text-align: right">−4.20 €</span></div>
+      <div class="row"><span class="mu" style="width: 90px">Today</span><span style="flex: 1">Supermarket</span><span style="width: 160px"><span class="tag">Groceries</span></span><span class="mu" style="width: 120px">Current</span><span class="m" style="width: 110px; text-align: right">−4.40 €</span></div>
+      <div class="row"><span class="mu" style="width: 90px">1 Nov</span><span style="flex: 1">Fuel station</span><span style="width: 160px"><span class="tag">Transport</span></span><span class="mu" style="width: 120px">Current</span><span class="m" style="width: 110px; text-align: right">−52.00 €</span></div>
+      <div class="row"><span class="mu" style="width: 90px">1 Nov</span><span style="flex: 1">Bookshop <span class="mu" style="font-size: 12px">18.00 $</span></span><span style="width: 160px"><span class="tag">Books</span></span><span class="mu" style="width: 120px">Revolut</span><span class="m" style="width: 110px; text-align: right">−16.63 €</span></div>
+      <div class="row"><span class="mu" style="width: 90px">31 Oct</span><span style="flex: 1">Side job</span><span style="width: 160px"><span class="tag">Extra income</span></span><span class="mu" style="width: 120px">Current</span><span class="m" style="width: 110px; text-align: right; color: #0D6B58; font-weight: 600">+120.00 €</span></div>
+    </section>
+  </main>
+
+  <aside style="border-left: 1px solid #E2E3DE; background: #FFFFFF; padding: 24px 20px; display: flex; flex-direction: column; gap: 12px">
+    <div style="display: flex; justify-content: space-between; align-items: baseline"><h2 style="margin: 0; font-size: 18px; font-weight: 700">Needs you</h2><span class="m mu">4</span></div>
+    <div class="card" style="padding: 14px; display: flex; flex-direction: column; gap: 8px">
+      <div style="display: flex; justify-content: space-between"><span class="tag">Bill to check</span><span class="m" style="font-weight: 600">48.20 €</span></div>
+      <div style="font-size: 14px; font-weight: 600">Electricity slip, due 20 Nov</div>
+      <div style="display: flex; gap: 8px"><a class="btn" href="Bill.dc.html">Check bill</a><button class="btn2">Later</button></div>
+    </div>
+    <div class="card" style="padding: 14px; display: flex; flex-direction: column; gap: 8px">
+      <div style="display: flex; justify-content: space-between"><span class="tag">Recurring bill found</span><span class="m" style="font-weight: 600">9.99 €</span></div>
+      <div style="font-size: 14px; font-weight: 600">Streaming, every month</div>
+      <div style="display: flex; gap: 8px"><button class="btn">Confirm</button><button class="btn2">Not a bill</button></div>
+    </div>
+    <div class="card" style="padding: 14px; display: flex; flex-direction: column; gap: 8px">
+      <div style="display: flex; justify-content: space-between"><span class="tag">Wish ready</span><span class="m" style="font-weight: 600">89.00 €</span></div>
+      <div style="font-size: 14px; font-weight: 600">Headphones: 72 hours are over</div>
+      <div style="display: flex; gap: 8px"><button class="btn">Buy it</button><button class="btn2">Skip</button></div>
+    </div>
+    <a href="Inbox.dc.html" style="font-size: 14px; font-weight: 600; text-decoration: none; min-height: 44px; display: flex; align-items: center">Start weekly review ›</a>
+  </aside>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const over = [4, 9, 13];
+    const days = [];
+    for (let i = 1; i <= 31; i++) {
+      let style;
+      if (i === 18) style = 'width:12px;height:12px;border-radius:50%;border:2px solid #16181D';
+      else if (i > 18) style = 'width:12px;height:12px;border-radius:50%;background:#E2E3DE';
+      else if (over.indexOf(i) >= 0) style = 'width:9px;height:9px;margin:1.5px;background:#B4441A;transform:rotate(45deg)';
+      else style = 'width:12px;height:12px;border-radius:50%;background:#0D6B58';
+      days.push({ style: style });
+    }
+    return { days: days };
+  }
+}
+</script>
+</body>
+</html>

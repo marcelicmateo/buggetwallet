@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Needs you</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+.r{font-family:'Geist',system-ui,sans-serif;color:#16181D;background:#F5F5F2;position:relative;overflow:hidden;box-sizing:border-box}
+.r *{box-sizing:border-box}
+.m{font-family:'Geist Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.card{background:#FFFFFF;border:1px solid #E2E3DE;border-radius:16px}
+.mu{color:#5B606B}
+.tag{font-size:12px;font-weight:600;color:#3F444D;background:#EEEFEA;border-radius:6px;padding:2px 7px}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 16px;border-radius:12px;border:0;background:#16181D;color:#FFFFFF;font:600 14px 'Geist',sans-serif;text-decoration:none;cursor:pointer}
+.btn2{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 16px;border-radius:12px;border:1px solid #CFD1CB;background:#FFFFFF;color:#16181D;font:600 14px 'Geist',sans-serif;text-decoration:none;cursor:pointer}
+.step{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:500;color:#5B606B}
+.bar{height:4px;border-radius:2px;background:#E2E3DE}
+.bar.done{background:#0D6B58}
+.bar.now{background:#16181D}
+svg{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+a{color:#0D6B58}a:hover{color:#0A5546}
+</style>
+</helmet>
+<div class="r" style="width: 390px; height: 1100px; padding: 12px 16px 24px; display: flex; flex-direction: column; gap: 12px">
+  <header style="display: flex; align-items: center; gap: 4px">
+    <a href="Today.dc.html" aria-label="Back to Today" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #16181D"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></a>
+    <h1 style="margin: 0; font-size: 22px; font-weight: 700; flex: 1">Needs you</h1>
+    <span class="m mu" style="font-size: 14px">{{count}} left</span>
+  </header>
+
+  <section class="card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+    <div style="display: flex; justify-content: space-between; align-items: baseline">
+      <span style="font-size: 15px; font-weight: 700">Weekly review</span>
+      <span class="mu" style="font-size: 13px">about 5 min</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+      <div class="step"><span class="bar done"></span>1 · Import ✓</div>
+      <div class="step" style="color: #16181D; font-weight: 600"><span class="bar now"></span>2 · Decide</div>
+      <div class="step"><span class="bar"></span>3 · Pace</div>
+    </div>
+    <div class="mu" style="font-size: 13px">2 bank files read: 46 new, 3 matched your cash entries.</div>
+  </section>
+
+  <sc-for list="{{items}}" as="it" hint-placeholder-count="5">
+    <article class="card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px">
+        <span class="tag">{{it.kind}}</span>
+        <span class="m" style="font-size: 15px; font-weight: 600">{{it.amount}}</span>
+      </div>
+      <div style="font-size: 15px; font-weight: 600; line-height: 20px">{{it.title}}</div>
+      <div class="mu" style="font-size: 13px; line-height: 18px">{{it.why}}</div>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap">
+        <button class="btn" onClick="{{it.yes}}">{{it.yesLabel}}</button>
+        <button class="btn2" onClick="{{it.no}}">{{it.noLabel}}</button>
+      </div>
+    </article>
+  </sc-for>
+
+  <sc-if value="{{empty}}" hint-placeholder-val="{{ false }}">
+    <section class="card" style="padding: 24px 16px; text-align: center; display: flex; flex-direction: column; gap: 8px; align-items: center">
+      <div style="font-size: 17px; font-weight: 700">All decided</div>
+      <div class="mu" style="font-size: 14px">Next: check your pace for the week.</div>
+      <a class="btn" href="Insights.dc.html">Check pace</a>
+    </section>
+  </sc-if>
+
+  <sc-if value="{{toast}}" hint-placeholder-val="{{ false }}">
+    <div role="status" style="position: absolute; left: 16px; right: 16px; bottom: 24px; background: #16181D; color: #FFFFFF; border-radius: 14px; padding: 6px 6px 6px 16px; display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px">
+      <span>{{toast}}</span>
+      <button onClick="{{undo}}" style="min-height: 44px; padding: 0 14px; border: 0; border-radius: 10px; background: transparent; color: #9FE0CC; font: 600 14px 'Geist', sans-serif; cursor: pointer">Undo</button>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1100}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.all = [
+      { id: 'bill', kind: 'Bill to check', amount: '48.20 €', title: 'Electricity slip, due 20 Nov', why: 'Amount and due date were read from a photo. Check them before it holds money.', yesLabel: 'Check bill', noLabel: 'Later', done: 'Bill checked' },
+      { id: 'rec', kind: 'Recurring bill found', amount: '9.99 €', title: 'Streaming, every month', why: 'Paid 3 times, about 30 days apart, same amount.', yesLabel: 'Confirm', noLabel: 'Not a bill', done: 'Streaming confirmed' },
+      { id: 'paid', kind: 'Paid by this?', amount: '40.00 €', title: 'Dentist ↔ bank row “DENTAL CLINIC”', why: 'Planned for 14 Nov; one bank row with the same tag and amount on 13 Nov.', yesLabel: 'Yes, paid', noLabel: 'No', done: 'Dentist marked paid' },
+      { id: 'wish', kind: 'Wish ready', amount: '89.00 €', title: 'Headphones: 72 hours are over', why: 'Fits. Each day to payday would drop from 23.40 € to 17.80 €.', yesLabel: 'Buy it', noLabel: 'Skip, keep 89 €', done: 'Headphones bought' },
+      { id: 'rule', kind: 'Rule suggestion', amount: '', title: 'Always tag “Corner bakery” as Food?', why: 'You tagged it by hand 3 times. Applies to 7 earlier payments too.', yesLabel: 'Accept', noLabel: 'Dismiss', done: 'Rule saved' }
+    ];
+    this.state = { gone: [], toast: '' };
+  }
+  act(it) {
+    this.setState({ gone: this.state.gone.concat([it.id]), toast: it.done, last: it.id });
+  }
+  renderVals() {
+    const items = this.all.filter((i) => this.state.gone.indexOf(i.id) < 0).map((i) => ({
+      ...i,
+      yes: () => this.act(i),
+      no: () => this.act({ id: i.id, done: i.noLabel === 'Later' ? 'Moved to later' : 'Done: ' + i.noLabel.toLowerCase() })
+    }));
+    return {
+      items: items,
+      count: items.length,
+      empty: items.length === 0,
+      toast: this.state.toast,
+      undo: () => this.setState({ gone: this.state.gone.filter((g) => g !== this.state.last), toast: '' })
+    };
+  }
+}
+</script>
+</body>
+</html>

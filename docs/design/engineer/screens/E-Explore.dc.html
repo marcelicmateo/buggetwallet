@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Engineer — Explore</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
+<style>
+body{margin:0}
+.r{font-family:'Manrope',system-ui,sans-serif;color:#E8EEF2;background:#0F1418;position:relative;overflow:hidden;box-sizing:border-box}
+.r *{box-sizing:border-box}
+.m{font-family:'JetBrains Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.pn{background:#161D23;border:1px solid #26313A;border-radius:18px}
+.mu{color:#9AAAB6}
+.ey{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#9AAAB6}
+.q{display:inline-flex;align-items:center;gap:6px;min-height:38px;padding:0 12px;border-radius:10px;border:1px solid #33404B;background:#1B232A;color:#E8EEF2;font:600 14px 'Manrope',sans-serif;cursor:pointer}
+.qw{font-size:14px;color:#9AAAB6;font-weight:500}
+.sw{width:10px;height:10px;border-radius:3px;flex:none}
+.chip{min-height:34px;padding:0 12px;border-radius:999px;border:1px solid #33404B;background:transparent;color:#E8EEF2;font:600 13px 'Manrope',sans-serif;cursor:pointer}
+.chip.on{background:#E8EEF2;color:#0F1418;border-color:#E8EEF2}
+.nv{display:flex;flex-direction:column;align-items:center;gap:4px;min-height:64px;justify-content:center;border-radius:12px;color:#9AAAB6;text-decoration:none;font-size:11px;font-weight:600}
+.nv.on{background:#1B232A;color:#8DB8F5}
+td,th{padding:8px 10px;text-align:right;border-top:1px solid #26313A;font-size:13px}
+th{color:#9AAAB6;font-weight:600;font-family:'Manrope',sans-serif}
+td:first-child,th:first-child{text-align:left}
+svg{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+a{color:#8DB8F5}a:hover{color:#B5D1F8}
+</style>
+</helmet>
+<div class="r" style="width: 1440px; height: 980px; display: grid; grid-template-columns: 88px minmax(0, 1fr) 380px">
+  <nav aria-label="Main" style="border-right: 1px solid #26313A; padding: 16px 10px; display: flex; flex-direction: column; gap: 6px">
+    <a class="nv" href="E-Home.dc.html"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h3l2-6 4 12 2-6h5"></path></svg>Overview</a>
+    <a class="nv" href="Money.dc.html"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16M4 17l3 3 3-3M17 20V4M14 7l3-3 3 3"></path></svg>Money</a>
+    <a class="nv on" href="E-Explore.dc.html" aria-current="page"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V4M4 20h16M8 16l4-5 3 3 5-7"></path></svg>Explore</a>
+    <a class="nv" href="E-House.dc.html"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11 12 4l8 7v9H4z"></path></svg>Plan</a>
+  </nav>
+
+  <main style="padding: 22px 26px; display: flex; flex-direction: column; gap: 16px; min-width: 0">
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap">
+      <h1 style="margin: 0; font-size: 26px; font-weight: 800">Explore</h1>
+      <div style="display: flex; gap: 8px">
+        <button class="q">Save view</button>
+        <button class="q">Export CSV</button>
+      </div>
+    </div>
+
+    <div class="pn" style="padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+      <span class="qw">Show</span><button class="q">spent ▾</button>
+      <span class="qw">on</span>
+      <button class="q"><span class="sw" style="background: #3987e5"></span>Groceries ×</button>
+      <button class="q"><span class="sw" style="background: #d95926"></span>Eating out ×</button>
+      <button class="q"><span class="sw" style="background: #d55181"></span>Transport ×</button>
+      <button class="q" style="border-style: dashed">+ tag, payee or project</button>
+      <span class="qw">by</span><button class="q">month ▾</button>
+      <span style="flex: 1"></span>
+      <sc-for list="{{ranges}}" as="g" hint-placeholder-count="4"><button class="{{g.cls}}" onClick="{{g.pick}}" aria-pressed="{{g.on}}">{{g.l}}</button></sc-for>
+    </div>
+
+    <section class="pn" style="padding: 16px 18px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; justify-content: space-between; align-items: center">
+        <div style="display: flex; gap: 16px; font-size: 13px" class="mu">
+          <span style="display: inline-flex; gap: 6px; align-items: center"><span class="sw" style="background: #3987e5"></span>Groceries</span>
+          <span style="display: inline-flex; gap: 6px; align-items: center"><span class="sw" style="background: #d95926"></span>Eating out</span>
+          <span style="display: inline-flex; gap: 6px; align-items: center"><span class="sw" style="background: #d55181"></span>Transport</span>
+        </div>
+        <span class="mu" style="font-size: 13px">Drag to zoom · hover for exact amounts</span>
+      </div>
+      <div style="position: relative">
+        <svg width="100%" height="300" viewBox="0 0 820 300" role="img" aria-label="Monthly spending on groceries, eating out and transport; table below has the exact values">
+          <sc-for list="{{grid}}" as="gl" hint-placeholder-count="4"><line x1="44" y1="{{gl.y}}" x2="760" y2="{{gl.y}}" stroke="#222C34" stroke-width="1"></line><text x="36" y="{{gl.ty}}" fill="#9AAAB6" font-size="11" font-family="JetBrains Mono" text-anchor="end" stroke="none">{{gl.l}}</text></sc-for>
+          <sc-for list="{{years}}" as="yl" hint-placeholder-count="4"><text x="{{yl.x}}" y="292" fill="#9AAAB6" font-size="11" font-family="JetBrains Mono" stroke="none">{{yl.l}}</text></sc-for>
+          <sc-if value="{{hasHover}}" hint-placeholder-val="{{ false }}"><line x1="{{hx}}" y1="12" x2="{{hx}}" y2="272" stroke="#9AAAB6" stroke-width="1"></line></sc-if>
+          <polyline points="{{gPts}}" stroke="#3987e5" stroke-width="2"></polyline>
+          <polyline points="{{ePts}}" stroke="#d95926" stroke-width="2"></polyline>
+          <polyline points="{{tPts}}" stroke="#d55181" stroke-width="2"></polyline>
+          <text x="768" y="{{gEndY}}" fill="#E8EEF2" font-size="12" font-family="Manrope" stroke="none">Groceries</text>
+          <text x="768" y="{{tEndY}}" fill="#E8EEF2" font-size="12" font-family="Manrope" stroke="none">Transport</text>
+          <text x="768" y="{{eEndY}}" fill="#E8EEF2" font-size="12" font-family="Manrope" stroke="none">Eating out</text>
+          <sc-for list="{{hits}}" as="h" hint-placeholder-count="46"><rect x="{{h.x}}" y="0" width="{{h.w}}" height="280" fill="#000000" fill-opacity="0" stroke="none" onMouseEnter="{{h.on}}"></rect></sc-for>
+        </svg>
+        <sc-if value="{{hasHover}}" hint-placeholder-val="{{ false }}">
+          <div style="{{tipS}}">
+            <div style="font-weight: 700; margin-bottom: 4px">{{tip.month}}</div>
+            <div style="display: flex; gap: 8px; align-items: center"><span class="sw" style="background: #3987e5"></span><span style="flex: 1">Groceries</span><span class="m">{{tip.g}}</span></div>
+            <div style="display: flex; gap: 8px; align-items: center"><span class="sw" style="background: #d95926"></span><span style="flex: 1">Eating out</span><span class="m">{{tip.e}}</span></div>
+            <div style="display: flex; gap: 8px; align-items: center"><span class="sw" style="background: #d55181"></span><span style="flex: 1">Transport</span><span class="m">{{tip.t}}</span></div>
+          </div>
+        </sc-if>
+      </div>
+    </section>
+
+    <section class="pn" style="padding: 6px 18px 10px; overflow-x: auto">
+      <table style="width: 100%; border-collapse: collapse" class="m">
+        <thead><tr><th style="border-top: 0">Month</th><th style="border-top: 0">Groceries</th><th style="border-top: 0">Eating out</th><th style="border-top: 0">Transport</th><th style="border-top: 0">Together</th></tr></thead>
+        <tbody>
+          <sc-for list="{{rows}}" as="rw" hint-placeholder-count="5"><tr><td>{{rw.month}}</td><td>{{rw.g}}</td><td>{{rw.e}}</td><td>{{rw.t}}</td><td>{{rw.s}}</td></tr></sc-for>
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <aside style="border-left: 1px solid #26313A; padding: 22px 20px; display: flex; flex-direction: column; gap: 16px">
+    <section class="pn" style="padding: 16px; display: flex; flex-direction: column; gap: 10px">
+      <div class="ey">Eating out · month × year</div>
+      <div style="display: grid; grid-template-columns: 40px repeat(12, minmax(0, 1fr)); gap: 3px; align-items: center" role="img" aria-label="Heatmap of eating out per month for 2023 to 2026; darker is less, brighter is more">
+        <sc-for list="{{heat}}" as="c" hint-placeholder-count="52"><span style="{{c.s}}">{{c.t}}</span></sc-for>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px" class="mu"><span>less</span><span style="display: flex; gap: 3px"><span style="width: 18px; height: 10px; border-radius: 2px; background: #1C2B3A"></span><span style="width: 18px; height: 10px; border-radius: 2px; background: #24405C"></span><span style="width: 18px; height: 10px; border-radius: 2px; background: #2E5C86"></span><span style="width: 18px; height: 10px; border-radius: 2px; background: #3A7BB5"></span><span style="width: 18px; height: 10px; border-radius: 2px; background: #5C9CE0"></span></span><span>more</span></div>
+      <div style="font-size: 14px">December is your priciest month every year.</div>
+    </section>
+
+    <section class="pn" style="padding: 16px; display: flex; flex-direction: column; gap: 10px">
+      <div class="ey">Do two series move together?</div>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap"><button class="q"><span class="sw" style="background: #d55181"></span>Transport</button><span class="qw" style="align-self: center">vs</span><button class="q"><span class="sw" style="background: #d95926"></span>Eating out</button></div>
+      <div style="display: flex; align-items: baseline; gap: 10px"><span class="m" style="font-size: 30px; font-weight: 700">0.62</span><span class="mu" style="font-size: 14px">fairly strong · 46 months</span></div>
+      <div class="mu" style="font-size: 13px">Moves together, which isn't proof one causes the other.</div>
+    </section>
+
+    <section class="pn" style="padding: 16px; display: flex; flex-direction: column; gap: 8px">
+      <div class="ey">Saved views</div>
+      <a href="E-Project.dc.html" style="text-decoration: none; color: #E8EEF2; min-height: 40px; display: flex; align-items: center; justify-content: space-between; font-size: 14px">Flat renovation, all years<span class="mu">›</span></a>
+      <a href="E-Explore.dc.html" style="text-decoration: none; color: #E8EEF2; min-height: 40px; display: flex; align-items: center; justify-content: space-between; font-size: 14px; border-top: 1px solid #26313A">Kept per period vs salary<span class="mu">›</span></a>
+      <a href="E-House.dc.html" style="text-decoration: none; color: #E8EEF2; min-height: 40px; display: flex; align-items: center; justify-content: space-between; font-size: 14px; border-top: 1px solid #26313A">House fund forecast<span class="mu">›</span></a>
+    </section>
+  </aside>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":980}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { range: 'All', hover: -1 }; }
+  renderVals() {
+    const N = 46, names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const G = [], E = [], T = [];
+    for (let i = 0; i < N; i++) {
+      const mo = i % 12;
+      G.push(Math.round(178 + i * 0.95 + 12 * Math.sin(i * 0.9)));
+      E.push(Math.round(58 + 9 * Math.sin(i * 0.5 + 1) + (mo === 11 ? 34 : 0) + (i >= 44 ? 22 : 0)));
+      T.push(Math.round(96 + 34 * Math.sin(i * 0.52) + (mo === 6 || mo === 7 ? 30 : 0)));
+    }
+    const span = { '1y': 12, '3y': 36, '5y': N, 'All': N }[this.state.range];
+    const start = N - span;
+    const x0 = 44, x1 = 760, yTop = 12, yBot = 272, vmax = 300;
+    const X = (i) => x0 + (i - start) / Math.max(1, span - 1) * (x1 - x0);
+    const Y = (v) => yBot - v / vmax * (yBot - yTop);
+    const pts = (arr) => arr.slice(start).map((v, k) => X(start + k).toFixed(1) + ',' + Y(v).toFixed(1)).join(' ');
+    const grid = [0, 100, 200, 300].map((v) => ({ y: Y(v).toFixed(1), ty: (Y(v) + 4).toFixed(1), l: v }));
+    const years = [];
+    for (let i = start; i < N; i++) if (i % 12 === 0) years.push({ x: X(i).toFixed(1), l: String(2023 + i / 12) });
+    const w = (x1 - x0) / Math.max(1, span - 1);
+    const hits = [];
+    for (let i = start; i < N; i++) hits.push({ x: (X(i) - w / 2).toFixed(1), w: w.toFixed(1), on: ((k) => () => this.setState({ hover: k }))(i) });
+    const h = this.state.hover >= start ? this.state.hover : -1;
+    const lab = (i) => names[i % 12] + ' ' + (2023 + Math.floor(i / 12));
+    const eur = (v) => v.toFixed(2) + ' €';
+    const tipLeft = h >= 0 ? Math.min(X(h) / 820 * 100, 72) : 0;
+    const rows = [];
+    for (let i = N - 1; i >= N - 5; i--) rows.push({ month: lab(i), g: eur(G[i]), e: eur(E[i]), t: eur(T[i]), s: eur(G[i] + E[i] + T[i]) });
+    const ramp = ['#1C2B3A', '#24405C', '#2E5C86', '#3A7BB5', '#5C9CE0'];
+    const heat = [];
+    heat.push({ s: '', t: '' });
+    names.forEach((n) => heat.push({ s: 'font-size:10px;color:#9AAAB6;text-align:center', t: n[0] }));
+    for (let yr = 0; yr < 4; yr++) {
+      heat.push({ s: 'font-size:11px;color:#9AAAB6;font-family:JetBrains Mono', t: String(2023 + yr) });
+      for (let mo = 0; mo < 12; mo++) {
+        const i = yr * 12 + mo;
+        if (i >= N) { heat.push({ s: 'height:18px;border-radius:3px;border:1px dashed #26313A', t: '' }); continue; }
+        const lvl = Math.max(0, Math.min(4, Math.floor((E[i] - 48) / 12)));
+        heat.push({ s: 'height:18px;border-radius:3px;background:' + ramp[lvl], t: '' });
+      }
+    }
+    return {
+      ranges: ['1y', '3y', '5y', 'All'].map((l) => ({ l: l, on: this.state.range === l ? 'true' : 'false', cls: this.state.range === l ? 'chip on' : 'chip', pick: () => this.setState({ range: l, hover: -1 }) })),
+      gPts: pts(G), ePts: pts(E), tPts: pts(T),
+      gEndY: (Y(G[N - 1]) + 4).toFixed(1), eEndY: (Y(E[N - 1]) + 4).toFixed(1), tEndY: (Y(T[N - 1]) + 4).toFixed(1),
+      grid: grid, years: years, hits: hits,
+      hasHover: h >= 0, hx: h >= 0 ? X(h).toFixed(1) : 0,
+      tip: h >= 0 ? { month: lab(h), g: eur(G[h]), e: eur(E[h]), t: eur(T[h]) } : { month: '', g: '', e: '', t: '' },
+      tipS: 'position:absolute;top:8px;left:calc(' + tipLeft.toFixed(1) + '% + 12px);width:200px;background:#0F1418;border:1px solid #33404B;border-radius:12px;padding:10px 12px;font-size:13px;display:flex;flex-direction:column;gap:4px;pointer-events:none',
+      rows: rows, heat: heat
+    };
+  }
+}
+</script>
+</body>
+</html>

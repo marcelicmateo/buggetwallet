@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Engineer — Findings</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
+<style>
+body{margin:0}
+.r{font-family:'Manrope',system-ui,sans-serif;color:#E8EEF2;background:#0F1418;position:relative;overflow:hidden;box-sizing:border-box}
+.r *{box-sizing:border-box}
+.m{font-family:'JetBrains Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.pn{background:#161D23;border:1px solid #26313A;border-radius:18px}
+.mu{color:#9AAAB6}
+.ey{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#9AAAB6}
+.act{min-height:40px;padding:0 12px;border-radius:10px;border:1px solid #33404B;background:transparent;color:#E8EEF2;font:600 13px 'Manrope',sans-serif;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center}
+.bar{border:0;padding:0;cursor:pointer;background:transparent;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:4px;height:100%;min-width:0}
+svg{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+a{color:#8DB8F5}a:hover{color:#B5D1F8}
+</style>
+</helmet>
+<div class="r" style="width: 390px; height: 1120px; padding: 12px 16px 24px; display: flex; flex-direction: column; gap: 14px">
+  <header style="display: flex; align-items: center; gap: 6px">
+    <a href="E-Home.dc.html" aria-label="Back" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #E8EEF2"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></a>
+    <div style="flex: 1"><div style="font-size: 22px; font-weight: 800">Findings</div><div class="mu" style="font-size: 13px">Found in 1,000 days of your data. A link is not proof of a cause.</div></div>
+  </header>
+
+  <article class="pn" style="padding: 16px; display: flex; flex-direction: column; gap: 10px">
+    <div class="ey">Weekly rhythm</div>
+    <div style="font-size: 17px; font-weight: 800; line-height: 22px">Sundays cost you 2.1× a weekday</div>
+    <div style="position: relative; height: 130px; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; align-items: end; border-bottom: 1px solid #33404B; padding-top: 22px">
+      <sc-for list="{{week}}" as="d" hint-placeholder-count="7">
+        <button class="bar" onClick="{{d.pick}}" aria-label="{{d.aria}}" aria-pressed="{{d.on}}">
+          <sc-if value="{{d.sel}}" hint-placeholder-val="{{ false }}"><span class="m" style="font-size: 11px; background: #E8EEF2; color: #0F1418; border-radius: 6px; padding: 2px 5px; white-space: nowrap">{{d.v}}</span></sc-if>
+          <span style="{{d.s}}"></span>
+        </button>
+      </sc-for>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; margin-top: -4px"><sc-for list="{{week}}" as="d" hint-placeholder-count="7"><span class="mu" style="font-size: 12px; text-align: center">{{d.l}}</span></sc-for></div>
+    <div class="mu" style="font-size: 13px">Average spend per day of the week, last 12 months. Tap a bar.</div>
+  </article>
+
+  <article class="pn" style="padding: 16px; display: flex; flex-direction: column; gap: 10px">
+    <div class="ey">Moves together</div>
+    <div style="font-size: 17px; font-weight: 800; line-height: 22px">More fuel, more eating out</div>
+    <svg width="100%" height="150" viewBox="0 0 340 150" role="img" aria-label="24 months: fuel per month on the x axis, eating out on the y axis; points rise to the right">
+      <line x1="34" y1="126" x2="334" y2="126" stroke="#33404B" stroke-width="1"></line>
+      <line x1="34" y1="8" x2="34" y2="126" stroke="#33404B" stroke-width="1"></line>
+      <sc-for list="{{pts}}" as="p" hint-placeholder-count="24"><circle cx="{{p.x}}" cy="{{p.y}}" r="4.5" fill="#d55181" stroke="#161D23" stroke-width="2"></circle></sc-for>
+      <line x1="44" y1="112" x2="326" y2="30" stroke="#9AAAB6" stroke-width="1.5" stroke-dasharray="4 4"></line>
+      <text x="184" y="146" fill="#9AAAB6" font-size="11" font-family="Manrope" text-anchor="middle" stroke="none">Fuel per month →</text>
+      <text x="10" y="70" fill="#9AAAB6" font-size="11" font-family="Manrope" text-anchor="middle" stroke="none" transform="rotate(-90 10 70)">Eating out →</text>
+    </svg>
+    <div class="mu" style="font-size: 13px">24 months, link strength <span class="m" style="color: #E8EEF2">0.62</span> of 1: fairly strong. Trips are the likely reason.</div>
+    <div style="display: flex; gap: 8px"><a class="act" href="E-Explore.dc.html">Open in Explore</a><button class="act">Not interesting</button></div>
+  </article>
+
+  <article class="pn" style="padding: 16px; display: flex; flex-direction: column; gap: 10px">
+    <div class="ey">Slow creep</div>
+    <div style="font-size: 17px; font-weight: 800; line-height: 22px">Subscriptions went from 64 € to 104 € a month in 2 years</div>
+    <svg width="100%" height="80" viewBox="0 0 340 80" role="img" aria-label="Subscriptions per month, stepping up from 64 to 104 euro over 24 months">
+      <polyline points="4,70 60,70 60,58 130,58 130,46 200,46 200,30 270,30 270,12 336,12" stroke="#3987e5" stroke-width="2"></polyline>
+      <text x="4" y="62" fill="#9AAAB6" font-size="11" font-family="JetBrains Mono" stroke="none">64</text>
+      <text x="306" y="28" fill="#E8EEF2" font-size="11" font-family="JetBrains Mono" stroke="none">104</text>
+    </svg>
+    <div style="display: flex; gap: 8px"><a class="act" href="Money.dc.html">See the 5 new ones</a></div>
+  </article>
+
+  <article class="pn" style="padding: 16px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; text-align: center">
+    <div><div class="m" style="font-size: 22px; font-weight: 700">1,000</div><div class="mu" style="font-size: 12px">days tracked</div></div>
+    <div><div class="m" style="font-size: 22px; font-weight: 700">4,812</div><div class="mu" style="font-size: 12px">payments</div></div>
+    <div><div class="m" style="font-size: 22px; font-weight: 700">23</div><div class="mu" style="font-size: 12px">best streak, days</div></div>
+  </article>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1120}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { sel: 6 }; }
+  renderVals() {
+    const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const vals = [18.2, 16.9, 17.5, 19.8, 24.6, 31.0, 38.4];
+    const mx = 40;
+    const week = vals.map((v, i) => ({
+      l: labels[i], v: v.toFixed(2) + ' €', sel: this.state.sel === i,
+      on: this.state.sel === i ? 'true' : 'false',
+      aria: labels[i] + ', ' + v.toFixed(2) + ' euro',
+      s: 'width:100%;max-width:30px;height:' + Math.round(v / mx * 96) + 'px;border-radius:4px 4px 0 0;background:#3987e5;' + (this.state.sel === i ? 'outline:2px solid #E8EEF2;outline-offset:2px;' : ''),
+      pick: () => this.setState({ sel: i })
+    }));
+    const raw = [[40, 52], [55, 60], [62, 55], [70, 70], [80, 64], [88, 78], [95, 74], [104, 88], [110, 80], [118, 95], [126, 90], [132, 101], [140, 96], [150, 108], [158, 100], [166, 115], [175, 110], [182, 124], [190, 118], [200, 130], [212, 126], [224, 140], [236, 136], [250, 150]];
+    const pts = raw.map((p) => ({ x: (34 + (p[0] - 30) / 230 * 296).toFixed(1), y: (126 - (p[1] - 40) / 120 * 112).toFixed(1) }));
+    return { week: week, pts: pts };
+  }
+}
+</script>
+</body>
+</html>

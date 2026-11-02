@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Engineer — House planner</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
+<style>
+body{margin:0}
+.r{font-family:'Manrope',system-ui,sans-serif;color:#E8EEF2;background:#0F1418;position:relative;overflow:hidden;box-sizing:border-box}
+.r *{box-sizing:border-box}
+.m{font-family:'JetBrains Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.pn{background:#161D23;border:1px solid #26313A;border-radius:18px}
+.mu{color:#9AAAB6}
+.ey{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#9AAAB6}
+.sl{display:flex;flex-direction:column;gap:2px}
+.sl label{display:flex;justify-content:space-between;font-size:14px;font-weight:600}
+input[type=range]{width:100%;accent-color:#9085e9;height:28px}
+.rw{display:flex;align-items:center;gap:10px;min-height:40px;border-top:1px solid #26313A;font-size:14px}
+.lev{display:flex;align-items:center;gap:10px;min-height:52px;padding:0 12px;border-radius:12px;border:1px solid #33404B;background:transparent;color:#E8EEF2;font:600 14px 'Manrope',sans-serif;cursor:pointer;text-align:left;width:100%}
+.lev.on{border-color:#9085e9;background:#221F3A}
+svg{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+a{color:#8DB8F5}a:hover{color:#B5D1F8}
+</style>
+</helmet>
+<div class="r" style="width: 390px; height: 1180px; padding: 12px 16px 24px; display: flex; flex-direction: column; gap: 14px">
+  <header style="display: flex; align-items: center; gap: 6px">
+    <a href="E-Home.dc.html" aria-label="Back" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #E8EEF2"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></a>
+    <div style="flex: 1"><div class="ey">Goal · big purchase</div><div style="font-size: 22px; font-weight: 800">Buying a home</div></div>
+  </header>
+
+  <section class="pn" style="padding: 16px; display: flex; flex-direction: column; gap: 6px">
+    <div class="ey">Ready to buy</div>
+    <div style="font-size: 34px; line-height: 38px; font-weight: 800; letter-spacing: -0.02em">{{readyDate}}</div>
+    <div class="mu" style="font-size: 14px">{{readyLine}}</div>
+    <svg width="100%" height="130" viewBox="0 0 340 130" role="img" aria-label="{{chartLabel}}" style="margin-top: 6px">
+      <line x1="0" y1="{{needY}}" x2="340" y2="{{needY}}" stroke="#9AAAB6" stroke-width="1.5" stroke-dasharray="5 4"></line>
+      <text x="4" y="{{needLabelY}}" fill="#9AAAB6" font-size="11" font-family="Manrope" stroke="none">Needed {{needK}}</text>
+      <polyline points="{{fundPts}}" stroke="#9085e9" stroke-width="2"></polyline>
+      <circle cx="{{meetX}}" cy="{{needY}}" r="5" fill="#9085e9" stroke="#161D23" stroke-width="2"></circle>
+      <line x1="0" y1="120" x2="340" y2="120" stroke="#33404B" stroke-width="1"></line>
+      <text x="0" y="129" fill="#9AAAB6" font-size="10" font-family="JetBrains Mono" stroke="none">now</text>
+      <text x="300" y="129" fill="#9AAAB6" font-size="10" font-family="JetBrains Mono" stroke="none">{{endLabel}}</text>
+    </svg>
+  </section>
+
+  <section class="pn" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 8px">
+    <div class="sl"><label for="price"><span>Home price</span><span class="m">{{priceT}}</span></label><input id="price" type="range" min="120000" max="400000" step="5000" value="{{price}}" onChange="{{onPrice}}"></div>
+    <div class="sl"><label for="dep"><span>Deposit</span><span class="m">{{depT}}</span></label><input id="dep" type="range" min="10" max="40" step="1" value="{{dep}}" onChange="{{onDep}}"></div>
+    <div class="sl"><label for="mo"><span>Into the house fund each month</span><span class="m">{{moT}}</span></label><input id="mo" type="range" min="200" max="1500" step="50" value="{{mo}}" onChange="{{onMo}}"></div>
+    <div class="sl"><label for="rate"><span>Loan rate <span class="mu" style="font-weight: 500">· typed by you</span></span><span class="m">{{rateT}}</span></label><input id="rate" type="range" min="2" max="6" step="0.1" value="{{rate}}" onChange="{{onRate}}"></div>
+  </section>
+
+  <section class="pn" style="padding: 14px 16px 4px">
+    <div style="font-size: 16px; font-weight: 800; padding-bottom: 6px">The numbers</div>
+    <div class="rw"><span style="flex: 1">Deposit</span><span class="m">{{depE}}</span></div>
+    <div class="rw"><span style="flex: 1">Buying costs <span class="mu">(tax, notary, agent ~6 %)</span></span><span class="m">{{costE}}</span></div>
+    <div class="rw"><span style="flex: 1">Already in the fund</span><span class="m">−18,400 €</span></div>
+    <div class="rw" style="border-top: 2px solid #E8EEF2; font-weight: 800"><span style="flex: 1">Still to save</span><span class="m">{{leftE}}</span></div>
+    <div class="rw"><span style="flex: 1">Loan, 25 years</span><span class="m">{{loanE}}</span></div>
+    <div class="rw"><span style="flex: 1">Loan payment</span><span class="m">{{payE}} / mo</span></div>
+    <div class="rw"><span style="flex: 1">vs rent today</span><span class="m">{{vsRent}}</span></div>
+    <div class="rw"><span style="flex: 1">Spending money per period after</span><span class="m" style="{{afterS}}">{{afterE}}</span></div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 8px">
+    <div style="font-size: 16px; font-weight: 800">Get there sooner <span class="mu" style="font-size: 13px; font-weight: 500">· from your own data</span></div>
+    <sc-for list="{{levers}}" as="l" hint-placeholder-count="2">
+      <button class="{{l.cls}}" onClick="{{l.toggle}}" aria-pressed="{{l.on}}"><span style="flex: 1">{{l.label}}</span><span class="m" style="font-size: 13px; color: #C9C2FF">{{l.gain}}</span></button>
+    </sc-for>
+    <div class="mu" style="font-size: 12px">Estimate only. The bank's offer gives the exact loan numbers.</div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1180}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { price: 220000, dep: 20, mo: 650, rate: 3.6, eat: false, side: false }; }
+  renderVals() {
+    const st = this.state, have = 18400, rent = 350, flex = 830;
+    const eur = (v) => Math.round(v).toLocaleString('en-US') + ' €';
+    const monthsAt = (m) => Math.max(0, Math.ceil(left / m));
+    const dep = st.price * st.dep / 100, cost = st.price * 0.06, need = dep + cost, left = Math.max(0, need - have);
+    const extra = (st.eat ? 40 : 0) + (st.side ? 120 : 0);
+    const mo = st.mo + extra;
+    const months = monthsAt(mo);
+    const d = new Date(2026, 10, 1); d.setMonth(d.getMonth() + months);
+    const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const loan = st.price - dep, r = st.rate / 1200, n = 300;
+    const pay = loan * r / (1 - Math.pow(1 + r, -n));
+    const after = flex - (pay - rent);
+    const span = Math.max(24, months + 6);
+    const X = (m) => (m / span * 336 + 2);
+    const Y = (v) => (116 - Math.min(v, need * 1.15) / (need * 1.15) * 104);
+    const pts = [];
+    for (let m = 0; m <= span; m += Math.max(1, Math.floor(span / 24))) pts.push(X(m).toFixed(1) + ',' + Y(have + mo * m).toFixed(1));
+    const endD = new Date(2026, 10, 1); endD.setMonth(endD.getMonth() + span);
+    const lever = (key, label, perMo) => {
+      const on = !!st[key];
+      const without = monthsAt(mo - (on ? perMo : 0)), withIt = monthsAt(mo + (on ? 0 : perMo));
+      return { label: label, on: on ? 'true' : 'false', cls: on ? 'lev on' : 'lev', gain: on ? 'on · ' + (without - months) + ' mo sooner' : (months - withIt) + ' mo sooner', toggle: () => this.setState({ [key]: !on }) };
+    };
+    return {
+      price: st.price, dep: st.dep, mo: st.mo, rate: st.rate,
+      priceT: eur(st.price), depT: st.dep + ' % · ' + eur(dep), moT: eur(st.mo), rateT: st.rate.toFixed(1) + ' %',
+      onPrice: (e) => this.setState({ price: Number(e.target.value) }),
+      onDep: (e) => this.setState({ dep: Number(e.target.value) }),
+      onMo: (e) => this.setState({ mo: Number(e.target.value) }),
+      onRate: (e) => this.setState({ rate: Number(e.target.value) }),
+      readyDate: months === 0 ? 'Now' : names[d.getMonth()] + ' ' + d.getFullYear(),
+      readyLine: 'in ' + Math.floor(months / 12) + ' y ' + (months % 12) + ' m at ' + eur(mo) + ' a month',
+      chartLabel: 'House fund growing from 18,400 euro to the needed ' + eur(need) + ' in ' + months + ' months',
+      needY: Y(need).toFixed(1), needLabelY: (Y(need) - 6).toFixed(1), needK: eur(need),
+      fundPts: pts.join(' '), meetX: X(months).toFixed(1),
+      endLabel: names[endD.getMonth()] + ' ' + String(endD.getFullYear()).slice(2),
+      depE: eur(dep), costE: eur(cost), leftE: eur(left), loanE: eur(loan), payE: eur(pay),
+      vsRent: (pay >= rent ? '+' : '−') + eur(Math.abs(pay - rent)) + ' / mo',
+      afterE: after > 0 ? eur(after) : 'short by ' + eur(-after),
+      afterS: after > 0 ? '' : 'color:#F07167;font-weight:700',
+      levers: [lever('eat', 'Eating out back to your usual (−40 € / mo)', 40), lever('side', 'Send side-job income to the fund (+120 € / mo)', 120)]
+    };
+  }
+}
+</script>
+</body>
+</html>

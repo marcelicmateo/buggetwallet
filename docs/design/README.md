@@ -12,3 +12,7 @@ in `directions/`; palettes and rules in `docs/context/DESIGN_DECISIONS.md` §6. 
 ## Dashboard redesign (RX1, 2026-10-30)
 `dashboard/`: concept (`CONCEPT.md`), mockups (`index.html`, `?d=a|b`) and screenshots of two directions, A Ledger Board and
 B Paper Tiles. Owner picks next.
+
+## Engineer direction (2026-11-02, picked)
+`engineer/`: the picked direction for the "curious engineer" (dark + light) and the v1 structure screens it builds on.
+Spec and handoff: `docs/context/ENG_UI_SPEC.md`. Canvas (private): https://claude.ai/artifact/HEyzibzxFzy4cnHFQfrCFf

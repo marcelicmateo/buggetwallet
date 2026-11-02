@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>First run — set up my wallet</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+.r{font-family:'Geist',system-ui,sans-serif;color:#16181D;background:#F5F5F2;position:relative;overflow:hidden;box-sizing:border-box}
+.r *{box-sizing:border-box}
+.m{font-family:'Geist Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.card{background:#FFFFFF;border:1px solid #E2E3DE;border-radius:16px}
+.mu{color:#5B606B}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:52px;padding:0 18px;border-radius:12px;border:0;background:#16181D;color:#FFFFFF;font:600 15px 'Geist',sans-serif;cursor:pointer;text-decoration:none;width:100%}
+.btn2{display:inline-flex;align-items:center;justify-content:center;min-height:52px;padding:0 18px;border-radius:12px;border:1px solid #CFD1CB;background:#FFFFFF;color:#16181D;font:600 15px 'Geist',sans-serif;cursor:pointer;text-decoration:none;width:100%}
+.btn3{min-height:44px;border:0;background:transparent;color:#0D6B58;font:600 14px 'Geist',sans-serif;cursor:pointer}
+.st{display:flex;align-items:center;gap:12px;min-height:48px;padding:0 16px;border-top:1px solid #EEEFEA;font-size:15px}
+.n{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font:600 12px 'Geist Mono',monospace;flex:none}
+svg{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+a{color:#0D6B58}a:hover{color:#0A5546}
+</style>
+</helmet>
+<div class="r" style="width: 390px; height: 844px; padding: 24px 20px; display: flex; flex-direction: column; gap: 16px">
+  <div style="display: flex; gap: 6px" aria-label="Step {{stepNo}} of 3">
+    <span style="{{p0}}"></span><span style="{{p1}}"></span><span style="{{p2}}"></span>
+  </div>
+
+  <sc-if value="{{s0}}" hint-placeholder-val="{{ true }}">
+    <div style="flex: 1; display: flex; flex-direction: column; gap: 16px">
+      <div style="margin-top: 48px; width: 64px; height: 64px; border-radius: 20px; background: #0D6B58; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="34" height="34" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="3"></rect><path d="M3 10h18M15 15h3"></path></svg></div>
+      <h1 style="margin: 0; font-size: 32px; line-height: 38px; font-weight: 700; letter-spacing: -0.02em">Know what you can spend today.</h1>
+      <p class="mu" style="margin: 0; font-size: 16px; line-height: 24px">Your wallet stays on your devices. Only your own relay passes it between them, sealed.</p>
+      <div style="margin-top: auto; display: flex; flex-direction: column; gap: 10px">
+        <button class="btn" onClick="{{next}}">Start a new wallet</button>
+        <button class="btn2">I have a wallet on another device</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{s1}}" hint-placeholder-val="{{ false }}">
+    <div style="flex: 1; display: flex; flex-direction: column; gap: 16px">
+      <h1 style="margin: 16px 0 0; font-size: 26px; font-weight: 700">Save your wallet key</h1>
+      <p class="mu" style="margin: 0; font-size: 15px; line-height: 22px">It is the only way back into your wallet on a new phone. Write it down or keep it in a password manager.</p>
+      <div class="card m" style="padding: 18px; font-size: 18px; line-height: 30px; letter-spacing: 0.06em; text-align: center; user-select: none">K7QF · M9KD · 2XWA · P4TR<br>H8NE · C3ZV · 6YJB · R5LU</div>
+      <label style="display: flex; flex-direction: column; gap: 6px">
+        <span style="font-size: 13px; font-weight: 600; color: #3F444D">Type the last 4 characters to check</span>
+        <input class="m" placeholder="····" aria-label="Last 4 characters of the key" style="min-height: 52px; border: 1px solid #CFD1CB; border-radius: 12px; padding: 0 14px; font: 600 20px 'Geist Mono', monospace; letter-spacing: 0.2em">
+      </label>
+      <div style="margin-top: auto; display: flex; flex-direction: column; gap: 4px">
+        <button class="btn" onClick="{{next}}">I saved it</button>
+        <button class="btn3" onClick="{{next}}">Remind me later</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{s2}}" hint-placeholder-val="{{ false }}">
+    <div style="flex: 1; display: flex; flex-direction: column; gap: 14px">
+      <h1 style="margin: 16px 0 0; font-size: 26px; font-weight: 700">Set up my wallet</h1>
+      <p class="mu" style="margin: 0; font-size: 15px; line-height: 22px">About 10 minutes. Each step suggests; nothing is saved until you tap.</p>
+      <div class="card" style="overflow: hidden">
+        <div class="st" style="border-top: 0; font-weight: 600"><span class="n" style="background: #16181D; color: #FFFFFF">1</span>Import a bank file</div>
+        <div class="st mu"><span class="n" style="background: #ECEDE8">2</span>Accounts and cash</div>
+        <div class="st mu"><span class="n" style="background: #ECEDE8">3</span>Payday plan</div>
+        <div class="st mu"><span class="n" style="background: #ECEDE8">4</span>Bills that repeat</div>
+        <div class="st mu"><span class="n" style="background: #ECEDE8">5</span>Extra income</div>
+        <div class="st mu"><span class="n" style="background: #ECEDE8">6</span>Payee tags</div>
+        <div class="st mu"><span class="n" style="background: #ECEDE8">7</span>Budgets</div>
+      </div>
+      <div style="margin-top: auto; display: flex; flex-direction: column; gap: 4px">
+        <a class="btn" href="Inbox.dc.html">Choose a bank file</a>
+        <a class="btn3" href="Today.dc.html" style="display: flex; align-items: center; justify-content: center; text-decoration: none">Skip for now · finish later from Today</a>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { s: 0 }; }
+  renderVals() {
+    const s = this.state.s;
+    const p = (i) => 'flex:1;height:4px;border-radius:2px;background:' + (i <= s ? '#0D6B58' : '#E2E3DE');
+    return {
+      s0: s === 0, s1: s === 1, s2: s === 2,
+      stepNo: s + 1,
+      p0: p(0), p1: p(1), p2: p(2),
+      next: () => this.setState({ s: Math.min(2, s + 1) })
+    };
+  }
+}
+</script>
+</body>
+</html>

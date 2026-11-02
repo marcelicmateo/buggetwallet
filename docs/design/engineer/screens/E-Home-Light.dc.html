@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Engineer light — Home</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
+<style>
+body{margin:0}
+.r{font-family:'Manrope',system-ui,sans-serif;color:#121A21;background:#F4F6F8;position:relative;overflow:hidden;box-sizing:border-box}
+.r *{box-sizing:border-box}
+.m{font-family:'JetBrains Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.pn{background:#FFFFFF;border:1px solid #E1E6EB;border-radius:18px}
+.mu{color:#56636F}
+.ey{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#56636F}
+.ib{position:relative;width:44px;height:44px;border-radius:12px;border:1px solid #E1E6EB;background:#FFFFFF;display:inline-flex;align-items:center;justify-content:center;color:#121A21;text-decoration:none}
+.seg{display:inline-flex;padding:3px;border-radius:10px;background:#F4F6F8;border:1px solid #E1E6EB}
+.sb{min-height:36px;padding:0 12px;border-radius:8px;border:0;background:transparent;color:#56636F;font:600 13px 'Manrope',sans-serif;cursor:pointer}
+.sb.on{background:#E1E6EB;color:#121A21}
+.tile{padding:12px 12px 10px;display:flex;flex-direction:column;gap:4px;text-decoration:none;color:#121A21}
+svg{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+a{color:#1F5FBF}a:hover{color:#174A94}
+</style>
+</helmet>
+<div class="r" style="width: 390px; height: 1120px; padding: 16px 16px 96px; display: flex; flex-direction: column; gap: 14px">
+  <header style="display: flex; justify-content: space-between; align-items: center">
+    <div><div class="ey">Mon 2 Nov · period day 18/31</div><div style="font-size: 26px; font-weight: 800; letter-spacing: -0.02em">Overview</div></div>
+    <div style="display: flex; gap: 8px">
+      <a class="ib" href="E-Explore-Light.dc.html" aria-label="Ask a question about your money"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 4 4"></path></svg></a>
+      <a class="ib" href="Inbox.dc.html" aria-label="Needs you, 4 items"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h4l2 3h4l2-3h4"></path><path d="M5 13 7 5h10l2 8v6H5z"></path></svg><span class="m" style="position: absolute; top: -5px; right: -5px; min-width: 20px; height: 20px; border-radius: 10px; background: #C2412F; color: #F4F6F8; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center">4</span></a>
+    </div>
+  </header>
+
+  <section class="pn" style="padding: 16px; display: flex; flex-direction: column; gap: 10px">
+    <div style="display: flex; justify-content: space-between; align-items: center">
+      <span class="ey">Safe to spend today</span>
+      <div class="seg" role="group" aria-label="Show money as">
+        <button class="{{eurCls}}" onClick="{{toEur}}" aria-pressed="{{eurOn}}">€</button>
+        <button class="{{hrCls}}" onClick="{{toHr}}" aria-pressed="{{hrOn}}">hours of work</button>
+      </div>
+    </div>
+    <div style="display: flex; align-items: baseline; gap: 10px"><span class="m" style="font-size: 52px; line-height: 54px; font-weight: 700; letter-spacing: -0.03em">{{today}}</span><span class="m mu" style="font-size: 18px">{{unit}}</span></div>
+    <div class="mu" style="font-size: 14px">Tomorrow <span class="m" style="color: #121A21">{{tomorrow}}</span> · pace <span style="color: #1F7A50; font-weight: 700">▲ 31 € ahead</span></div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 8px">
+    <div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 17px; font-weight: 800">Found this week</span><a href="E-Findings-Light.dc.html" style="font-size: 14px; font-weight: 700; text-decoration: none">All 7 ›</a></div>
+    <a class="pn" href="E-Findings-Light.dc.html" style="padding: 14px 16px; display: flex; gap: 14px; align-items: center; text-decoration: none; color: #121A21">
+      <svg width="88" height="44" viewBox="0 0 88 44" role="img" aria-label="Eating out per month, last 12 months, rising at the end" style="flex: none"><polyline points="{{eatPts}}" stroke="#EB6834" stroke-width="2"></polyline><circle cx="86" cy="{{eatLastY}}" r="4" fill="#EB6834" stroke="#FFFFFF" stroke-width="2"></circle></svg>
+      <div style="flex: 1"><div style="font-size: 15px; font-weight: 700; line-height: 20px">Eating out is 34 % above your usual month</div><div class="mu" style="font-size: 13px">vs 12-month median · {{eatNow}}</div></div>
+    </a>
+    <a class="pn" href="E-Findings-Light.dc.html" style="padding: 14px 16px; display: flex; gap: 14px; align-items: center; text-decoration: none; color: #121A21">
+      <svg width="88" height="44" viewBox="0 0 88 44" role="img" aria-label="Scatter: months with more fuel also have more eating out" style="flex: none"><sc-for list="{{dots}}" as="p" hint-placeholder-count="12"><circle cx="{{p.x}}" cy="{{p.y}}" r="3.5" fill="#E87BA4" stroke="#FFFFFF" stroke-width="1.5"></circle></sc-for><line x1="4" y1="38" x2="84" y2="8" stroke="#56636F" stroke-width="1" stroke-dasharray="3 3"></line></svg>
+      <div style="flex: 1"><div style="font-size: 15px; font-weight: 700; line-height: 20px">Road-trip months cost twice: fuel and eating out rise together</div><div class="mu" style="font-size: 13px">24 months · fairly strong link (0.62)</div></div>
+    </a>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 8px">
+    <div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 17px; font-weight: 800">Pinned</span><a href="E-Explore-Light.dc.html" style="font-size: 14px; font-weight: 700; text-decoration: none">+ Pin a series</a></div>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+      <sc-for list="{{pins}}" as="p" hint-placeholder-count="4">
+        <a class="pn tile" href="{{p.href}}">
+          <span class="ey" style="font-size: 10px">{{p.span}}</span>
+          <span style="font-size: 14px; font-weight: 700">{{p.name}}</span>
+          <svg width="100%" height="40" viewBox="0 0 150 40" preserveAspectRatio="none" aria-hidden="true"><polyline points="{{p.pts}}" stroke="{{p.color}}" stroke-width="2" vector-effect="non-scaling-stroke"></polyline></svg>
+          <span style="display: flex; justify-content: space-between; align-items: baseline"><span class="m" style="font-size: 15px; font-weight: 700">{{p.value}}</span><span class="m mu" style="font-size: 12px">{{p.delta}}</span></span>
+        </a>
+      </sc-for>
+    </div>
+  </section>
+
+  <a class="pn" href="E-House-Light.dc.html" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; text-decoration: none; color: #121A21">
+    <div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 16px; font-weight: 800">House</span><span class="m mu" style="font-size: 13px">ready ~ Nov 2031</span></div>
+    <div style="height: 8px; border-radius: 4px; background: #E1E6EB; overflow: hidden"><div style="width: 32%; height: 100%; background: #6250D6; border-radius: 4px"></div></div>
+    <div class="mu" style="font-size: 13px"><span class="m" style="color: #121A21">18,400</span> of <span class="m" style="color: #121A21">57,200 €</span> for deposit and costs</div>
+  </a>
+
+  <nav aria-label="Main" style="position: absolute; left: 0; right: 0; bottom: 0; height: 78px; background: #FFFFFF; border-top: 1px solid #E1E6EB; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: center">
+    <a href="E-Home-Light.dc.html" aria-current="page" style="display: flex; flex-direction: column; align-items: center; gap: 3px; color: #1F5FBF; font-size: 11px; font-weight: 700; text-decoration: none; min-height: 48px; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h3l2-6 4 12 2-6h5"></path></svg>Overview</a>
+    <a href="Money.dc.html" style="display: flex; flex-direction: column; align-items: center; gap: 3px; color: #56636F; font-size: 11px; font-weight: 600; text-decoration: none; min-height: 48px; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16M4 17l3 3 3-3M17 20V4M14 7l3-3 3 3"></path></svg>Money</a>
+    <a href="Add.dc.html" aria-label="Add" style="justify-self: center; width: 54px; height: 54px; border-radius: 16px; background: #1F5FBF; color: #F4F6F8; display: flex; align-items: center; justify-content: center"><svg width="26" height="26" viewBox="0 0 24 24" style="stroke-width: 2.6" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></a>
+    <a href="E-Explore-Light.dc.html" style="display: flex; flex-direction: column; align-items: center; gap: 3px; color: #56636F; font-size: 11px; font-weight: 600; text-decoration: none; min-height: 48px; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V4M4 20h16M8 16l4-5 3 3 5-7"></path></svg>Explore</a>
+    <a href="E-House-Light.dc.html" style="display: flex; flex-direction: column; align-items: center; gap: 3px; color: #56636F; font-size: 11px; font-weight: 600; text-decoration: none; min-height: 48px; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11 12 4l8 7v9H4z"></path><path d="M10 20v-5h4v5"></path></svg>Plan</a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1120}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { hr: false }; }
+  line(vals, w, h, pad) {
+    const mx = Math.max.apply(null, vals), mn = Math.min.apply(null, vals);
+    return vals.map((v, i) => (pad + i * (w - 2 * pad) / (vals.length - 1)).toFixed(1) + ',' + (h - pad - (v - mn) / ((mx - mn) || 1) * (h - 2 * pad)).toFixed(1)).join(' ');
+  }
+  renderVals() {
+    const hr = this.state.hr, rate = 11.40;
+    const f = (eur) => hr ? (eur / rate).toFixed(1) : eur.toFixed(2);
+    const eat = [62, 70, 58, 66, 71, 64, 60, 69, 73, 65, 68, 96];
+    const eatMx = Math.max.apply(null, eat), eatMn = Math.min.apply(null, eat);
+    const scatter = [[10, 30], [18, 34], [24, 27], [30, 26], [36, 24], [42, 22], [48, 23], [54, 18], [60, 17], [68, 14], [74, 12], [82, 9]];
+    const pin = (name, span, vals, color, value, delta, href) => ({ name: name, span: span, pts: this.line(vals, 150, 40, 3), color: color, value: value, delta: delta, href: href });
+    return {
+      hrOn: hr ? 'true' : 'false', eurOn: hr ? 'false' : 'true',
+      hrCls: hr ? 'sb on' : 'sb', eurCls: hr ? 'sb' : 'sb on',
+      toHr: () => this.setState({ hr: true }), toEur: () => this.setState({ hr: false }),
+      today: f(23.40), tomorrow: f(26.10) + (hr ? ' h' : ' €'), unit: hr ? 'h of work' : '€',
+      eatPts: this.line(eat, 88, 44, 4),
+      eatLastY: (44 - 4 - (96 - eatMn) / (eatMx - eatMn) * 36).toFixed(1),
+      eatNow: hr ? '8.4 h this month' : '96.00 € this month',
+      dots: scatter.map((p) => ({ x: p[0], y: p[1] })),
+      pins: [
+        pin('Kept per period', '24 periods', [210, 180, 260, 120, 300, 240, 280, 190, 310, 330, 290, 457], '#1BAF7A', hr ? f(457.60) + ' h' : '457.60 €', '▲ 23 % rate', 'E-Explore-Light.dc.html'),
+        pin('Groceries / month', 'since 2023', [180, 190, 185, 200, 205, 198, 210, 215, 212, 220, 218, 226], '#2A78D6', hr ? f(212) + ' h' : '212.00 €', '+11 % in 2 y', 'E-Explore-Light.dc.html'),
+        pin('Flat renovation', '2023 → now', [0, 900, 2400, 2600, 4100, 4300, 6800, 7200, 7400, 8900, 9100, 9480], '#EDA100', hr ? f(9480) + ' h' : '9,480 €', '3 years', 'E-Project-Light.dc.html'),
+        pin('House fund', 'since 2024', [2000, 3100, 4300, 5200, 6800, 8100, 9900, 11500, 13200, 15000, 16700, 18400], '#6250D6', hr ? f(18400) + ' h' : '18,400 €', '+650 / mo', 'E-House-Light.dc.html')
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Budget Wallet — site map</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+.r{font-family:'Geist',system-ui,sans-serif;color:#16181D;background:#F5F5F2;box-sizing:border-box}
+.r *{box-sizing:border-box}
+.m{font-family:'Geist Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.card{background:#FFFFFF;border:1px solid #E2E3DE;border-radius:16px}
+.ey{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#5B606B}
+.mu{color:#5B606B}
+.li{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:14px;line-height:20px;padding:6px 0;border-top:1px solid #EEEFEA}
+.f{font-family:'Geist Mono',monospace;font-size:11px;font-weight:600;padding:2px 6px;border-radius:6px;background:#EEEFEA;color:#3F444D;flex:none}
+.fD{background:#E3F1EC;color:#0A5546}
+.chip{display:inline-flex;align-items:center;height:30px;padding:0 12px;border-radius:999px;border:1px solid #E2E3DE;background:#FFFFFF;font-size:13px;font-weight:500}
+a{color:#0D6B58}a:hover{color:#0A5546}
+</style>
+</helmet>
+<div class="r" style="width: 1600px; height: 900px; padding: 48px 56px; display: flex; flex-direction: column; gap: 28px">
+  <div style="display: flex; justify-content: space-between; align-items: flex-end; gap: 32px">
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div class="ey">Budget Wallet · site map</div>
+      <h1 style="margin: 0; font-size: 40px; line-height: 44px; font-weight: 700; letter-spacing: -0.02em">Four places, one add button, one queue</h1>
+      <p class="mu" style="margin: 0; font-size: 17px; line-height: 24px; max-width: 900px">Placed by how often you need it: what you check daily sits one tap away, what you set once lives in Settings.</p>
+    </div>
+    <div style="display: flex; gap: 8px; align-items: center; font-size: 13px">
+      <span class="f fD">D</span><span class="mu">daily</span>
+      <span class="f">W</span><span class="mu">weekly</span>
+      <span class="f">P</span><span class="mu">payday</span>
+      <span class="f">R</span><span class="mu">rare</span>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px">
+    <a href="Today.dc.html" class="card" style="padding: 20px; text-decoration: none; color: #16181D; display: flex; flex-direction: column; gap: 4px">
+      <div class="ey" style="color: #0D6B58">Tab 1</div>
+      <div style="font-size: 22px; font-weight: 700; margin-bottom: 8px">Today</div>
+      <div class="li">Safe to spend today <span class="f fD">D</span></div>
+      <div class="li">Day dots for the pay period <span class="f fD">D</span></div>
+      <div class="li">Needs you (badge) <span class="f fD">D</span></div>
+      <div class="li">Before payday: held money <span class="f fD">D</span></div>
+      <div class="li">Below-zero warning <span class="f fD">D</span></div>
+      <div class="li">Your tiles, your order <span class="f">R</span></div>
+      <div class="li">Settings (gear, top right) <span class="f">R</span></div>
+    </a>
+    <a href="Money.dc.html" class="card" style="padding: 20px; text-decoration: none; color: #16181D; display: flex; flex-direction: column; gap: 4px">
+      <div class="ey" style="color: #0D6B58">Tab 2</div>
+      <div style="font-size: 22px; font-weight: 700; margin-bottom: 8px">Money</div>
+      <div class="li">One timeline: coming up, then past <span class="f fD">D</span></div>
+      <div class="li">Search + filters <span class="f fD">D</span></div>
+      <div class="li">Payment: tags, split, files, lent <span class="f">W</span></div>
+      <div class="li">Bills, slips, warranty, returns <span class="f">W</span></div>
+      <div class="li">Recurring bills + bill history <span class="f">W</span></div>
+      <div class="li">Accounts + balances <span class="f">W</span></div>
+      <div class="li">Calendar view of the period <span class="f">W</span></div>
+    </a>
+    <a href="Add.dc.html" class="card" style="padding: 20px; text-decoration: none; color: #FFFFFF; background: #0D6B58; border-color: #0D6B58; display: flex; flex-direction: column; gap: 4px">
+      <div class="ey" style="color: #CFE9E0">Centre button</div>
+      <div style="font-size: 22px; font-weight: 700; margin-bottom: 8px">+ Add</div>
+      <div class="li" style="border-color: #2B7F6D">Expense (opens first) <span class="f">D</span></div>
+      <div class="li" style="border-color: #2B7F6D">Scan or share a bill <span class="f">D</span></div>
+      <div class="li" style="border-color: #2B7F6D">Can I afford it? → wish <span class="f">D</span></div>
+      <div class="li" style="border-color: #2B7F6D">Import bank file <span class="f">W</span></div>
+      <div class="li" style="border-color: #2B7F6D">Planned cost <span class="f">R</span></div>
+      <div class="li" style="border-color: #2B7F6D">Lent / borrowed <span class="f">R</span></div>
+    </a>
+    <a href="Insights.dc.html" class="card" style="padding: 20px; text-decoration: none; color: #16181D; display: flex; flex-direction: column; gap: 4px">
+      <div class="ey" style="color: #0D6B58">Tab 3</div>
+      <div style="font-size: 22px; font-weight: 700; margin-bottom: 8px">Insights</div>
+      <div class="li">Pay-period report: in / out / kept <span class="f">W</span></div>
+      <div class="li">Budgets vs spent, per tag <span class="f">W</span></div>
+      <div class="li">Trends, zoomable graphs <span class="f">W</span></div>
+      <div class="li">Tag → payee → payments <span class="f">W</span></div>
+      <div class="li">Payday forecast <span class="f">P</span></div>
+      <div class="li">Biggest payments, compare <span class="f">R</span></div>
+    </a>
+    <a href="Plan.dc.html" class="card" style="padding: 20px; text-decoration: none; color: #16181D; display: flex; flex-direction: column; gap: 4px">
+      <div class="ey" style="color: #0D6B58">Tab 4</div>
+      <div style="font-size: 22px; font-weight: 700; margin-bottom: 8px">Plan</div>
+      <div class="li">Payday plan, edit in place <span class="f">P</span></div>
+      <div class="li">Budgets per tag <span class="f">P</span></div>
+      <div class="li">Goals: this period, skip, take out <span class="f">P</span></div>
+      <div class="li">Wishlist + saved by waiting <span class="f">W</span></div>
+      <div class="li">Owed: lent and borrowed <span class="f">R</span></div>
+      <div class="li">Expected income <span class="f">R</span></div>
+    </a>
+  </div>
+
+  <div style="display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; flex: 1">
+    <a href="Inbox.dc.html" class="card" style="padding: 20px 24px; text-decoration: none; color: #16181D; display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; justify-content: space-between; align-items: baseline">
+        <div style="font-size: 20px; font-weight: 700">Needs you: every suggestion in one queue</div>
+        <span class="f fD">D · W</span>
+      </div>
+      <p class="mu" style="margin: 0; font-size: 14px; line-height: 20px">Opened from Today's badge. Weekly review is this queue plus one pace check. Nothing counts until you tap.</p>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px">
+        <span class="chip">Bills to check</span><span class="chip">Recurring bill found</span><span class="chip">Calendar cost</span><span class="chip">Paid by this?</span><span class="chip">Untagged payments</span><span class="chip">Rule suggestion</span><span class="chip">Wish ready to decide</span><span class="chip">Which account is this?</span><span class="chip">Check balance</span><span class="chip">Side income found</span><span class="chip">Use another currency?</span><span class="chip">New device asks to join</span><span class="chip">Plan suggestion</span>
+      </div>
+    </a>
+    <a href="Settings.dc.html" class="card" style="padding: 20px 24px; text-decoration: none; color: #16181D; display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; justify-content: space-between; align-items: baseline">
+        <div style="font-size: 20px; font-weight: 700">Settings: setup only</div>
+        <span class="f">R</span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; font-size: 14px; line-height: 28px">
+        <span>Accounts &amp; currencies</span><span>Tags &amp; rules</span>
+        <span>Import formats</span><span>Sync &amp; devices</span>
+        <span>Wallet key</span><span>Backup &amp; export</span>
+        <span>Calendars</span><span>Reminders</span>
+        <span>Look &amp; Today tiles</span><span>Diagnostics</span>
+      </div>
+    </a>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1600,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Engineer light — Project over years</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
+<style>
+body{margin:0}
+.r{font-family:'Manrope',system-ui,sans-serif;color:#121A21;background:#F4F6F8;position:relative;overflow:hidden;box-sizing:border-box}
+.r *{box-sizing:border-box}
+.m{font-family:'JetBrains Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.pn{background:#FFFFFF;border:1px solid #E1E6EB;border-radius:18px}
+.mu{color:#56636F}
+.ey{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#56636F}
+.chip{min-height:36px;padding:0 12px;border-radius:999px;border:1px solid #CBD3DA;background:transparent;color:#121A21;font:600 13px 'Manrope',sans-serif;cursor:pointer;flex:none}
+.chip.on{background:#121A21;color:#F4F6F8;border-color:#121A21}
+.rw{display:flex;align-items:center;gap:10px;min-height:44px;border-top:1px solid #E1E6EB;font-size:14px}
+.sw{width:10px;height:10px;border-radius:3px;flex:none}
+svg{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+a{color:#1F5FBF}a:hover{color:#174A94}
+</style>
+</helmet>
+<div class="r" style="width: 390px; height: 1180px; padding: 12px 16px 24px; display: flex; flex-direction: column; gap: 14px">
+  <header style="display: flex; align-items: center; gap: 6px">
+    <a href="E-Home-Light.dc.html" aria-label="Back" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #121A21"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></a>
+    <div style="flex: 1"><div class="ey">Project · tag</div><div style="font-size: 22px; font-weight: 800">Flat renovation</div></div>
+  </header>
+
+  <section class="pn" style="padding: 16px; display: flex; flex-direction: column; gap: 8px">
+    <div class="mu" style="font-size: 13px">Mar 2023 → today · 3 years 8 months · 63 payments</div>
+    <div class="m" style="font-size: 44px; line-height: 46px; font-weight: 700; letter-spacing: -0.03em">9,480 €</div>
+    <div class="mu" style="font-size: 14px">7.2 % of everything you spent in that time · about <span class="m" style="color: #121A21">832 h</span> of work</div>
+  </section>
+
+  <section class="pn" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+    <div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 16px; font-weight: 800">Running total</span><span class="m mu" style="font-size: 13px">{{selText}}</span></div>
+    <div style="display: flex; gap: 6px; overflow: hidden">
+      <sc-for list="{{years}}" as="y" hint-placeholder-count="5"><button class="{{y.cls}}" onClick="{{y.pick}}" aria-pressed="{{y.on}}">{{y.l}}</button></sc-for>
+    </div>
+    <svg width="100%" height="150" viewBox="0 0 340 150" role="img" aria-label="Running total of the flat renovation from March 2023 to now, rising in bursts to 9,480 euro">
+      <sc-if value="{{hasSel}}" hint-placeholder-val="{{ false }}"><rect x="{{selX}}" y="6" width="{{selW}}" height="124" fill="#121A21" fill-opacity="0.07" stroke="none"></rect></sc-if>
+      <line x1="0" y1="130" x2="340" y2="130" stroke="#CBD3DA" stroke-width="1"></line>
+      <sc-for list="{{ticks}}" as="t" hint-placeholder-count="4"><line x1="{{t.x}}" y1="126" x2="{{t.x}}" y2="134" stroke="#CBD3DA" stroke-width="1"></line><text x="{{t.tx}}" y="146" fill="#56636F" font-size="11" font-family="JetBrains Mono" stroke="none">{{t.l}}</text></sc-for>
+      <path d="{{area}}" fill="#EDA100" fill-opacity="0.16" stroke="none"></path>
+      <polyline points="{{line}}" stroke="#EDA100" stroke-width="2"></polyline>
+      <text x="62" y="78" fill="#121A21" font-size="11" font-family="Manrope" stroke="none">Kitchen</text>
+      <text x="214" y="40" fill="#121A21" font-size="11" font-family="Manrope" stroke="none">Bathroom</text>
+    </svg>
+  </section>
+
+  <section class="pn" style="padding: 14px 16px 4px; display: flex; flex-direction: column; gap: 10px">
+    <span style="font-size: 16px; font-weight: 800">What it went on</span>
+    <div style="display: flex; gap: 2px; height: 14px" role="img" aria-label="Materials 4,120; furniture 2,610; services 1,900; tools 850 euro">
+      <span style="width: 43.5%; background: #2A78D6; border-radius: 4px 0 0 4px"></span><span style="width: 27.5%; background: #EB6834"></span><span style="width: 20%; background: #1BAF7A"></span><span style="width: 9%; background: #EDA100; border-radius: 0 4px 4px 0"></span>
+    </div>
+    <div>
+      <div class="rw"><span class="sw" style="background: #2A78D6"></span><span style="flex: 1">Materials</span><span class="m">4,120 €</span></div>
+      <div class="rw"><span class="sw" style="background: #EB6834"></span><span style="flex: 1">Furniture</span><span class="m">2,610 €</span></div>
+      <div class="rw"><span class="sw" style="background: #1BAF7A"></span><span style="flex: 1">Services</span><span class="m">1,900 €</span></div>
+      <div class="rw"><span class="sw" style="background: #EDA100"></span><span style="flex: 1">Tools</span><span class="m">850 €</span></div>
+    </div>
+  </section>
+
+  <section class="pn" style="padding: 14px 16px; display: flex; gap: 12px; align-items: center; border-color: #BFD3F0; background: #EAF1FC">
+    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" style="color: #1F5FBF; flex: none"><path d="M4 4h7l9 9-7 7-9-9z"></path><circle cx="8.5" cy="8.5" r="1.3"></circle></svg>
+    <div style="flex: 1; font-size: 14px; line-height: 20px">3 payments at the same DIY stores aren't tagged yet.</div>
+    <button style="min-height: 40px; padding: 0 12px; border-radius: 10px; border: 0; background: #1F5FBF; color: #F4F6F8; font: 700 13px 'Manrope', sans-serif; cursor: pointer">Review 3</button>
+  </section>
+
+  <section class="pn" style="padding: 14px 16px 4px">
+    <div style="display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 6px"><span style="font-size: 16px; font-weight: 800">Still coming</span><span class="m mu" style="font-size: 13px">held before payday</span></div>
+    <div class="rw"><span class="m mu" style="width: 56px">14 Nov</span><span style="flex: 1">Paint, planned</span><span class="m">180.00 €</span></div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1180}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { y: 'All' }; }
+  renderVals() {
+    // 2023 (Mar–Dec) 2,600 · 2024 1,700 · 2025 3,300 · 2026 (Jan–Oct) 1,880 = 9,480
+    const monthly = [300, 900, 1400, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 200, 0, 300, 0, 600, 0, 0, 0, 600, 0, 0, 0, 200, 0, 0, 1300, 1500, 300, 0, 0, 0, 0, 0, 0, 400, 0, 0, 600, 0, 400, 480];
+    const cum = []; let s = 0; monthly.forEach((v) => { s += v; cum.push(s); });
+    const total = s, n = cum.length, W = 340, H = 130, top = 10;
+    const x = (i) => (i / (n - 1) * (W - 4) + 2);
+    const y = (v) => (H - (v / total) * (H - top));
+    let line = '';
+    cum.forEach((v, i) => { line += (i ? ' ' : '') + x(i).toFixed(1) + ',' + y(i ? cum[i - 1] : 0).toFixed(1) + ' ' + x(i).toFixed(1) + ',' + y(v).toFixed(1); });
+    const area = 'M' + x(0) + ',' + H + ' L' + line.split(' ').join(' L') + ' L' + x(n - 1) + ',' + H + ' Z';
+    const yearStart = { '2023': 0, '2024': 10, '2025': 22, '2026': 34 };
+    const yearTot = { '2023': '2,600 €', '2024': '1,700 €', '2025': '3,300 €', '2026': '1,880 €' };
+    const ticks = ['2023', '2024', '2025', '2026'].map((l) => ({ x: x(yearStart[l]).toFixed(1), tx: (x(yearStart[l]) + 3).toFixed(1), l: l }));
+    const sel = this.state.y;
+    const years = ['All', '2023', '2024', '2025', '2026'].map((l) => ({ l: l, on: sel === l ? 'true' : 'false', cls: sel === l ? 'chip on' : 'chip', pick: () => this.setState({ y: l }) }));
+    const hasSel = sel !== 'All';
+    const sx = hasSel ? x(yearStart[sel]) : 0;
+    const ex = hasSel ? (sel === '2026' ? x(n - 1) : x(yearStart[String(Number(sel) + 1)])) : 0;
+    return {
+      line: line, area: area, ticks: ticks, years: years,
+      hasSel: hasSel, selX: sx.toFixed(1), selW: Math.max(2, ex - sx).toFixed(1),
+      selText: hasSel ? sel + ': ' + yearTot[sel] : 'all years: 9,480 €'
+    };
+  }
+}
+</script>
+</body>
+</html>

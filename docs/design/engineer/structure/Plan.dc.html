@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Plan</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+.r{font-family:'Geist',system-ui,sans-serif;color:#16181D;background:#F5F5F2;position:relative;overflow:hidden;box-sizing:border-box}
+.r *{box-sizing:border-box}
+.m{font-family:'Geist Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.card{background:#FFFFFF;border:1px solid #E2E3DE;border-radius:16px}
+.ey{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#5B606B}
+.mu{color:#5B606B}
+.segw{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;padding:4px;border-radius:14px;background:#ECEDE8}
+.sg{display:flex;align-items:center;justify-content:center;min-height:40px;border-radius:10px;font:600 14px 'Geist',sans-serif;color:#3F444D;text-decoration:none}
+.sg.on{background:#FFFFFF;color:#16181D;box-shadow:0 1px 2px rgba(22,24,29,.08)}
+.ln{display:flex;align-items:center;gap:10px;min-height:50px;padding:0 16px;border-top:1px solid #EEEFEA;font-size:15px;width:100%;background:transparent;border-left:0;border-right:0;border-bottom:0;text-align:left;color:#16181D;font-family:'Geist',sans-serif;cursor:pointer}
+.sub{padding-left:28px;font-size:14px;color:#3F444D}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:0 14px;border-radius:10px;border:0;background:#16181D;color:#FFFFFF;font:600 14px 'Geist',sans-serif;cursor:pointer}
+.btn2{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:0 14px;border-radius:10px;border:1px solid #CFD1CB;background:#FFFFFF;color:#16181D;font:600 14px 'Geist',sans-serif;cursor:pointer}
+.nav{position:absolute;left:0;right:0;bottom:0;height:80px;background:#FFFFFF;border-top:1px solid #E2E3DE;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));align-items:start;padding-top:8px}
+.tab{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px;font-weight:500;color:#5B606B;text-decoration:none;min-height:48px}
+.tab.on{color:#16181D;font-weight:600}
+.fab{justify-self:center;width:56px;height:56px;border-radius:18px;background:#0D6B58;color:#FFFFFF;display:flex;align-items:center;justify-content:center;margin-top:-6px;text-decoration:none}
+svg{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+a{color:#0D6B58}a:hover{color:#0A5546}
+</style>
+</helmet>
+<div class="r" style="width: 390px; height: 1240px; padding: 16px 16px 96px; display: flex; flex-direction: column; gap: 12px">
+  <h1 style="margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.01em">Plan</h1>
+  <div class="segw" role="tablist">
+    <a class="sg on" href="Plan.dc.html" role="tab" aria-selected="true">Payday plan</a>
+    <a class="sg" href="Save.dc.html" role="tab" aria-selected="false">Saving</a>
+  </div>
+
+  <section class="card" style="padding: 0; overflow: hidden">
+    <div style="padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; justify-content: space-between; align-items: baseline">
+        <span style="font-size: 16px; font-weight: 700">Every payday</span>
+        <span class="mu" style="font-size: 13px">tap a number to change it</span>
+      </div>
+      <div role="img" aria-label="Of 1,850 euro: 620 fixed, 400 saved first, 830 to spend" style="display: flex; height: 12px; border-radius: 6px; overflow: hidden; gap: 2px">
+        <span style="width: 33.5%; background: #16181D"></span><span style="width: 21.6%; background: #6E8F86"></span><span style="width: 44.9%; background: #0D6B58"></span>
+      </div>
+      <div class="mu" style="font-size: 12px; display: flex; gap: 14px"><span>■ Fixed</span><span style="color: #4E6A62">■ Saved first</span><span style="color: #0D6B58">■ To spend</span></div>
+    </div>
+    <button class="ln" style="font-weight: 600"><span style="flex: 1">Salary <span class="mu" style="font-weight: 400; font-size: 13px">· lands 10th–15th</span></span><span class="m">1,850.00 €</span></button>
+    <div class="ln" style="cursor: default"><span style="flex: 1; font-weight: 600">Fixed bills</span><span class="m">−620.00 €</span></div>
+    <button class="ln sub"><span style="flex: 1">Rent</span><span class="m">350.00 €</span></button>
+
+    <sc-if value="{{editing}}" hint-placeholder-val="{{ true }}">
+      <div style="padding: 10px 16px 12px 28px; border-top: 1px solid #EEEFEA; background: #F5F9F7; display: flex; flex-direction: column; gap: 8px">
+        <label style="display: flex; align-items: center; gap: 8px; font-size: 14px"><span style="flex: 1">Loan</span><input class="m" value="180.00" aria-label="Loan per month" style="width: 110px; min-height: 44px; border: 2px solid #0D6B58; border-radius: 10px; padding: 0 10px; font: 600 15px 'Geist Mono', monospace; text-align: right"> €</label>
+        <span class="mu" style="font-size: 12px">Ends Jan 2028 · 14 payments left at this rate</span>
+        <div style="display: flex; gap: 8px; justify-content: flex-end"><button class="btn2" onClick="{{toggle}}">Cancel</button><button class="btn" onClick="{{toggle}}">Save</button></div>
+      </div>
+    </sc-if>
+    <sc-if value="{{notEditing}}" hint-placeholder-val="{{ false }}">
+      <button class="ln sub" onClick="{{toggle}}"><span style="flex: 1">Loan <span class="mu" style="font-size: 12px">· 14 left</span></span><span class="m">180.00 €</span></button>
+    </sc-if>
+
+    <button class="ln sub"><span style="flex: 1">Subscriptions</span><span class="m">90.00 €</span></button>
+    <div style="margin: 0 16px 10px 28px; padding: 10px 12px; border-radius: 12px; background: #EEF3FB; display: flex; flex-direction: column; gap: 8px">
+      <span style="font-size: 13px; line-height: 18px">Subscriptions were <span class="m" style="font-weight: 600">104.00 €</span> on average over the last 3 months.</span>
+      <div style="display: flex; gap: 8px"><button class="btn" style="background: #26407A">Use 104.00 €</button><button class="btn2">Keep 90.00 €</button></div>
+    </div>
+    <div class="ln" style="cursor: default"><span style="flex: 1; font-weight: 600">Saved first</span><span class="m">−400.00 €</span></div>
+    <button class="ln sub"><span style="flex: 1">Savings</span><span class="m">200.00 €</span></button>
+    <a class="ln sub" href="Save.dc.html" style="text-decoration: none"><span style="flex: 1">Goals · 2</span><span class="m">200.00 €</span></a>
+    <div class="ln" style="border-top: 2px solid #16181D; font-weight: 700; font-size: 16px; cursor: default"><span style="flex: 1">To spend</span><span class="m" style="color: #0D6B58">830.00 €</span></div>
+  </section>
+
+  <section class="card" style="padding: 0; overflow: hidden">
+    <div style="padding: 14px 16px 10px; display: flex; justify-content: space-between; align-items: center">
+      <span style="font-size: 16px; font-weight: 700">Budgets per tag</span>
+      <button class="btn2">Start from…</button>
+    </div>
+    <button class="ln"><span style="flex: 1">Groceries</span><span class="m">260.00 €</span></button>
+    <button class="ln"><span style="flex: 1">Eating out</span><span class="m">80.00 €</span></button>
+    <button class="ln"><span style="flex: 1">Transport</span><span class="m">150.00 €</span></button>
+    <button class="ln"><span style="flex: 1">Fun</span><span class="m">60.00 €</span></button>
+    <div class="ln mu" style="cursor: default; font-size: 14px"><span style="flex: 1">Not given a budget</span><span class="m">280.00 €</span></div>
+  </section>
+
+  <section class="card" style="padding: 0; overflow: hidden">
+    <div style="padding: 14px 16px 10px; font-size: 16px; font-weight: 700">Extra income</div>
+    <button class="ln"><span style="flex: 1">Side job <span class="mu" style="font-size: 13px">· counts when it lands</span></span><span class="m mu">~120.00 €</span></button>
+  </section>
+
+  <nav class="nav" aria-label="Main">
+    <a class="tab" href="Today.dc.html"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"></rect><path d="M3 10h18M8 3v4M16 3v4"></path></svg>Today</a>
+    <a class="tab" href="Money.dc.html"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16M4 17l3 3 3-3M17 20V4M14 7l3-3 3 3"></path></svg>Money</a>
+    <a class="fab" href="Add.dc.html" aria-label="Add"><svg width="26" height="26" viewBox="0 0 24 24" style="stroke-width: 2.2" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></a>
+    <a class="tab" href="Insights.dc.html"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V11M11 20V5M17 20v-6M3 20h18"></path></svg>Insights</a>
+    <a class="tab on" href="Plan.dc.html" aria-current="page"><svg width="24" height="24" viewBox="0 0 24 24" style="color: #0D6B58" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="5"></circle><circle cx="12" cy="12" r="1"></circle></svg>Plan</a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1240}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { editing: true }; }
+  renderVals() {
+    return {
+      editing: this.state.editing,
+      notEditing: !this.state.editing,
+      toggle: () => this.setState({ editing: !this.state.editing })
+    };
+  }
+}
+</script>
+</body>
+</html>

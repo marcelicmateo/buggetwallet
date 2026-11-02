@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Payment detail</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+.r{font-family:'Geist',system-ui,sans-serif;color:#16181D;background:#F5F5F2;position:relative;overflow:hidden;box-sizing:border-box}
+.r *{box-sizing:border-box}
+.m{font-family:'Geist Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.card{background:#FFFFFF;border:1px solid #E2E3DE;border-radius:16px}
+.ey{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#5B606B}
+.mu{color:#5B606B}
+.chip{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 12px;border-radius:999px;border:1px solid #E2E3DE;background:#FFFFFF;font:500 14px 'Geist',sans-serif;color:#16181D}
+.chip.main{background:#16181D;color:#FFFFFF;border-color:#16181D}
+.x{border:0;background:transparent;color:inherit;font-size:16px;min-width:24px;min-height:24px;cursor:pointer;padding:0}
+.act{display:flex;align-items:center;gap:12px;min-height:52px;padding:0 16px;border-top:1px solid #EEEFEA;font:500 15px 'Geist',sans-serif;color:#16181D;background:transparent;border-left:0;border-right:0;border-bottom:0;width:100%;text-align:left;cursor:pointer}
+.thumb{width:72px;height:72px;border-radius:12px;background:#EEEFEA;border:1px solid #E2E3DE;display:flex;align-items:center;justify-content:center;color:#5B606B;font-size:12px}
+svg{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+a{color:#0D6B58}a:hover{color:#0A5546}
+</style>
+</helmet>
+<div class="r" style="width: 390px; height: 1040px; padding: 12px 16px 24px; display: flex; flex-direction: column; gap: 12px">
+  <header style="display: flex; align-items: center; gap: 4px">
+    <a href="Money.dc.html" aria-label="Back to Money" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #16181D"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></a>
+    <span style="flex: 1"></span>
+  </header>
+
+  <section style="display: flex; flex-direction: column; gap: 4px; padding: 0 4px 4px">
+    <div class="m" style="font-size: 40px; font-weight: 600; letter-spacing: -0.02em">−52.00 €</div>
+    <div style="font-size: 18px; font-weight: 600">Fuel station</div>
+    <div class="mu" style="font-size: 14px">Sun 1 Nov · Current account</div>
+    <div class="m mu" style="font-size: 12px">Bank text: FUEL STN 0421 CITY</div>
+  </section>
+
+  <section class="card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 12px">
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <span class="ey">Main tag · decides how it counts</span>
+      <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+        <span class="chip main">Transport</span>
+        <span class="mu" style="font-size: 13px">flexible spending</span>
+      </div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <span class="ey">Extra tags</span>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap">
+        <span class="chip">car <button class="x" aria-label="Remove tag car">×</button></span>
+        <span class="chip">coast trip <button class="x" aria-label="Remove tag coast trip">×</button></span>
+        <button class="chip" style="cursor: pointer; border-style: dashed">+ Tag</button>
+      </div>
+      <span class="mu" style="font-size: 12px">“car” comes from a payee rule. Removing it here changes only this payment.</span>
+    </div>
+    <label style="display: flex; flex-direction: column; gap: 6px">
+      <span class="ey">Note</span>
+      <input placeholder="Add a note" aria-label="Note" style="min-height: 48px; border: 1px solid #CFD1CB; border-radius: 12px; padding: 0 14px; font: 400 15px 'Geist', sans-serif">
+    </label>
+  </section>
+
+  <section class="card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+    <div style="display: flex; justify-content: space-between; align-items: baseline">
+      <span class="ey">Files · 1 of 5</span>
+      <a href="Bill.dc.html" style="font-size: 14px; font-weight: 600; text-decoration: none">Open bill ›</a>
+    </div>
+    <div style="display: flex; gap: 8px">
+      <div class="thumb">Receipt</div>
+      <button class="thumb" style="cursor: pointer; border-style: dashed; font: 500 13px 'Geist', sans-serif" aria-label="Add photo or PDF">+ Add</button>
+    </div>
+  </section>
+
+  <section class="card" style="padding: 0; overflow: hidden">
+    <button class="act" style="border-top: 0"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4v6a6 6 0 0 0 6 6h6M14 12l4 4-4 4"></path></svg>Split into parts</button>
+    <button class="act"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"></circle><path d="M3 20c0-3.3 2.7-6 6-6M15 14h6M18 11v6"></path></svg>Lent to someone</button>
+    <button class="act"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h10M4 17h7"></path></svg>Tag every payment from Fuel station…</button>
+    <button class="act"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v4H5zM5 13h9v6H5z"></path></svg>Account: Current</button>
+  </section>
+
+  <button style="min-height: 48px; border: 0; background: transparent; color: #B4441A; font: 600 15px 'Geist', sans-serif; cursor: pointer">Delete payment</button>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1040}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

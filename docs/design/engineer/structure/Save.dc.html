@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Plan — Saving</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+.r{font-family:'Geist',system-ui,sans-serif;color:#16181D;background:#F5F5F2;position:relative;overflow:hidden;box-sizing:border-box}
+.r *{box-sizing:border-box}
+.m{font-family:'Geist Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.card{background:#FFFFFF;border:1px solid #E2E3DE;border-radius:16px}
+.ey{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#5B606B}
+.mu{color:#5B606B}
+.segw{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;padding:4px;border-radius:14px;background:#ECEDE8}
+.sg{display:flex;align-items:center;justify-content:center;min-height:40px;border-radius:10px;font:600 14px 'Geist',sans-serif;color:#3F444D;text-decoration:none}
+.sg.on{background:#FFFFFF;color:#16181D;box-shadow:0 1px 2px rgba(22,24,29,.08)}
+.it{display:flex;flex-direction:column;gap:8px;padding:14px 16px;border-top:1px solid #EEEFEA}
+.trk{height:8px;border-radius:4px;background:#ECEDE8;overflow:hidden}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:0 14px;border-radius:10px;border:0;background:#16181D;color:#FFFFFF;font:600 14px 'Geist',sans-serif;cursor:pointer;text-decoration:none}
+.btn2{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:0 14px;border-radius:10px;border:1px solid #CFD1CB;background:#FFFFFF;color:#16181D;font:600 14px 'Geist',sans-serif;cursor:pointer;text-decoration:none}
+.hd{display:flex;justify-content:space-between;align-items:center;padding:14px 16px 12px}
+.pill{font-size:12px;font-weight:600;border-radius:6px;padding:2px 7px}
+.nav{position:absolute;left:0;right:0;bottom:0;height:80px;background:#FFFFFF;border-top:1px solid #E2E3DE;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));align-items:start;padding-top:8px}
+.tab{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px;font-weight:500;color:#5B606B;text-decoration:none;min-height:48px}
+.tab.on{color:#16181D;font-weight:600}
+.fab{justify-self:center;width:56px;height:56px;border-radius:18px;background:#0D6B58;color:#FFFFFF;display:flex;align-items:center;justify-content:center;margin-top:-6px;text-decoration:none}
+svg{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+a{color:#0D6B58}a:hover{color:#0A5546}
+</style>
+</helmet>
+<div class="r" style="width: 390px; height: 1180px; padding: 16px 16px 96px; display: flex; flex-direction: column; gap: 12px">
+  <h1 style="margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.01em">Plan</h1>
+  <div class="segw" role="tablist">
+    <a class="sg" href="Plan.dc.html" role="tab" aria-selected="false">Payday plan</a>
+    <a class="sg on" href="Save.dc.html" role="tab" aria-selected="true">Saving</a>
+  </div>
+
+  <section class="card" style="overflow: hidden">
+    <div class="hd"><span style="font-size: 16px; font-weight: 700">Goals</span><button class="btn2">+ Goal</button></div>
+    <div class="it">
+      <div style="display: flex; justify-content: space-between; font-size: 15px"><span style="font-weight: 600">Laptop</span><span class="m">640 of 1,200 €</span></div>
+      <div class="trk"><div style="width: 53%; height: 100%; background: #0D6B58"></div></div>
+      <div class="mu" style="font-size: 13px">By March · <span class="m">120.00 €</span> this period, paid on payday</div>
+      <div style="display: flex; gap: 8px"><button class="btn2">Skip this period</button><button class="btn2">Take out…</button></div>
+    </div>
+    <div class="it">
+      <div style="display: flex; justify-content: space-between; font-size: 15px"><span style="font-weight: 600">Holiday</span><span class="m">310 of 900 €</span></div>
+      <div class="trk"><div style="width: 34%; height: 100%; background: #0D6B58"></div></div>
+      <div class="mu" style="font-size: 13px">By July · <span class="m">80.00 €</span> this period, paid on payday</div>
+    </div>
+  </section>
+
+  <section class="card" style="overflow: hidden">
+    <div class="hd" style="flex-wrap: wrap; gap: 6px">
+      <span style="font-size: 16px; font-weight: 700">Wishlist</span>
+      <span class="mu" style="font-size: 13px">Saved by waiting: <span class="m" style="color: #0D6B58; font-weight: 600">412.00 €</span> all time</span>
+    </div>
+    <div class="it">
+      <div style="display: flex; justify-content: space-between; align-items: center; font-size: 15px"><span style="font-weight: 600">Headphones</span><span class="m">89.00 €</span></div>
+      <div style="display: flex; gap: 8px; align-items: center"><span class="pill" style="background: #E3F1EC; color: #0A5546">Ready to decide</span><span class="mu" style="font-size: 13px">Fits; each day drops to 17.80 €</span></div>
+      <div style="display: flex; gap: 8px"><button class="btn">Buy it</button><button class="btn2">Skip, keep 89 €</button></div>
+    </div>
+    <div class="it">
+      <div style="display: flex; justify-content: space-between; align-items: center; font-size: 15px"><span style="font-weight: 600">Running shoes</span><span class="m">120.00 €</span></div>
+      <div style="display: flex; gap: 8px; align-items: center"><span class="pill" style="background: #EEEFEA; color: #3F444D">Cooling off · 2 d 23 h</span><span class="mu" style="font-size: 13px">Fits after payday</span></div>
+    </div>
+    <div style="padding: 0 16px 14px"><a class="btn2" href="Add.dc.html" style="width: 100%">Can I afford it?</a></div>
+  </section>
+
+  <section class="card" style="overflow: hidden">
+    <div class="hd" style="flex-wrap: wrap; gap: 6px">
+      <span style="font-size: 16px; font-weight: 700">Owed</span>
+      <span class="mu" style="font-size: 13px">Owed to you <span class="m" style="color: #16181D; font-weight: 600">55.00 €</span> · you owe <span class="m" style="color: #16181D; font-weight: 600">0.00 €</span></span>
+    </div>
+    <div class="it" style="flex-direction: row; align-items: center; justify-content: space-between">
+      <div><div style="font-size: 15px; font-weight: 600">Flatmate</div><div class="mu" style="font-size: 13px">Lent 60.00 € · 20.00 € back</div></div>
+      <span class="m" style="font-size: 15px">40.00 €</span>
+    </div>
+    <div class="it" style="flex-direction: row; align-items: center; justify-content: space-between">
+      <div><div style="font-size: 15px; font-weight: 600">Sister</div><div class="mu" style="font-size: 13px">Concert ticket</div></div>
+      <span class="m" style="font-size: 15px">15.00 €</span>
+    </div>
+  </section>
+
+  <nav class="nav" aria-label="Main">
+    <a class="tab" href="Today.dc.html"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"></rect><path d="M3 10h18M8 3v4M16 3v4"></path></svg>Today</a>
+    <a class="tab" href="Money.dc.html"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16M4 17l3 3 3-3M17 20V4M14 7l3-3 3 3"></path></svg>Money</a>
+    <a class="fab" href="Add.dc.html" aria-label="Add"><svg width="26" height="26" viewBox="0 0 24 24" style="stroke-width: 2.2" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></a>
+    <a class="tab" href="Insights.dc.html"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V11M11 20V5M17 20v-6M3 20h18"></path></svg>Insights</a>
+    <a class="tab on" href="Plan.dc.html" aria-current="page"><svg width="24" height="24" viewBox="0 0 24 24" style="color: #0D6B58" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="5"></circle><circle cx="12" cy="12" r="1"></circle></svg>Plan</a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1180}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
