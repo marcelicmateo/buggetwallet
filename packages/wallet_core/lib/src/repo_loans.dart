@@ -110,12 +110,25 @@ extension WalletRepoLoans on WalletRepo {
   }
 
   /// For `settings()`: each open live loan's payment in force today ([loanPaymentOn]: its schedule when known; 0 when
-  /// unknown).
+  /// unknown). A loan closed in the running period (closed on or after `periodStart`, as `computePeriod` starts it)
+  /// keeps its line, at its payment on the closing date, while a payment matched to it ("Loan") lies in
+  /// [periodStart, closed date]: that payment is the line's money, so closing never changes safe-to-spend. From the
+  /// next period on, the line is gone.
   Map<String, int> _loanPlanLines() {
     final today = _today();
+    String? start;
+    bool keeps(Loan l) {
+      if (l.open) return true;
+      final closed = l.closedAt!;
+      if (closed.compareTo(start ??= _readSettings(db).periodStart ?? today) < 0) return false;
+      final st = _loanState();
+      return (st.decisions.matched[l.id] ?? const [])
+          .any((p) => p.date.compareTo(start!) >= 0 && p.date.compareTo(closed) <= 0 && st.loanTx.contains(p.txId));
+    }
+
     return {
       for (final l in loans())
-        if (l.open) l.id: loanPaymentOn(l, loanRates(l.id), loanChecks(l.id), today) ?? 0,
+        if (keeps(l)) l.id: loanPaymentOn(l, loanRates(l.id), loanChecks(l.id), l.closedAt ?? today) ?? 0,
     };
   }
 

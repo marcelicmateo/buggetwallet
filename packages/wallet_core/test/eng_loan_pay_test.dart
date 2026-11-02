@@ -226,6 +226,52 @@ void main() {
       expect([_tag(repo, nov), _pending(repo)], ['Bills & one-offs', isEmpty], reason: 'after the closing date: not the loan\'s');
     });
 
+    group('closing a loan in a period', () {
+      var now = _clock();
+      late WalletRepo r;
+      setUp(() {
+        now = _clock();
+        r = WalletRepo.inMemory(now: () => now);
+        r.updateSettings({'salary': 300000, 'paydayDay': 15, 'periodStart': '2026-10-15'});
+      });
+      tearDown(() => r.close());
+      PeriodBudget period(String today) =>
+          computePeriod(r.categorizer().expandAll(r.transactions()), r.settings(), r.goals(), today, table: r.categoryTable());
+      String loanPaidOn(String date) {
+        final aug = _import(r, '2026-08-15', -20000, _payee);
+        final id = r.addLoan(Loan(id: '', name: 'Car', payment: 20000, payeeKey: _keyOf(r, aug)));
+        r.confirmLoanPayment(id, aug);
+        _import(r, date, -20000, _payee); // matched silently
+        return id;
+      }
+
+      test('closed mid-period after its last payment: safe-to-spend does not change; the next period has no line', () {
+        final id = loanPaidOn('2026-10-20');
+        final before = period(_today);
+        expect([before.flexBudget, before.spent, before.fixedPaid['Loan']], [280000, 0, 20000]);
+        r.closeLoan(id, '2026-10-25');
+        final after = period(_today);
+        expect([after.flexBudget, after.remaining, after.safeToday, r.settings().loanPlan],
+            [before.flexBudget, before.remaining, before.safeToday, 20000]);
+        now = DateTime.utc(2026, 11, 16, 9).millisecondsSinceEpoch;
+        r.updateSettings({'periodStart': '2026-11-15'});
+        expect([r.settings().loanPlan, period('2026-11-16').flexBudget], [0, 300000]);
+      });
+
+      test('a payment on the closing day: safe-to-spend does not change', () {
+        final id = loanPaidOn('2026-10-20');
+        final before = period(_today);
+        r.closeLoan(id, '2026-10-20');
+        expect([period(_today).remaining, r.settings().loanPlan], [before.remaining, 20000]);
+      });
+
+      test('closed in a period without a matched payment in it: the line ends', () {
+        final id = loanPaidOn('2026-09-15');
+        r.closeLoan(id, '2026-10-20');
+        expect([r.settings().loanPlan, period(_today).flexBudget], [0, 300000]);
+      });
+    });
+
     test('a synced row whose other fields arrive before its creation op is matched once its date lands', () {
       final id = loanByKey();
       repo.confirmLoanPayment(id, repo.transactions().single.id);
