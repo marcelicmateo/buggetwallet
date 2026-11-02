@@ -38,7 +38,7 @@ String? _str(Object? v) => v is String ? v : null;
 abstract final class TxCols {
   static const entity = 'tx';
   static const source = TextCol(entity, 'source', label: 'Source'); // pbz | revolut | csv:<shape> | manual
-  static const date = DateCol(entity, 'date', label: 'Date');
+  static const date = DateCol(entity, 'date', label: 'Date', rawRead: true);
   static const amount = MoneyCol(entity, 'amount', label: 'Amount', searchable: true, cap: legacyRowCapCents);
   static const currency = TextCol(entity, 'currency', label: 'Currency', defaultValue: 'EUR');
   static const bankType = TextCol(entity, 'bank_type', label: 'Bank type');
@@ -329,7 +329,7 @@ abstract final class GoalContribCols {
   static const entity = 'goal_contrib';
   static const goalId = RefCol(entity, 'goal_id', label: 'Goal', target: GoalCols.entity);
   static const amount = IntCol(entity, 'amount', label: 'Amount');
-  static const date = DateCol(entity, 'date', label: 'Date');
+  static const date = DateCol(entity, 'date', label: 'Date', rawRead: true);
   static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
 
   static const all = <Col>[goalId, amount, date, deleted];
@@ -372,7 +372,7 @@ abstract final class WishCols {
 /// The columns of the synced entity `review` (table `reviews`, id = the review date): a weekly review done.
 abstract final class ReviewCols {
   static const entity = 'review';
-  static const done = DateCol(entity, 'done', label: 'Done');
+  static const done = DateCol(entity, 'done', label: 'Done', rawRead: true);
   static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
 
   static const all = <Col>[done, deleted];
@@ -450,7 +450,7 @@ abstract final class RecurringCols {
       min: RecurringBill.minIntervalDays,
       max: RecurringBill.maxIntervalDays,
       unit: 'days');
-  static const nextDue = DateCol(entity, 'next_due', label: 'Next due');
+  static const nextDue = DateCol(entity, 'next_due', label: 'Next due', rawRead: true);
   // candidate | confirmed | dismissed, with the `in:` prefix for an income (`RecurringBill.storedStatus`).
   static const status = TextCol(entity, 'status', label: 'Status', defaultValue: 'candidate');
   static const lastPaidTx = RefCol(entity, 'last_paid_tx', label: 'Last paid by', target: 'tx', nullable: true);
@@ -823,7 +823,7 @@ abstract final class IouCols {
   static const direction = EnumCol(entity, 'direction', label: 'Direction', values: IouDirection.values, defaultValue: IouDirection.lent);
   static const amount = MoneyCol(entity, 'amount', label: 'Amount', positive: true);
   static const currency = TextCol(entity, 'currency', label: 'Currency', defaultValue: 'EUR');
-  static const date = DateCol(entity, 'date', label: 'Date');
+  static const date = DateCol(entity, 'date', label: 'Date', rawRead: true);
   static const note = TextCol(entity, 'note', label: 'Note', nullable: true, searchable: true, maxLength: Iou.maxNote);
   static const tx = RefCol(entity, 'tx', label: 'Payment', target: 'tx', nullable: true);
   static const closed = FlagCol(entity, 'closed', label: 'Closed');
@@ -884,7 +884,7 @@ abstract final class IouPartCols {
   static const entity = 'iou_part';
   static const iouId = RefCol(entity, 'iou_id', label: 'IOU', target: IouCols.entity);
   static const amount = MoneyCol(entity, 'amount', label: 'Amount', positive: true);
-  static const date = DateCol(entity, 'date', label: 'Date');
+  static const date = DateCol(entity, 'date', label: 'Date', rawRead: true);
   static const tx = RefCol(entity, 'tx', label: 'Payment', target: 'tx', nullable: true);
   static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
 
@@ -937,7 +937,7 @@ enum PlannedStatus { open, paid, skipped }
 abstract final class PlannedCols {
   static const entity = 'planned';
   static const title = TextCol(entity, 'title', label: 'Title', searchable: true);
-  static const date = DateCol(entity, 'date', label: 'Date');
+  static const date = DateCol(entity, 'date', label: 'Date', rawRead: true);
   static const amount = MoneyCol(entity, 'amount', label: 'Amount', nullable: true, searchable: true, positive: true);
   static const category = TextCol(entity, 'category', label: 'Category', nullable: true, searchable: true);
   static const source = EnumCol(entity, 'source', label: 'Source', values: PlannedSource.values, defaultValue: PlannedSource.manual);

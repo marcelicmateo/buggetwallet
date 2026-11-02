@@ -49,7 +49,8 @@ extension WalletRepoPatch on WalletRepo {
         written = _patchTag(id, checked);
       default:
         final fields = _patchFields(checked);
-        if (db.select('SELECT 1 FROM ${def.table} WHERE id = ?', [id]).isEmpty) throw ArgumentError('No such row.');
+        final live = def.columnNames.contains('deleted') ? ' AND deleted = 0' : '';
+        if (db.select('SELECT 1 FROM ${def.table} WHERE id = ?$live', [id]).isEmpty) throw ArgumentError('No such row.');
         if (fields.isNotEmpty) _write([(entity, id, fields)]);
         written = fields.length;
     }

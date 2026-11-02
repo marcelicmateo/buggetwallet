@@ -415,6 +415,39 @@ void main() {
     });
   });
 
+  group('review fixes', () {
+    test('a peer-stored date with no such day reads back as its text, and the money paths still run', () {
+      const bad = '2026-02-30';
+      final out = Tx.fromRow(
+          {'id': 'o', 'source': 'pbz', 'date': bad, 'amount': -5000, 'currency': 'EUR', 'kind_hint': 'ownTransfer', 'description': 'x'});
+      final into =
+          Tx.fromRow({'id': 'i', 'source': 'revolut', 'date': '2026-02-27', 'amount': 5000, 'currency': 'EUR', 'description': 'y'});
+      expect(out.date, bad, reason: 'as e58bc99 read it');
+      expect(IouPart.fromRow({'id': 'r', 'date': bad}).date, bad);
+      expect(Iou.fromRow({'id': 'o', 'date': bad}).date, bad);
+      expect(PlannedCost.fromRow({'id': 'p', 'date': bad}).date, bad);
+      expect(GoalContribution.fromRow({'id': 'c', 'date': bad}).date, bad);
+      expect(RecurringBill.fromRow({'id': 'b', 'next_due': bad}).nextDue, bad);
+      expect(RecurringBill.fromRow({'id': 'b', 'ends_on': bad}).endsOn, isNull, reason: 'a bad end date was none before too');
+      expect(() => planTransfers([out, into]), returnsNormally);
+      expect(() => openTransfers([out, into]), returnsNormally);
+      final cz = repo.categorizer();
+      expect(
+          () => computePeriod([cz.categorize(out), cz.categorize(into)],
+              const WalletSettings(salary: 100000, paydayDay: 15, periodStart: '2026-02-15'), const [], '2026-02-20',
+              table: repo.categoryTable()),
+          returnsNormally);
+    });
+
+    test('patch refuses a deleted row of an entity with a deleted column', () {
+      final g = repo.saveGoal(name: 'Bike', target: 90000, saved: 0, monthly: 5000, sort: 7);
+      repo.deleteGoal(g);
+      final before = repo.pendingOps().length;
+      expect(() => repo.patch('goal', g, {GoalCols.name: 'x'}), _refused('No such row.'));
+      expect(repo.pendingOps().length, before);
+    });
+  });
+
   test('every synced entity but setting comes from a Col holder', () {
     for (final e in entitySchema.entries) {
       if (e.key == 'setting') continue;

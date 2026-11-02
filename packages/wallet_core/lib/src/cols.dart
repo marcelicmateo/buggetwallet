@@ -86,14 +86,16 @@ final class TextCol extends Col<String> {
   }
 }
 
-/// A real calendar date `YYYY-MM-DD`; with [notAfterToday] none after the device's today.
+/// A real calendar date `YYYY-MM-DD`; with [notAfterToday] none after the device's today. With [rawRead] any stored text
+/// reads as it is (a peer's `2026-02-30` stays that text, as models read it before F2); writes are checked either way.
 final class DateCol extends Col<String> {
-  final bool notAfterToday;
-  const DateCol(super.entity, super.column, {required super.label, super.nullable, super.searchable, this.notAfterToday = false})
+  final bool notAfterToday, rawRead;
+  const DateCol(super.entity, super.column,
+      {required super.label, super.nullable, super.searchable, this.notAfterToday = false, this.rawRead = false})
       : super(type: ColumnType.text);
 
   @override
-  String? decode(Object? stored) => stored is String && isIsoDate(stored) ? stored : null;
+  String? decode(Object? stored) => stored is String && (rawRead || isIsoDate(stored)) ? stored : null;
   @override
   Object? encode(String value) => value;
   @override
