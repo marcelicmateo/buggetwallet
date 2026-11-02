@@ -13,7 +13,6 @@ import 'changes.dart';
 import 'cols.dart';
 import 'dates.dart';
 import 'ecb.dart';
-import 'goal_plan.dart' show goalPlan;
 import 'hlc.dart';
 import 'import_preview.dart';
 import 'loans.dart';
@@ -814,7 +813,25 @@ class WalletRepo {
   /// unchanged total writes no contribution. [saved] is clamped to ±[Goal.maxSaved]. The difference is taken from the
   /// unclamped total and written as at most [Goal.maxContribution]: from a total beyond the cap (only reachable with
   /// adds on several devices at once) a set can take a second edit to land exactly.
-  String saveGoal({String? id, required String name, required int target, required int saved, required int monthly, int? sort}) {
+  ///
+  /// [purchase]: a big purchase's planner fields ([GoalCols.price], `depositPermille`, `costsPermille`, `loanRateBp`,
+  /// `loanMonths`, `compareLineId`; null or [clearValue] clears one), written in the same op and checked like `patch`
+  /// (a bad value or another column: [ArgumentError], nothing written). With a price the goal's target is derived
+  /// (`goalTarget`), so [target] is not written.
+  String saveGoal(
+      {String? id,
+      required String name,
+      required int target,
+      required int saved,
+      required int monthly,
+      int? sort,
+      Map<Col, Object?> purchase = const {}}) {
+    final values = {for (final e in purchase.entries) e.key: identical(e.value, clearValue) ? null : e.value};
+    for (final MapEntry(key: c, value: v) in values.entries) {
+      if (!_purchaseCols.contains(c)) throw ArgumentError('${c.label}: not a big-purchase field.');
+      if (!c.accepts(v)) throw ArgumentError('${c.label}: wrong kind of value.');
+    }
+    final big = _patchFields(values);
     final gid = id ?? _newId('g');
     final want = saved.clamp(-Goal.maxSaved, Goal.maxSaved);
     final now = id == null ? null : _goalSaved(gid);
@@ -824,10 +841,11 @@ class WalletRepo {
         gid,
         {
           'name': name,
-          'target': target,
+          if (values[GoalCols.price] == null) 'target': target,
           if (now == null) 'saved': want,
           'monthly': monthly,
           'sort': sort ?? DateTime.now().millisecondsSinceEpoch,
+          ...big,
           'deleted': 0
         }
       ),
@@ -835,6 +853,15 @@ class WalletRepo {
     ]);
     return gid;
   }
+
+  static const _purchaseCols = {
+    GoalCols.price,
+    GoalCols.depositPermille,
+    GoalCols.costsPermille,
+    GoalCols.loanRateBp,
+    GoalCols.loanMonths,
+    GoalCols.compareLineId
+  };
 
   (String, String, Map<String, Object?>) _contribution(String goalId, int cents, {String? date, String? id}) =>
       ('goal_contrib', id ?? _newId('c'), {'goal_id': goalId, 'amount': cents, 'date': date ?? isoDate(DateTime.now()), 'deleted': 0});

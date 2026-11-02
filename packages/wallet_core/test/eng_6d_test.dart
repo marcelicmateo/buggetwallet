@@ -42,11 +42,14 @@ void main() {
       expect(loanBalanceOn(c, '2026-06-20'), 500000);
       expect(loanBalanceOn(c, '2026-07-15'), 416434, reason: '500 000 + 2 500 interest − 86 066');
       expect(loanBalanceOn(c, '2026-06-14'), s[4].balance, reason: 'before the check: the schedule as it was');
+      expect([loanBalanceOn(c, '2026-06-15'), loanBalanceOn(c, '2026-06-19')], [s[5].balance, s[5].balance],
+          reason: 'between the due date and the check: the scheduled balance, never the later check');
+      expect([c[5].checkDate, c[5].scheduled, c[4].checkDate], ['2026-06-20', s[5].balance, null]);
     });
 
-    test('a check before the first due date is the opening balance; one in the first month leaves it', () {
+    test('a check before the first due date is the opening balance from its date; one in the first month leaves it', () {
       final pre = loanSchedule(_loan(), const [], const [LoanCheck(loanId: 'l1', date: '2026-01-10', balance: 900000)]);
-      expect(loanBalanceOn(pre, '2026-01-01'), 900000);
+      expect([loanBalanceOn(pre, '2026-01-09'), loanBalanceOn(pre, '2026-01-10')], [1000000, 900000]);
       final first = loanSchedule(_loan(), const [], const [LoanCheck(loanId: 'l1', date: '2026-01-20', balance: 950000)]);
       expect([loanBalanceOn(first, '2026-01-14'), loanBalanceOn(first, '2026-01-20')], [1000000, 950000]);
     });
@@ -72,6 +75,21 @@ void main() {
       final part = loanYears(s.take(8).toList());
       expect(_sum(part.map((e) => e.principal)), 1000000 - part.last.endBalance);
       expect(loanYears(const []), isEmpty);
+      expect(y.map((e) => e.adjust), [0, 0]);
+    });
+
+    test('lender checks: adjust per year, Σ principal + adjust = borrowed − the end balance', () {
+      final s = loanSchedule(_loan(first: '2026-07-15'), const [], const [
+        LoanCheck(loanId: 'l1', date: '2026-09-20', balance: 500000),
+        LoanCheck(loanId: 'l1', date: '2027-02-20', balance: 300000)
+      ]);
+      final y = loanYears(s);
+      expect(y.map((e) => e.adjust), [s[2].scheduled - 500000, s[7].scheduled - 300000]);
+      expect(y.first.adjust, greaterThan(0), reason: 'the lender showed less owed');
+      expect(_sum(y.map((e) => e.principal + e.adjust)), 1000000 - y.last.endBalance);
+      final pre = loanYears(loanSchedule(_loan(), const [], const [LoanCheck(loanId: 'l1', date: '2026-01-10', balance: 1100000)]));
+      expect(pre.single.adjust, -100000, reason: 'a check before the first due date: principal − its balance');
+      expect(_sum(pre.map((e) => e.principal + e.adjust)), 1000000 - pre.last.endBalance);
     });
   });
 
@@ -169,19 +187,26 @@ void main() {
       devices.clear();
     });
 
-    test('addGoal: one write with every big-purchase field; the other device reads the same', () async {
+    test('saveGoal with a purchase map: one write; the target is derived and follows a deposit edit', () async {
       final a = device('a'), b = device('b');
       final ops = a.repo.pendingOps().length, v = a.repo.dataVersion;
-      final id = a.repo
-          .addGoal(name: 'Boat', price: 1000000, depositPermille: 200, costsPermille: 60, loanRateBp: 450, loanMonths: 60, monthly: 20000);
-      expect([a.repo.pendingOps().length - ops, a.repo.dataVersion - v], [1, 1]);
+      final id = a.repo.saveGoal(name: 'Boat', target: 0, saved: 0, monthly: 20000, purchase: {
+        GoalCols.price: 1000000,
+        GoalCols.depositPermille: 200,
+        GoalCols.costsPermille: 60,
+        GoalCols.loanRateBp: 450,
+        GoalCols.loanMonths: 60,
+      });
+      final made = a.repo.pendingOps().skip(ops).map((o) => o.$2).toList();
+      expect([made.length, a.repo.dataVersion - v], [1, 1]);
+      expect(made.single.fields.containsKey('target'), isFalse, reason: 'a goal with a price stores no target');
       await a.run();
       await b.run();
       for (final d in [a, b]) {
         final g = d.repo.goals().single;
         expect([
           g.id,
-          g.target,
+          goalTarget(g),
           g.monthly,
           g.price,
           g.depositPermille,
@@ -201,9 +226,24 @@ void main() {
           null
         ], reason: '${d.name}: target = deposit + costs');
       }
-      expect(() => a.repo.addGoal(name: 'X', depositPermille: 1001), throwsArgumentError);
-      expect(a.repo.addGoal(name: 'Plain', target: 5000), isNotEmpty);
-      expect([a.repo.goals().length, a.repo.goals().last.price, a.repo.goals().last.target], [2, null, 5000]);
+      final before = b.repo.pendingOps().length;
+      b.repo.patch(GoalCols.entity, id, <Col, Object?>{GoalCols.depositPermille: 300});
+      expect(b.repo.pendingOps().skip(before).single.$2.fields.keys, ['deposit_permille']);
+      await b.run();
+      await a.run();
+      for (final d in [a, b]) {
+        final g = d.repo.goals().single;
+        expect([goalTarget(g), monthsToGoal(g), goalTotals(d.repo.goals()).target], [360000, 18, 360000], reason: d.name);
+        expect(searchAll('3600', txs: const [], goals: [g], wishlist: const [], bills: const []).goals, [g], reason: d.name);
+      }
+      expect(goalTarget(const Goal(id: 'p', name: 'Paid in full', price: 100000, costsPermille: 50)), 105000);
+      expect(goalTarget(const Goal(id: 'q', name: 'Plain', target: 5000)), 5000);
+      expect(() => a.repo.saveGoal(name: 'X', target: 0, saved: 0, monthly: 0, purchase: {GoalCols.depositPermille: 1001}),
+          throwsArgumentError);
+      expect(() => a.repo.saveGoal(name: 'X', target: 0, saved: 0, monthly: 0, purchase: {GoalCols.boughtAt: '2026-11-01'}),
+          throwsArgumentError);
+      expect(() => a.repo.saveGoal(name: 'X', target: 0, saved: 0, monthly: 0, purchase: {GoalCols.price: 'ten'}), throwsArgumentError);
+      expect(a.repo.goals().length, 1, reason: 'nothing written for a bad value');
     });
 
     test('Skip on an untagged Project candidate holds for good, on both devices', () async {
@@ -235,6 +275,41 @@ void main() {
         expect(d.repo.tagLinks()[t2], {tag: false}, reason: d.name);
         expect(candidates(d.repo), isEmpty, reason: d.name);
       }
+    });
+
+    test('Skip with a sync-duplicate tag: an off link on the duplicate counts for the original', () async {
+      final a = device('a'), b = device('b');
+      final t1 = a.repo.addTransaction(date: '2026-10-05', amount: 1000, category: 'Groceries', note: 'Corner shop');
+      final t2 = a.repo.addTransaction(date: '2026-10-06', amount: 1200, category: 'Groceries', note: 'Corner shop');
+      final t3 = a.repo.addTransaction(date: '2026-10-07', amount: 1300, category: 'Groceries', note: 'Corner shop');
+      await a.run();
+      await b.run();
+      final ta = await a.repo.addTag('Trip'), tb = await b.repo.addTag('Trip'); // offline: two rows, one name
+      final orig = ta.compareTo(tb) < 0 ? ta : tb, dup = orig == ta ? tb : ta;
+      final dupDevice = dup == ta ? a : b, origDevice = dupDevice == a ? b : a;
+      await origDevice.repo.setTxTag(t1, orig, true);
+      await dupDevice.repo.setTxTag(t2, dup, false); // its own tag there: the off link is on the duplicate
+      for (var i = 0; i < 2; i++) {
+        await a.run();
+        await b.run();
+      }
+      for (final d in [a, b]) {
+        expect(d.repo.tagTable().resolve(dup), orig, reason: d.name);
+        final ctx = d.repo.tagContext();
+        final rows = [
+          for (final t in d.repo.transactions()) tagged(t, 'Groceries', tagsOf(t, tags: ctx.tags, ruleTags: ctx.ruleTags, links: ctx.links))
+        ];
+        for (final id in [orig, dup]) {
+          final c = projectStats(id, rows, tags: ctx, table: CategoryTable.builtIn, currency: 'EUR', today: _today).candidates;
+          expect(c.map((t) => t.id), [t3], reason: '${d.name}: skipped through the duplicate');
+        }
+        final ops = d.repo.pendingOps().length;
+        await d.repo.setTxTag(t2, orig, false);
+        await d.repo.setTxTag(t2, dup, false);
+        expect(d.repo.pendingOps().length, ops, reason: '${d.name}: the group is already off');
+      }
+      await a.repo.setTxTag(t3, dup, false); // Skip through the duplicate id: written on the original
+      expect(a.repo.tagLinks()[t3], {orig: false});
     });
   });
 }

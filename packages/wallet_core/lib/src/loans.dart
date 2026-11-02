@@ -147,12 +147,19 @@ class LoanCheck {
 }
 
 /// One month of a loan's schedule: due on [due] at [rateBp]; [paid] = [interest] + [principal]; [opening] = the balance
-/// before it, [balance] after it (after a lender's balance check dated before the next due date, the check's balance).
+/// before it, [balance] after it (after a lender's balance check dated before the next due date, the check's balance,
+/// and [checkDate] its date). [borrowed] = the loan's principal; [startCheckDate]: the date of a check before the first
+/// due date that set the first month's [opening] (the same on every month).
 class LoanMonth {
   final int index;
   final String due;
-  final int rateBp, paid, interest, principal, balance, opening;
-  const LoanMonth(this.index, this.due, this.rateBp, this.paid, this.interest, this.principal, this.balance, this.opening);
+  final int rateBp, paid, interest, principal, balance, opening, borrowed;
+  final String? checkDate, startCheckDate;
+  const LoanMonth(this.index, this.due, this.rateBp, this.paid, this.interest, this.principal, this.balance, this.opening,
+      {this.borrowed = 0, this.checkDate, this.startCheckDate});
+
+  /// The balance after this month as scheduled, before a lender's check replaced it.
+  int get scheduled => opening + interest - paid;
 }
 
 /// [first] (`YYYY-MM-DD`) moved [k] months on, the day clamped to the month's last day.
@@ -187,7 +194,8 @@ List<LoanMonth> _schedule(Loan l, List<LoanRate> rates, List<LoanCheck> checks,
   LoanCheck? lastCheck(String from, String? to) =>
       cs.where((c) => c.date.compareTo(from) >= 0 && (to == null || c.date.compareTo(to) < 0)).lastOrNull;
   var bal = p0;
-  if (lastCheck('', first) case final c?) bal = c.balance;
+  final start = lastCheck('', first);
+  if (start != null) bal = start.balance;
   final basePayment = l.payment ?? annuityPayment(p0, l.rateBp ?? 0, n);
   LoanRate? applied;
   var payment = basePayment, onceLeft = extraOnce;
@@ -209,30 +217,36 @@ List<LoanMonth> _schedule(Loan l, List<LoanRate> rates, List<LoanCheck> checks,
     }
     if (k == n - 1 || total <= pay) pay = total;
     bal = total - pay;
-    if (lastCheck(due, k + 1 < n ? _dueDate(first, k + 1) : null) case final c?) bal = c.balance;
-    out.add(LoanMonth(k, due, bp, pay, interest, pay - interest, bal, opening));
+    final c = lastCheck(due, k + 1 < n ? _dueDate(first, k + 1) : null);
+    if (c != null) bal = c.balance;
+    out.add(
+        LoanMonth(k, due, bp, pay, interest, pay - interest, bal, opening, borrowed: p0, checkDate: c?.date, startCheckDate: start?.date));
   }
   return out;
 }
 
-/// [schedule]'s balance on [date] (`YYYY-MM-DD`): the balance after the last month due on or before [date] (a lender's
-/// check in that month's window included, as [loanSchedule] places it), the opening balance (the principal, or a check
-/// dated before the first due date) before the first due date; 0 for an empty schedule.
+/// [schedule]'s balance on [date] (`YYYY-MM-DD`): the balance after the last month due on or before [date], the opening
+/// balance before the first due date; 0 for an empty schedule. A lender's check counts from its own date only: before it,
+/// the month's [LoanMonth.scheduled] balance (or the principal before a check that precedes the first due date).
 int loanBalanceOn(List<LoanMonth> schedule, String date) {
   if (schedule.isEmpty) return 0;
-  var bal = schedule.first.opening;
+  final f = schedule.first;
+  if (f.startCheckDate != null && date.compareTo(f.startCheckDate!) < 0) return f.borrowed;
+  var bal = f.opening;
   for (final m in schedule) {
     if (m.due.compareTo(date) > 0) break;
-    bal = m.balance;
+    bal = m.checkDate != null && date.compareTo(m.checkDate!) < 0 ? m.scheduled : m.balance;
   }
   return bal;
 }
 
-/// One calendar year of a schedule ([loanYears]): Σ [principal] and Σ [interest] of the months due in [year], and the
-/// balance after its last month.
+/// One calendar year of a schedule ([loanYears]): Σ [principal] and Σ [interest] of the months due in [year], [adjust] =
+/// Σ the drops lender checks made (scheduled − checked balance; negative when the lender showed more owed; the first
+/// year also holds a check before the first due date, principal − its balance), and the balance after its last month.
+/// Over all years Σ ([principal] + [adjust]) = the principal borrowed − the last [endBalance].
 class LoanYear {
-  final int year, principal, interest, endBalance;
-  const LoanYear(this.year, this.principal, this.interest, this.endBalance);
+  final int year, principal, interest, adjust, endBalance;
+  const LoanYear(this.year, this.principal, this.interest, this.adjust, this.endBalance);
 }
 
 /// [schedule] per calendar year of the due dates, oldest first (the Loan screen's chart).
@@ -240,10 +254,11 @@ List<LoanYear> loanYears(List<LoanMonth> schedule) {
   final out = <LoanYear>[];
   for (final m in schedule) {
     final y = int.parse(m.due.substring(0, 4)), last = out.lastOrNull;
+    final adj = m.scheduled - m.balance + (m.index == 0 ? m.borrowed - m.opening : 0);
     if (last != null && last.year == y) {
-      out.last = LoanYear(y, last.principal + m.principal, last.interest + m.interest, m.balance);
+      out.last = LoanYear(y, last.principal + m.principal, last.interest + m.interest, last.adjust + adj, m.balance);
     } else {
-      out.add(LoanYear(y, m.principal, m.interest, m.balance));
+      out.add(LoanYear(y, m.principal, m.interest, adj, m.balance));
     }
   }
   return out;

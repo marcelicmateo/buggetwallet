@@ -326,53 +326,6 @@ extension WalletRepoLoans on WalletRepo {
   (String, String, Map<String, Object?>) _loanPay(String loanId, String txId, bool on) =>
       (LoanPayCols.entity, '$loanId|$txId', {'loan_id': loanId, 'tx': txId, 'state': on ? 'on' : 'off'});
 
-  /// Creates a goal with its big-purchase fields ([GoalCols]: price, deposit and costs in permille, loan rate in basis
-  /// points, loan length, compared plan line) in ONE write (one op); [saveGoal] stays for plain goals. [target] defaults
-  /// to the plan's need ([goalPlan]: deposit + costs of [price]; 0 without a price); [saved] is the base, clamped like
-  /// [saveGoal]'s. Returns the goal id. A bad value: [ArgumentError], nothing written.
-  String addGoal(
-      {required String name,
-      int? target,
-      int saved = 0,
-      int monthly = 0,
-      int? sort,
-      int? price,
-      int? depositPermille,
-      int? costsPermille,
-      int? loanRateBp,
-      int? loanMonths,
-      String? compareLineId}) {
-    final big = _patchFields(<Col, Object?>{
-      if (price != null) GoalCols.price: price,
-      if (depositPermille != null) GoalCols.depositPermille: depositPermille,
-      if (costsPermille != null) GoalCols.costsPermille: costsPermille,
-      if (loanRateBp != null) GoalCols.loanRateBp: loanRateBp,
-      if (loanMonths != null) GoalCols.loanMonths: loanMonths,
-      if (compareLineId != null) GoalCols.compareLineId: compareLineId,
-    });
-    final need = goalPlan(Goal(id: '', name: name, price: price, depositPermille: depositPermille, costsPermille: costsPermille),
-            savedCents: 0, monthlyCents: 0, toSpendPerPeriodCents: 0, today: _today())
-        .need;
-    final id = _newId('g');
-    _write([
-      (
-        'goal',
-        id,
-        {
-          'name': name,
-          'target': target ?? need,
-          'saved': saved.clamp(-Goal.maxSaved, Goal.maxSaved),
-          'monthly': monthly,
-          'sort': sort ?? DateTime.now().millisecondsSinceEpoch,
-          ...big,
-          'deleted': 0,
-        }
-      )
-    ]);
-    logEvent(_log, Level.INFO, 'goal.add', {'fields': big.length});
-    return id;
-  }
-
   /// The loan a bought goal becomes: one id per goal, so buying on two devices offline makes one loan.
   static String goalLoanId(String goalId) => 'l:goal:$goalId';
 

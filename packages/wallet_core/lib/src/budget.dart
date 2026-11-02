@@ -3,6 +3,7 @@ import 'package:wallet_importer/wallet_importer.dart' show pow10, storageDigitsO
 import 'bills.dart' show occurrenceKey, plannedReserves;
 import 'categories.dart';
 import 'dates.dart';
+import 'goal_plan.dart' show goalTarget;
 import 'logs.dart';
 import 'models.dart';
 import 'planned.dart' show billOccurrences, firstDueFrom;
@@ -1143,9 +1144,9 @@ Affordability affordability(int price, PeriodBudget p) {
   return Affordability(Verdict.tight, newDaily);
 }
 
-/// Months until a goal is reached at its monthly amount, or null if never.
+/// Months until a goal ([goalTarget]) is reached at its monthly amount, or null if never.
 int? monthsToGoal(Goal g) {
-  final left = g.target - g.saved;
+  final left = goalTarget(g) - g.saved;
   if (left <= 0) return 0;
   if (g.monthly <= 0) return null;
   return (left / g.monthly).ceil();
@@ -1174,7 +1175,7 @@ GoalTotals goalTotals(List<Goal> goals) {
   var saved = 0, target = 0;
   for (final g in goals) {
     saved = _ok(saved + g.saved);
-    target = _ok(target + g.target);
+    target = _ok(target + goalTarget(g));
   }
   return GoalTotals(saved: saved, target: target, count: goals.length);
 }
