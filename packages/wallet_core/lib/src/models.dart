@@ -276,9 +276,34 @@ abstract final class GoalCols {
   static const monthly = MoneyCol(entity, 'monthly', label: 'Monthly');
   static const sort = IntCol(entity, 'sort', label: 'Order');
   static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
+  // v21 (ENG E6): a home goal's planner inputs (`homePlan`); null = not set (buying costs and loan months then read as
+  // 6 % and 30 years, owner 2026-11-02). Older builds ignore them.
+  static const kind = EnumCol(entity, 'kind', label: 'Kind', values: GoalKind.values, nullable: true);
+  static const homePrice = MoneyCol(entity, 'home_price', label: 'Price', nullable: true);
+  static const depositPermille = IntCol(entity, 'deposit_permille', label: 'Deposit', nullable: true, min: 0, max: 1000);
+  static const buyCostPermille =
+      IntCol(entity, 'buy_cost_permille', label: 'Buying costs', nullable: true, defaultValue: 60, min: 0, max: 1000);
+  static const loanRateBp = IntCol(entity, 'loan_rate_bp', label: 'Loan rate', nullable: true, min: 0, max: 10000);
+  static const loanMonths = IntCol(entity, 'loan_months', label: 'Loan months', nullable: true, defaultValue: 360, min: 1, max: 600);
 
-  static const all = <Col>[name, target, saved, monthly, sort, deleted];
+  static const all = <Col>[
+    name,
+    target,
+    saved,
+    monthly,
+    sort,
+    deleted,
+    kind,
+    homePrice,
+    depositPermille,
+    buyCostPermille,
+    loanRateBp,
+    loanMonths
+  ];
 }
+
+/// What a goal is for (v21): `plain` (save the target, as goals always worked) or `home` (the House planner).
+enum GoalKind { plain, home }
 
 class Goal {
   final String id;
@@ -290,7 +315,25 @@ class Goal {
   final int saved;
   final int monthly;
   final int sort;
-  const Goal({required this.id, required this.name, this.target = 0, this.saved = 0, this.monthly = 0, this.sort = 0});
+
+  /// v21 (ENG E6) home planner fields ([GoalCols], `homePlan`); null = not set ([kind] null = plain). Unset
+  /// [buyCostPermille] / [loanMonths] read as their column defaults (60 = 6 %, 360 = 30 years).
+  final GoalKind? kind;
+  final int? homePrice, depositPermille, loanRateBp;
+  final int buyCostPermille, loanMonths;
+  const Goal(
+      {required this.id,
+      required this.name,
+      this.target = 0,
+      this.saved = 0,
+      this.monthly = 0,
+      this.sort = 0,
+      this.kind,
+      this.homePrice,
+      this.depositPermille,
+      this.buyCostPermille = 60,
+      this.loanRateBp,
+      this.loanMonths = 360});
 
   /// Largest saved total either way, in cents: 10 billion in major units (the importer's and the app's cap).
   static const maxSaved = 1000000000000;
@@ -305,9 +348,27 @@ class Goal {
         saved: GoalCols.saved.read(r) ?? 0,
         monthly: GoalCols.monthly.read(r) ?? 0,
         sort: GoalCols.sort.read(r) ?? 0,
+        kind: GoalCols.kind.read(r),
+        homePrice: GoalCols.homePrice.read(r),
+        depositPermille: GoalCols.depositPermille.read(r),
+        buyCostPermille: GoalCols.buyCostPermille.read(r)!,
+        loanRateBp: GoalCols.loanRateBp.read(r),
+        loanMonths: GoalCols.loanMonths.read(r)!,
       );
 
-  Goal withSaved(int saved) => Goal(id: id, name: name, target: target, saved: saved, monthly: monthly, sort: sort);
+  Goal withSaved(int saved) => Goal(
+      id: id,
+      name: name,
+      target: target,
+      saved: saved,
+      monthly: monthly,
+      sort: sort,
+      kind: kind,
+      homePrice: homePrice,
+      depositPermille: depositPermille,
+      buyCostPermille: buyCostPermille,
+      loanRateBp: loanRateBp,
+      loanMonths: loanMonths);
 }
 
 /// A goal's saved total: [base] (its stored `saved` column) plus [contributions]. Each contribution counts at most

@@ -193,6 +193,7 @@ export 'src/forecast.dart'
     show BalanceWarning, BalanceWarningKind, balanceWarnings, ForecastPoint, forecastAfterAllowance, forecastToPayday;
 export 'src/fx.dart' show convertMinor, FxUsed, fxUsed, homeAmount, inHomeCurrency;
 export 'src/hlc.dart' show ClockBehindException, Hlc, HlcClock, maxClockDrift;
+export 'src/home.dart' show annuityPayment, HomeLever, HomeLeverKind, homeLevers, HomePlan, homePlan;
 export 'src/ics.dart' show CalendarEvent, calendarEventRef, calendarRef, IcsParseResult, legacyCalendarEventRef, parseIcs, plannedIcs;
 export 'src/import_preview.dart' show ImportPreview, PreviewRow, PreviewStatus;
 export 'src/insights.dart'
@@ -252,6 +253,7 @@ export 'src/models.dart'
         FxRate,
         Goal,
         GoalCols,
+        GoalKind,
         GoalContribCols,
         GoalContribution,
         goalTotal,

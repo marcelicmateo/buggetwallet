@@ -22,7 +22,7 @@ void main() {
   }) {
     final id = repo.saveGoal(name: 'Home', target: 0, saved: 0, monthly: 0);
     repo.patch(GoalCols.entity, id, <Col, Object?>{
-      GoalCols.kind: 'home',
+      GoalCols.kind: GoalKind.home,
       GoalCols.homePrice: price,
       GoalCols.depositPermille: deposit,
       if (buy != null) GoalCols.buyCostPermille: buy,
@@ -125,7 +125,7 @@ void main() {
       final g = repo.goals().firstWhere((g) => g.id == id);
       expect(g.buyCostPermille, 60);
       expect(g.loanMonths, 360);
-      expect(g.kind == null || g.kind == 'plain', isTrue);
+      expect(g.kind == null || g.kind == GoalKind.plain, isTrue);
     });
     test('boundary values accepted', () {
       final id = repo.saveGoal(name: 'Home', target: 0, saved: 0, monthly: 0);

@@ -199,8 +199,10 @@ class WalletRepo {
   /// fiat currency, as always; BTC satoshis, new in 20). Also in 20 (UX-ACC, UX-FX; SCHEMA21_SPEC.md, folded in):
   /// `tx` gains `account` (the app account of a bank row), `accounts` gains `match_key` (keyed fingerprint of the
   /// export account), the synced entity `fx_day` (table `fx_days`, ECB rates the wallet needs) and the device-local,
-  /// never-synced cache table `ecb_rates`; no data migration.
-  static const schemaVersion = 20;
+  /// never-synced cache table `ecb_rates`; no data migration. Version 21 (ENG E6): `goals` gains the home planner
+  /// fields `kind`, `home_price`, `deposit_permille`, `buy_cost_permille`, `loan_rate_bp`, `loan_months` (`homePlan`);
+  /// no data migration, older builds ignore them.
+  static const schemaVersion = 21;
 
   /// Device-local, set once by the schema-15 migration ([_migrateBlobTables]): the next sync runs PUT every cached file
   /// a live bill points to again (api-3 builds deleted files on the relay), cleared once all of them were stored.

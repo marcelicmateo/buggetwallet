@@ -37,7 +37,23 @@ const entityTables = {
       'account'
     ]
   ),
-  'goal': ('goals', ['name', 'target', 'saved', 'monthly', 'sort', 'deleted']),
+  'goal': (
+    'goals',
+    [
+      'name',
+      'target',
+      'saved',
+      'monthly',
+      'sort',
+      'deleted',
+      'kind',
+      'home_price',
+      'deposit_permille',
+      'buy_cost_permille',
+      'loan_rate_bp',
+      'loan_months'
+    ]
+  ),
   'wish': ('wish', ['name', 'price', 'added', 'status', 'decided', 'deleted']),
   'setting': ('settings', ['value', 'deleted']),
   'rule': ('merchant_rules', ['category', 'deleted']),
