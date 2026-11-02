@@ -10,6 +10,7 @@ import 'dart:collection' show UnmodifiableMapView;
 import 'bills.dart' show BillCols, PayeeAliasCols;
 import 'categories.dart' show CategoryCols;
 import 'ecb.dart' show FxDayCols;
+import 'loans.dart' show LoanCheckCols, LoanCols, LoanRateCols;
 import 'models.dart'
     show AccountCols, GoalCols, GoalContribCols, IouCols, IouPartCols, PlannedCols, RecurringCols, ReviewCols, RuleCols, TxCols, WishCols;
 import 'series.dart' show ViewCols;
@@ -130,6 +131,10 @@ const Map<String, EntityDef> _schema = {
   // only for the (currency, date) pairs the wallet needs (`WalletRepo.fillFxDays`); the full history stays in the
   // device-local `ecb_rates`.
   'fx_day': EntityDef('fx_days', FxDayCols.all),
+  // Loans (v21, ENG E6): one row per loan, its rate changes and the lender's balance checks (see `Loan`).
+  'loan': EntityDef('loans', LoanCols.all),
+  'loanrate': EntityDef('loan_rates', LoanRateCols.all, indexes: {'loan_rates_loan': 'loan_id'}),
+  'loancheck': EntityDef('loan_checks', LoanCheckCols.all, indexes: {'loan_checks_loan': 'loan_id'}),
   // Saved Explore views (v21, ENG §6.3): name, query JSON (`SeriesQuery.toJson`), pinned on Overview, order.
   'view': EntityDef('views', ViewCols.all),
 };

@@ -37,7 +37,25 @@ const entityTables = {
       'account'
     ]
   ),
-  'goal': ('goals', ['name', 'target', 'saved', 'monthly', 'sort', 'deleted']),
+  'goal': (
+    'goals',
+    [
+      'name',
+      'target',
+      'saved',
+      'monthly',
+      'sort',
+      'deleted',
+      'price',
+      'deposit_permille',
+      'costs_permille',
+      'loan_rate_bp',
+      'loan_months',
+      'compare_line_id',
+      'bought_at',
+      'loan_id',
+    ]
+  ),
   'wish': ('wish', ['name', 'price', 'added', 'status', 'decided', 'deleted']),
   'setting': ('settings', ['value', 'deleted']),
   'rule': ('merchant_rules', ['category', 'deleted']),
@@ -69,6 +87,26 @@ const entityTables = {
   'review': ('reviews', ['done', 'deleted']),
   'payee_alias': ('payee_aliases', ['alias', 'payee', 'deleted']),
   'fx_day': ('fx_days', ['cur', 'date', 'per_eur', 'source', 'deleted']),
+  'loan': (
+    'loans',
+    [
+      'name',
+      'principal',
+      'rate_bp',
+      'months',
+      'first_due',
+      'payment',
+      'account_id',
+      'payee_key',
+      'reference',
+      'goal_id',
+      'tag_id',
+      'closed_at',
+      'deleted',
+    ]
+  ),
+  'loanrate': ('loan_rates', ['loan_id', 'from_date', 'rate_bp', 'payment', 'deleted']),
+  'loancheck': ('loan_checks', ['loan_id', 'date', 'balance', 'deleted']),
   'view': ('views', ['name', 'query', 'pinned', 'sort', 'deleted']),
 };
 
@@ -93,7 +131,10 @@ const dataTables = [
   'reviews',
   'payee_aliases',
   'fx_days',
-  'views'
+  'loans',
+  'loan_rates',
+  'loan_checks',
+  'views',
 ];
 
 /// Every row of the data tables (and the field clocks), in a stable order, as plain maps.

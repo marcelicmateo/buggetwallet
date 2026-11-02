@@ -476,7 +476,7 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
   final goalMonthly = _goalSum(goals, goalAmounts);
   // Plan lines of custom fixed categories (P1) count with rent, loan and subs; only lines the table still allows.
   final fixedPlan =
-      st.rent + st.loan + st.subs + st.planLines.entries.fold<int>(0, (s, e) => table.hasPlanLine(e.key) ? _ok(s + e.value) : s);
+      st.rent + st.loanPlan + st.subs + st.planLines.entries.fold<int>(0, (s, e) => table.hasPlanLine(e.key) ? _ok(s + e.value) : s);
   final set = _setAside(outBills, raw, planned, start, today, end, currency: st.currency, table: table, payeeAliases: payeeAliases);
   final cycles = set.cycles, reservedCycles = set.reservedCycles, duePl = set.duePlanned, reservedRows = set.reservedRows;
   final seenBills = <String>{};
@@ -578,7 +578,9 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
 }
 
 /// PS: this period's savings: each goal's [amounts] entry (`WalletRepo.goalPeriodAmounts`), else its monthly amount.
-int _goalSum(List<Goal> goals, Map<String, int>? amounts) => goals.fold<int>(0, (s, g) => _ok(s + (amounts?[g.id] ?? g.monthly)));
+/// A bought goal (ENG E6, `Goal.boughtAt`) saves no more.
+int _goalSum(List<Goal> goals, Map<String, int>? amounts) =>
+    goals.fold<int>(0, (s, g) => g.boughtAt != null ? s : _ok(s + (amounts?[g.id] ?? g.monthly)));
 
 /// What a pay period [start] .. [end] (exclusive) sets aside, one path for [computePeriod] and [projectedReserves]:
 /// [dueCycles] of [outBills] (no incomes), the cycles that reserve (not [DueCycle.coveredIn] a plan line, reserve > 0),
@@ -783,12 +785,12 @@ class BudgetPreset {
 /// custom fixed categories ([CategoryTable.hasPlanLine]) and the monthly part of every goal. Never below 0.
 int monthlyFlex(WalletSettings st, {List<Goal> goals = const [], CategoryTable? table}) {
   final t = table ?? CategoryTable.builtIn;
-  var left = st.salary - st.rent - st.loan - st.subs;
+  var left = st.salary - st.rent - st.loanPlan - st.subs;
   for (final e in st.planLines.entries) {
     if (t.hasPlanLine(e.key)) left -= e.value;
   }
   for (final g in goals) {
-    left -= g.monthly;
+    if (g.boughtAt == null) left -= g.monthly; // a bought goal saves no more
   }
   return left < 0 ? 0 : left;
 }
@@ -1271,7 +1273,7 @@ List<PeriodDay> periodDays(List<CategorizedTx> txs, WalletSettings st, List<Goal
     }
     final goalMonthly = _goalSum(goals, goalAmounts);
     final fixedPlan =
-        st.rent + st.loan + st.subs + st.planLines.entries.fold<int>(0, (s, e) => table.hasPlanLine(e.key) ? _ok(s + e.value) : s);
+        st.rent + st.loanPlan + st.subs + st.planLines.entries.fold<int>(0, (s, e) => table.hasPlanLine(e.key) ? _ok(s + e.value) : s);
     final cycles = dueCycles(outBills, raw, start, end, currency: st.currency);
     final reservedBills = cycles.fold<int>(0, (s, c) => _ok(s + (c.coveredIn(table) ? 0 : c.reserve)));
     final counted = {for (final c in cycles) occurrenceKey(c.bill.id, c.due)};

@@ -68,10 +68,11 @@ sealed class Col<T extends Object> extends ColumnDef {
   String toString() => '$entity.$name';
 }
 
-/// Free text, at most [maxLength] characters (counted as Unicode code points) when given.
+/// Free text, at least [minLength] and at most [maxLength] characters (counted as Unicode code points) when given.
 final class TextCol extends Col<String> {
-  final int? maxLength;
-  const TextCol(super.entity, super.column, {required super.label, super.nullable, super.searchable, super.defaultValue, this.maxLength})
+  final int? minLength, maxLength;
+  const TextCol(super.entity, super.column,
+      {required super.label, super.nullable, super.searchable, super.defaultValue, this.minLength, this.maxLength})
       : super(type: ColumnType.text);
 
   @override
@@ -81,8 +82,9 @@ final class TextCol extends Col<String> {
   @override
   String? problem(String? value, {String? today}) {
     if (value == null) return super.problem(value);
-    final max = maxLength;
-    return max != null && value.runes.length > max ? 'Limited to $max characters.' : null;
+    final max = maxLength, min = minLength, n = value.runes.length;
+    if (min != null && n < min) return 'At least $min characters.';
+    return max != null && n > max ? 'Limited to $max characters.' : null;
   }
 }
 

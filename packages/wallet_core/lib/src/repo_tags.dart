@@ -36,6 +36,15 @@ extension WalletRepoTags on WalletRepo {
   /// already: [ArgumentError].
   Future<String> addTag(String name) async {
     final t = tagTable();
+    final row = _newTagRow(name, t);
+    _write([row]);
+    logEvent(_log, Level.INFO, 'tag.add', {'live': t.liveIds.length + 1});
+    return row.$2;
+  }
+
+  /// The write of a new tag [name] placed last (shared by [addTag] and `buyGoal`): a bad or taken name
+  /// ([_checkTagName]) or [TagRow.maxLive] live tags already: [ArgumentError].
+  (String, String, Map<String, Object?>) _newTagRow(String name, TagTable t) {
     final n = _checkTagName(name, t);
     if (t.liveIds.length >= TagRow.maxLive) throw ArgumentError('You can have at most ${TagRow.maxLive} tags.');
     var next = 0;
@@ -43,12 +52,7 @@ extension WalletRepoTags on WalletRepo {
       final p = t.position(id);
       if (p < (1 << 30) && p >= next) next = p + 1;
     }
-    final id = _newTagId();
-    _write([
-      ('tag', id, {'name': n, 'position': next, 'hidden': 0, 'deleted': 0})
-    ]);
-    logEvent(_log, Level.INFO, 'tag.add', {'live': t.liveIds.length + 1});
-    return id;
+    return ('tag', _newTagId(), {'name': n, 'position': next, 'hidden': 0, 'deleted': 0});
   }
 
   /// [id] and the live sync duplicates that resolve to it ([TagTable.resolve]), or empty when it is not live. A

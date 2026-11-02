@@ -15,6 +15,7 @@ import 'dates.dart';
 import 'ecb.dart';
 import 'hlc.dart';
 import 'import_preview.dart';
+import 'loans.dart';
 import 'logs.dart';
 import 'matching.dart';
 import 'models.dart';
@@ -39,6 +40,7 @@ part 'repo_views.dart';
 part 'repo_blobs.dart';
 part 'repo_import.dart';
 part 'repo_iou.dart';
+part 'repo_loans.dart';
 part 'repo_match.dart';
 part 'repo_patch.dart';
 part 'repo_meta.dart';
@@ -202,7 +204,10 @@ class WalletRepo {
   /// `tx` gains `account` (the app account of a bank row), `accounts` gains `match_key` (keyed fingerprint of the
   /// export account), the synced entity `fx_day` (table `fx_days`, ECB rates the wallet needs) and the device-local,
   /// never-synced cache table `ecb_rates`; no data migration. Version 21 (ENG): the synced entity `view` (table `views`,
-  /// saved Explore queries); no data migration.
+  /// saved Explore queries); `goals` gains the big-purchase fields `price`, `deposit_permille`, `costs_permille`,
+  /// `loan_rate_bp`, `loan_months`, `compare_line_id`, `bought_at`, `loan_id` (`goalPlan`) and the entities `loan`,
+  /// `loanrate`, `loancheck` (ENG E6); no data migration (the old `loan` setting keeps counting until the owner moves
+  /// it, `convertLegacyLoan`). Older builds ignore all of it.
   static const schemaVersion = 21;
 
   /// Device-local, set once by the schema-15 migration ([_migrateBlobTables]): the next sync runs PUT every cached file
@@ -569,7 +574,9 @@ class WalletRepo {
 
   /// The stored settings ([_readSettings]: per-key budget and pattern rows, legacy maps only as a fallback), with the
   /// wallet's ECB rates ([WalletSettings.ecb], `ecbRates`) for the money paths.
-  WalletSettings settings() => _readSettings(db, table: categoryTable(), ecb: ecbRates());
+  WalletSettings settings() {
+    return _readSettings(db, table: categoryTable(), ecb: ecbRates(), loanLines: _loanPlanLines());
+  }
 
   /// Built-ins plus the stored category rows ([categoryRows], deleted ones included: a row pointing at one falls back).
   CategoryTable categoryTable() => CategoryTable.from(categoryRows(includeDeleted: true));
@@ -866,7 +873,8 @@ class WalletRepo {
   void payGoals({required String period}) {
     final due = [
       for (final g in goals())
-        if (g.monthly > 0 && _paidPeriod(g.id, period) == null) _contribution(g.id, _payAmount(g), id: _payId(g.id, period)),
+        if (g.boughtAt == null && g.monthly > 0 && _paidPeriod(g.id, period) == null)
+          _contribution(g.id, _payAmount(g), id: _payId(g.id, period)),
     ];
     if (due.isNotEmpty) _write(due);
   }
@@ -911,6 +919,7 @@ class WalletRepo {
     if (cents > Goal.maxContribution) throw ArgumentError('The amount is too large.');
     final g = goals().where((g) => g.id == goalId).firstOrNull;
     if (g == null) throw ArgumentError('No such goal.');
+    if (g.boughtAt != null) throw ArgumentError('This goal is bought: it saves no more.');
     final p = _paidPeriod(goalId, period) ?? period;
     final payId = _payId(goalId, p), adjId = 'adj:$goalId:$p';
     final paid = _contribAmount(payId);
@@ -932,7 +941,9 @@ class WalletRepo {
   /// as `computePeriod(goalAmounts:)`.
   Map<String, int> goalPeriodAmounts(String period) => {
         for (final g in goals())
-          if (_paidPeriod(g.id, period) case final p?)
+          if (g.boughtAt != null)
+            g.id: 0 // bought (ENG E6): it saves no more
+          else if (_paidPeriod(g.id, period) case final p?)
             g.id: (_contribAmount(_payId(g.id, p)) ?? 0) + (_contribAmount('adj:${g.id}:$p') ?? 0)
           else
             g.id: g.monthly + (_contribAmount('adj:${g.id}:$period') ?? 0),
@@ -947,6 +958,9 @@ class WalletRepo {
     final live = {for (final g in goals()) g.id: g};
     final g = live[goalId];
     if (g == null || (toGoalId != null && !live.containsKey(toGoalId))) throw ArgumentError('No such goal.');
+    if (g.boughtAt != null || (toGoalId != null && live[toGoalId]!.boughtAt != null)) {
+      throw ArgumentError('This goal is bought: its money paid the purchase.');
+    }
     if (toGoalId == goalId) throw ArgumentError('Pick another goal.');
     if (cents <= 0) throw ArgumentError('The amount must be above zero.');
     if (cents > g.saved) throw ArgumentError('The goal has less saved than that.');
