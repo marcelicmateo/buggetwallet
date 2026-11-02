@@ -11,6 +11,8 @@ import '../layout.dart';
 import '../logging.dart';
 import '../platform.dart';
 import '../screens/bill_sheet.dart';
+import '../screens/goal_bought_sheet.dart';
+import '../screens/loan_screen.dart';
 import '../screens/owed.dart';
 import '../screens/rules_panel.dart';
 import '../screens/scan_bill.dart';
@@ -149,6 +151,10 @@ void txSheetToast(BuildContext context, WalletController wc, String? result) {
 void goalSheetToast(BuildContext context, WalletController wc, String? result) {
   final id = wc.lastDeletedGoal;
   if (result == 'deleted' && id != null) toast(context, 'Goal deleted', actionLabel: 'Undo', onAction: () => wc.undeleteGoal(id));
+  if (result != null && result.startsWith('bought:')) {
+    final goal = result.substring(7);
+    toast(context, '${wc.goalOf(goal)?.name ?? 'Goal'} is marked as bought', actionLabel: 'Undo', onAction: () => wc.undoBuyGoal(goal));
+  }
 }
 
 /// The X at the top right of a phone sheet.
@@ -603,6 +609,24 @@ class _TxSheetState extends State<TxSheet> {
     if (r != null && mounted) Navigator.pop(context, r);
   }
 
+  /// ENG E6: a payment found by a loan (its lender or reference) says so and opens the Loan screen. Read-only: the match is core's.
+  Widget? _loanSection(BuildContext context) {
+    final t = row.tx;
+    if (!t.live || t.amount >= 0) return null;
+    final loan = widget.wc.loanOfPayment(t.id);
+    if (loan == null) return null;
+    return Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+                key: const ValueKey('txLoan'),
+                style: TextButton.styleFrom(minimumSize: const Size(0, touchMin)),
+                icon: const Icon(Icons.account_balance_outlined, size: 18),
+                label: Text('Payment on ${loan.name}'),
+                onPressed: () => openLoan(context, widget.wc, loan.id))));
+  }
+
   /// Q8: "Lent to someone" on an expense, "Repayment" on income; a payment already linked to an IOU says so instead.
   Widget? _iouSection(BuildContext context) {
     final t = row.tx;
@@ -721,6 +745,7 @@ class _TxSheetState extends State<TxSheet> {
             tagRule = rule;
           }),
       if (canSplit) _splitSection(context),
+      if (_loanSection(context) case final w?) w,
       if (_iouSection(context) case final w?) w,
       const SizedBox(height: 8),
       Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 8, children: [
@@ -768,7 +793,7 @@ class GoalSheet extends StatefulWidget {
 class _GoalSheetState extends State<GoalSheet> {
   late final g = widget.goal;
   late final name = TextEditingController(text: g?.name ?? widget.name ?? '');
-  late final target = TextEditingController(text: centsToFieldText(g?.target ?? widget.target ?? 0, blankZero: true));
+  late final target = TextEditingController(text: centsToFieldText(g == null ? widget.target ?? 0 : goalTarget(g!), blankZero: true));
   late final monthly = TextEditingController(text: centsToFieldText(g?.monthly ?? 5000, blankZero: true));
   late final saved = TextEditingController(text: centsToFieldText(g?.saved ?? 0, blankZero: true));
   final add = TextEditingController();
@@ -809,7 +834,7 @@ class _GoalSheetState extends State<GoalSheet> {
 
   void _save() {
     // A new goal needs a target; an old goal that has none may keep it empty.
-    final keepsNone = g != null && g!.target == 0;
+    final keepsNone = g != null && goalTarget(g!) == 0;
     final t = keepsNone && target.text.trim().isEmpty ? 0 : parseMoney(target.text);
     final targetOk = t != null && (t > 0 || keepsNone);
     final m = _amount(monthly), sv = _amount(saved), ad = _amount(add), pa = _amount(periodAmt);
@@ -949,6 +974,17 @@ class _GoalSheetState extends State<GoalSheet> {
               child: OutlinedButton(key: const ValueKey('takeOutConfirm'), onPressed: _takeOut, child: const Text('Take it out'))),
         ],
       ],
+      if (g != null && g!.boughtAt == null)
+        Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton.icon(
+                key: const ValueKey('goalIBought'),
+                icon: const Icon(Icons.shopping_bag_outlined),
+                label: const Text('I bought it'),
+                onPressed: () async {
+                  final r = await showSheet<String>(context, BoughtSheet(wc: widget.wc, goal: g!, draft: GoalDraft.of(g!)));
+                  if (r == 'bought' && context.mounted) Navigator.pop(context, 'bought:${g!.id}');
+                })),
       const SizedBox(height: 8),
       Muted(hint()),
       const SizedBox(height: 12),

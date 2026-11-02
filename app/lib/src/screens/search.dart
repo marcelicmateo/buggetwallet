@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:wallet_core/wallet_core.dart'
-    show Bill, BillStatus, CategorizedTx, PlannedCost, PlannedStatus, RuleKind, RuleView, SearchFilter, SearchResult;
+    show Bill, BillStatus, CategorizedTx, PlannedCost, PlannedStatus, RuleKind, RuleView, SearchFilter, SearchResult, goalTarget;
 
 import '../controller.dart';
 import '../format.dart';
@@ -173,7 +173,7 @@ class _SearchResults extends StatelessWidget {
           _ResultSection('Goals', r.goals.length, [
             Rows(children: [
               for (final g in r.goals)
-                _ResultRow(g.name, '${money(g.saved, cur, decimals: 0)} / ${money(g.target, cur, decimals: 0)}', 'Goal', 'goal', () {
+                _ResultRow(g.name, '${money(g.saved, cur, decimals: 0)} / ${money(goalTarget(g), cur, decimals: 0)}', 'Goal', 'goal', () {
                   wc.setPlanView('saving');
                   onOpenTab(Tabs.plan);
                 }, query),

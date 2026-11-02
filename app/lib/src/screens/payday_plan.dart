@@ -9,6 +9,8 @@ import '../widgets/charts.dart' show ForecastStepChart;
 import '../widgets/common.dart';
 import '../widgets/dash.dart';
 import '../widgets/sheets.dart';
+import 'loan_ended.dart';
+import 'loan_screen.dart';
 import 'plan_suggestions.dart';
 
 /// Budget › Payday plan (P5, UX-B1): the ledger lines, edited in place: a tap on a value turns that row into its field with Save and
@@ -149,6 +151,14 @@ class _PaydayPlanState extends State<PaydayPlan> {
         Wrap(spacing: 8, runSpacing: 8, children: [
           FilledButton(key: const ValueKey('planSave'), onPressed: _savePlan, child: const Text('Save')),
           OutlinedButton(key: const ValueKey('planCancel'), onPressed: _cancelEdit, child: const Text('Cancel')),
+          if (key == 'loan' && widget.wc.settings.loan > 0)
+            TextButton(
+                key: const ValueKey('planConvertLoan'),
+                onPressed: () async {
+                  final r = await showLoanForm(context, widget.wc, mode: LoanFormMode.convert);
+                  if (r == 'saved' && mounted) _cancelEdit();
+                },
+                child: const Text('Turn into a loan…')),
         ]),
       ]),
     );
@@ -191,6 +201,10 @@ class _PaydayPlanState extends State<PaydayPlan> {
     final proposals = wc.planProposalList();
     final loanLeft = wc.loanLeftNow();
     final planIds = wc.categoryTable.planLineIds;
+    final openLoans = [
+      for (final l in wc.loansAll())
+        if (l.open) l
+    ];
 
     // Core's split of the money coming in: fixed (plan lines + bills and planned costs before payday), saved, spending (what is
     // left; none when the plan is over). fixed + saved + spending − over == inTotal, so the slices always add up.
@@ -225,14 +239,26 @@ class _PaydayPlanState extends State<PaydayPlan> {
             title: 'Salary ${s.incomeMode == 'received' && p.received > 0 ? '(received)' : '(planned)'}', amount: moneyExact(p.income, cur))
       ),
       ('rent', fixedLine('Rent', 'Rent', s.rent)),
-      (
-        'loan',
-        fixedLine('Loan', 'Loan', s.loan,
-            key: loanLeft == null ? null : const ValueKey('ledgerLoanLeft'),
-            sub: loanLeft == null
-                ? null
-                : '${loanLeft.payments} payment${loanLeft.payments == 1 ? '' : 's'} left · ${moneyExact(loanLeft.cents, cur)} at this rate')
-      ),
+      // The old single Loan setting stays until the owner turns it into a loan; each open loan is its own line (tap: the Loan screen).
+      if (s.loan > 0 || openLoans.isEmpty)
+        (
+          'loan',
+          fixedLine('Loan', 'Loan', s.loan,
+              key: loanLeft == null ? null : const ValueKey('ledgerLoanLeft'),
+              sub: loanLeft == null
+                  ? null
+                  : '${loanLeft.payments} payment${loanLeft.payments == 1 ? '' : 's'} left · ${moneyExact(loanLeft.cents, cur)} at this rate')
+        ),
+      for (final l in openLoans)
+        (
+          null,
+          DashRowData(
+              key: ValueKey('planLoan:${l.id}'),
+              title: l.name,
+              amount: moneyExact(-(s.loanLines[l.id] ?? 0), cur),
+              sub: wc.loanEndMonth(l) == null ? 'Add the details' : 'Ends ${monthLong(wc.loanEndMonth(l)!)}',
+              onTap: () => openLoan(context, wc, l.id))
+        ),
       ('subs', fixedLine('Bills & subscriptions', 'Bills & subscriptions', s.subs)),
       for (final id in planIds)
         (
@@ -317,6 +343,7 @@ class _PaydayPlanState extends State<PaydayPlan> {
             showSheet<void>(context, PlanSuggestionsSheet(wc: wc));
           },
         ),
+      if (wc.loanEnded().isNotEmpty) DashItem(span: 2, child: LoanEndedTile(wc: wc)),
       DashItem(
         span: 2,
         child: Tile(
@@ -325,6 +352,13 @@ class _PaydayPlanState extends State<PaydayPlan> {
             const TileLabel('Lines'),
             const SizedBox(height: 4),
             _rows(context, rows),
+            Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                    key: const ValueKey('planAddLoan'),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Loan'),
+                    onPressed: () => showLoanForm(context, wc, mode: LoanFormMode.add))),
             if (p.expectedIncome.isNotEmpty)
               Padding(
                 key: const ValueKey('ledgerExpectedIncome'),
