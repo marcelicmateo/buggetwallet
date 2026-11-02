@@ -10,6 +10,8 @@
 #   make go-test    unit tests of the tool;   make bin    just build dist/bin/wallet-build
 #   make emulator-screens | emulator-test [N="flows plan"] | emulator-start|install|shot|adb|stop|reset [ARGS=…]
 #   make live-start [ARGS="--demo --headless"] | live-reload|restart|shot|status|stop|mcp [ARGS=…] | live-trace ARGS="start|stop [name]"
+# Values are pasted into the shell line: C may hold ' (escaped for you) but a literal $ must be written $$ (make eats one); paths in
+# O, P and DIR are double-quoted; T, N, P (analyze) and ARGS are word lists on purpose.
 # Q=1 passes -q to the tool (nothing from the tool, not even the compiler log of a failed build), but make itself still prints
 # "make: *** ... Error N" for a failed recipe and exits 2 whatever the tool returned. For the real exit codes (0 ok, 1 a step
 # failed, 2 usage, 3 the tool did not build) call  dist/bin/wallet-build -q <command>  after `make bin`.
@@ -28,7 +30,8 @@ WB = @$(BIN) $(Q_FLAG)
 $(BIN): FORCE
 	@mkdir -p dist/bin
 	@cd tools/wallet-build && GOTOOLCHAIN=local CGO_ENABLED=0 go build -trimpath -o ../../$(BIN) . > ../../dist/wallet-build-build.log 2>&1 \
-	  || { [ "$(Q)" = 1 ] || { cat ../../dist/wallet-build-build.log >&2; echo "wallet-build did not build (see dist/wallet-build-build.log)" >&2; }; exit 3; }
+	  || { if [ "$(Q)" = 1 ]; then mkdir -p ../../dist/logs; echo "wallet-build $(CURDIR)/dist/wallet-build-build.log" > ../../dist/logs/last-failed.txt; \
+	       else cat ../../dist/wallet-build-build.log >&2; echo "wallet-build did not build (see dist/wallet-build-build.log)" >&2; fi; exit 3; }
 FORCE:
 
 bin: $(BIN)
@@ -54,7 +57,7 @@ relay-native-test: $(BIN)
 mutate: $(BIN)
 	$(WB) mutate $(ARGS)
 shell: $(BIN)
-	$(WB) shell $(if $(C),-c '$(C)',)
+	$(WB) shell $(if $(C),-c '$(subst ','\'',$(C))',)
 times trend: $(BIN)
 	$(WB) $@ $(ARGS)
 ci-status: $(BIN)
@@ -79,7 +82,7 @@ live-start live-reload live-restart live-shot live-trace live-status live-stop l
 # (mutate is above: make mutate ARGS="core lib/x.dart --max 5")
 .PHONY: fixtures fixtures-embed token-usage log-summary lsp-query
 fixtures: $(BIN)
-	$(WB) fixtures $(or $(DIR),packages/wallet_importer/test/fixtures) $(SET)
+	$(WB) fixtures "$(or $(DIR),packages/wallet_importer/test/fixtures)" $(SET)
 fixtures-embed: $(BIN)
 	$(WB) fixtures embed
 token-usage log-summary lsp-query: $(BIN)
@@ -101,7 +104,7 @@ web-serve: $(BIN)
 web-stop web-status: $(BIN)
 	$(WB) web $(patsubst web-%,%,$@)
 web-shot: $(BIN)
-	$(WB) web shot $(P) $(O) $(S)
+	$(WB) web shot "$(P)" "$(O)" $(S)
 relay-native-check signing-key: $(BIN)
 	$(WB) $@ $(ARGS)
 hook-no-poll: $(BIN)

@@ -76,6 +76,28 @@ class Harness {
     report.clear();
   }
 
+  /// Start of a test file in the combined CI entry: its registered texts, a wallet-less app folder and an empty log, as when the file runs alone.
+  static Future<void> beginFile(({Set<String> texts, Set<int> cents, Set<String> keys}) r) async {
+    useRegistered(r);
+    await AppLog.init(catchErrors: false);
+    await wipe();
+    await AppLog.clear();
+    final dir = await supportDir();
+    final sep = Platform.pathSeparator;
+    expect(File('${dir.path}${sep}wallet.db').existsSync(), isFalse, reason: 'a file must not start on the previous file\'s wallet');
+    for (final n in ['wallet.key', 'device.id', 'device.key']) {
+      expect(File('${dir.path}$sep$n').existsSync(), isFalse, reason: 'a file must not start on the previous file\'s $n');
+    }
+  }
+
+  /// End of a test file in the combined entry: its app log is kept as $BW_APP_LOG_COPY/app-linux-combined-<name>.log.
+  static Future<void> endFile(String name) async {
+    final dir = Platform.environment['BW_APP_LOG_COPY'];
+    if (dir == null || dir.isEmpty) return;
+    await AppLog.flush();
+    await File('$dir/app-linux-combined-$name.log').writeAsString(await AppLog.combined());
+  }
+
   /// Call first in main(). Registers the end-of-file hook that hands the app log and the report to the driver.
   static IntegrationTestWidgetsFlutterBinding init() {
     binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();

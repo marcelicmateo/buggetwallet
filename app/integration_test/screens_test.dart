@@ -29,7 +29,7 @@ import 'package:wallet_sync/wallet_sync.dart';
 
 import '../test/support/seams.dart';
 import 'demo_data.dart';
-import 'support/harness.dart' show navTab, pageList, settingsSection;
+import 'support/harness.dart' show Harness, navTab, pageList, settingsSection;
 
 /// Distinctive texts of the synthetic data: none of them may reach the log.
 const _private = [
@@ -47,6 +47,9 @@ void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('every tab with a synthetic wallet', (tester) async {
+    await AppLog.init(catchErrors: false);
+    await Harness.wipe(); // a fresh wallet, also when another test file ran before in this process
+    await AppLog.clear();
     final wc = await seamedBoot((deps) => bootstrap(catchErrors: false, deps: deps));
     if (!wc.hasWallet) await wc.createWallet();
     wc.takeKeyBackupPrompt(); // opened below from Today's row

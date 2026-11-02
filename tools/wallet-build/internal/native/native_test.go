@@ -212,15 +212,7 @@ func TestContainerfiles(t *testing.T) {
 	}
 }
 
-func TestInsideScriptIsTheScriptsBody(t *testing.T) {
-	root := repoRoot(t)
-	b, err := os.ReadFile(filepath.Join(root, "tools", "relay-native-test.sh"))
-	if err != nil {
-		t.Skip("tools/relay-native-test.sh is gone")
-	}
-	if !strings.Contains(string(b), insideScript) {
-		t.Error("the embedded inside script differs from tools/relay-native-test.sh")
-	}
+func TestInsideScriptSteps(t *testing.T) {
 	for _, want := range []string{"listens on 127.0.0.1:8787", "systemd-analyze security", "caddy validate", "upgrade script"} {
 		if !strings.Contains(insideScript, want) {
 			t.Errorf("inside script lacks %q", want)

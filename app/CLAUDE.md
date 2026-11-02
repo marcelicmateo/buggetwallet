@@ -388,7 +388,7 @@ key fails on the first read (`SqliteException` 26 "file is not a database"); pla
   unit-tested in `test/`): profile-mode frame performance, `make perf`. Actions are `binding.traceAction`
   reports keyed `perf_<action>`; add an action there and the driver picks it up. Budgets (`PerfBudget`, per-action map
   `budgets` in the driver) are set from baseline runs in `history/perf.jsonl`. It needs `flutter drive --profile`, so
-  outside it the test skips itself (`desktop-test` and `emulator.sh` run every file).
+  outside it the test skips itself (`desktop-test` and `make emulator-test` run every file).
 - `test/adaptive_test.dart` (four window sizes × two text scales), `test/adaptive_edge_test.dart` (boundaries, shortcuts, dialogs,
   resizing), helpers in `test/support/layout.dart`; `integration_test/adaptive_test.dart` takes desktop screenshots at
   1280×800, 1920×1080 and 800×1280 (`make desktop-test N=adaptive`). Tests find tabs with `tapTab`/`navTab`: they work for the bar and the rail.

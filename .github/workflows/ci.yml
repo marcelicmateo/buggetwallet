@@ -42,7 +42,7 @@ env:
   # ci-logs history.jsonl (app 128 s, desktop 591 s, apk 134 s) and not below the slowest runs seen (app 565 s, desktop 1341 s,
   # apk 475 s cold): the other steps keep the defaults (their CI maxima are far below them). `ci step` itself sets no limit.
   BW_TIMEOUT_APP: 1800
-  BW_HEADLESS_TIMEOUT: 1800 # each desktop test
+  BW_HEADLESS_TIMEOUT: 3300 # the whole combined desktop run (the separate files took 1381 s in total on the slowest run seen); a timeout names the file it stopped in
   BW_TIMEOUT_DESKTOP: 3600 # the whole desktop job step
   BW_TIMEOUT_APK: 2400
 jobs:

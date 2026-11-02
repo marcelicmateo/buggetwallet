@@ -18,7 +18,7 @@ import 'support/harness.dart';
 const perfPrefix = 'perf_';
 
 void main() {
-  // desktop-test and emulator.sh run every file in this folder: outside `flutter drive --profile` this one has nothing to measure
+  // desktop-test and emulator-test run every file in this folder: outside `flutter drive --profile` this one has nothing to measure
   if (!kProfileMode) {
     test('perf: only in profile mode (make perf)', () {}, skip: 'profile mode only: run make perf');
     return;

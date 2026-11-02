@@ -21,7 +21,7 @@ Local builds in a rootless Podman container. Runs the same steps as CI (.github/
   wallet-build linux    Linux release bundle  -> dist/BudgetWallet-linux-x64.tar.gz
   wallet-build relay-bin [arm64|x64]   relay server as a native executable (dart compile exe, cross-compiled; default arm64 for the
                           Raspberry Pi) -> dist/relay/relay-linux-<arch> + .sha256 (relay/deploy/native/README.md)
-  wallet-build relay-native-test [fedora|debian]   x64 relay + relay/deploy/native/ on real systemd in Podman containers (needs network;
+  wallet-build relay-native-test [fedora|debian]   (make relay-native-test ARGS=debian)  x64 relay + relay/deploy/native/ on real systemd in Podman containers (needs network;
                           not in lint/test)
   wallet-build web      Flutter web build (--wasm, JS if a dependency blocks it) -> dist/web/; fetches sqlite3.wasm first
                           (pinned by dev/sqlite3-wasm.sha256). Serve it with wallet-build web
