@@ -9,8 +9,8 @@
 // - aboveUsual: ≥ 6 tracked months in W12; median (`medianCents`) over them, zero months included, must be > 0;
 //   fires when 4·now ≥ 5·median and now − median ≥ 2000 cents. Window end = this month.
 // - weeklyRhythm: whole spending (subject `all`) over the tracked months of W12 (≥ 6); mean per ISO weekday = its sum ÷
-//   how many of that weekday the months hold; fires when 5·Smax·Nmin ≥ 8·Smin·Nmax with Smax > 0 and Smin ≥ 0
-//   (ratioPermille null when the lowest weekday is 0). Window end = last full month.
+//   how many of that weekday the months hold; fires when 5·Smax·Nmin ≥ 8·Smin·Nmax with Smin > 0 (lead 2026-11-02: a weekday
+//   with no spending at all never fires, so sparse data stays quiet). Window end = last full month.
 // - movesTogether: the last 24 full tracked months, the top 8 main tags by spend there; a shared month = both tags
 //   nonzero; ≥ 12 shared months; |r| ≥ 0.5 ⇔ 4·Sxy² ≥ Sxx·Syy (Sxx, Syy > 0), r in permille (signed) by integer square
 //   root. subject < other alphabetically. Window end = last full month.
@@ -212,12 +212,11 @@ void _weekly(List<int> hist, Map<String, int> byDay, _Add add) {
     if (cmp(w, hi) > 0) hi = w;
     if (cmp(w, lo) < 0) lo = w;
   }
-  if (sum[hi] <= 0 || sum[lo] < 0) return;
+  if (sum[lo] <= 0) return;
   final top = BigInt.from(sum[hi]) * BigInt.from(cnt[lo]), bottom = BigInt.from(sum[lo]) * BigInt.from(cnt[hi]);
   if (BigInt.from(5) * top < BigInt.from(8) * bottom) return;
   add(FindingKind.weeklyRhythm, 'all', null, hist.last, _firstDay(hist.first), _lastDay(hist.last), hist.length,
-      ratio: sum[lo] == 0 ? null : _div(top * _k, bottom),
-      series: [for (var w = 1; w <= 7; w++) ('$w', _div(BigInt.from(sum[w]), BigInt.from(cnt[w])))]);
+      ratio: _div(top * _k, bottom), series: [for (var w = 1; w <= 7; w++) ('$w', _div(BigInt.from(sum[w]), BigInt.from(cnt[w])))]);
 }
 
 void _moves(int now, int first, List<String> tags, int Function(String, int) v, _Add add) {

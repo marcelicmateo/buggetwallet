@@ -701,12 +701,12 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   half away from zero, capped at 2^53 − 1; null when salary ≤ 0 (display only). Settings `workHoursPerWeek` (default 40,
   1..100; `updateSettings` refuses others) and `dismissedFindings` (one row, JSON list of ids, newest 500 kept; repo
   `dismissFinding`/`undismissFinding`, async, no write when unchanged; two devices dismissing offline at once: the later
-  list wins, one id is lost). `findings(expanded, st, table, today, {reviewDates, bills})` → `Finding {id, kind,
+  list wins, see Known limits). `findings(expanded, st, table, today, {reviewDates, bills})` → `Finding {id, kind,
   subjectKey, otherKey?, from, to, n, strengthPermille?, ratioPermille?, series, otherSeries}`, `FindingKind`
   aboveUsual | weeklyRhythm | movesTogether | slowCreep | seasonality | milestone. Every threshold and window is in the
   file comment (lead-approved 2026-11-02): spending by `countsAsSpending` per main tag; W12 = 12 months before this one,
   tracked from the first counted row; aboveUsual 4·now ≥ 5·median and +2000 (≥ 6 months, median > 0); weeklyRhythm
-  5·max ≥ 8·min weekday means; movesTogether top 8 tags, last 24 months, ≥ 12 shared nonzero months, 4·Sxy² ≥ Sxx·Syy;
+  5·max ≥ 8·min weekday means, min > 0; movesTogether top 8 tags, last 24 months, ≥ 12 shared nonzero months, 4·Sxy² ≥ Sxx·Syy;
   slowCreep confirmed bills' payee rows per month, 4·latest ≥ 5·earliest ≥ 12 months apart; seasonality ≥ 3 full years;
   milestone levels (days 100/365/+365, payments 100/500/1000/+1000, streak 4/12/26/52/+52) with the month reached as
   window end. id `<kind>:<subject>[:<other>]:<window end YYYY-MM>`; logs counts per kind. Tests `test/eng_findings_test.dart`,
@@ -764,6 +764,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   paths or file names. Noisy per-render logs at FINER. `test/logs_impl_test.dart` checks core logs stay clean.
 
 ## Known limits (for the sync redesign)
+- Dismissed findings (ENG, one `dismissedFindings` row, lead 2026-11-02): two devices dismissing different findings
+  while offline keep only the later list, so the other finding comes back and the owner dismisses it again.
 - Schema 20 (UX-A) amounts: every fiat currency is stored in hundredths as before; a currency with 3 ISO decimals (KWD,
   BHD, JOD, OMR, TND, LYD, IQD) has no third decimal: typed input allows 2. Every importer (PBZ, Revolut, mapped CSV,
   e-invoice) refuses an amount, fee or balance with non-zero digits past the storage scale, per row with a reason

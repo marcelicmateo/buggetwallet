@@ -145,14 +145,13 @@ void main() {
       ];
       expect(rhythm(r), isEmpty);
     });
-    test('a quiet weekday with no spending at all fires with no ratio (null)', () {
+    // Lead 2026-11-02: Smin > 0, so a weekday with no spending at all never fires (was: fires with a null ratio).
+    test('a quiet weekday with no spending at all does not fire', () {
       final r = [
         for (final f in daily(1000, 3000))
           if (DateTime.parse(f.date).weekday == DateTime.saturday) f
       ];
-      final fs = rhythm(r);
-      expect(fs, hasLength(1));
-      expect(fs.single.ratioPermille, isNull);
+      expect(rhythm(r), isEmpty);
     });
     test('1599 / 1000 does not fire, 1601 / 1000 does', () {
       expect(rhythm(daily(1000, 1599)), isEmpty);

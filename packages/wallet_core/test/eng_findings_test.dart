@@ -83,6 +83,15 @@ void main() {
       expect(week(1599), isEmpty);
       expect(week(3000).single.ratioPermille, 3000);
     });
+
+    test('a weekday with no spending at all never fires (sparse data)', () {
+      // Spending on Mondays only: the other weekdays hold nothing, so the quietest mean is 0.
+      final mondays = [
+        for (var d = DateTime.utc(2025, 11, 3); d.isBefore(DateTime.utc(2026, 11, 1)); d = d.add(const Duration(days: 7)))
+          row(isoDate(d), -5000, 'Groceries')
+      ];
+      expect(only(FindingKind.weeklyRhythm, run(mondays)), isEmpty);
+    });
   });
 
   group('movesTogether', () {
