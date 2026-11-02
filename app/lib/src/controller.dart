@@ -1013,7 +1013,7 @@ class WalletController extends ChangeNotifier {
               matchRows: rawExpanded,
               payeeAliases: payeeAliases(),
               goalAmounts: goalPeriodAmounts(),
-              goalTakenOut: repo.goalTakenOutBetween(effectiveSettings.periodStart!, _periodEnd())),
+              goalTakenOutByDate: repo.goalTakenOutByDate(effectiveSettings.periodStart!, _periodEnd())),
           warnMs: 100));
 
   /// Saved or lost per pay period (salary to salary), oldest first; the last one is still running.

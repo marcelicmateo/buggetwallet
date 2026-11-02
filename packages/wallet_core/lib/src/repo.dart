@@ -857,18 +857,39 @@ class WalletRepo {
   }
 
   /// PS: the payday auto-save for pay [period] (`PeriodBudget.start`). Writes `pay:<goalId>:<period>` = the goal's
-  /// monthly amount for each live goal with `monthly > 0` that has no such row yet (a deleted one counts as there), so
-  /// two devices or two calls pay a period once and an owner's skip or lower ([setGoalPeriodAmount]) is never undone.
+  /// monthly amount for each live goal with `monthly > 0` that is not paid for that period yet ([_paidPeriod]: a pay
+  /// row, deleted or not, within [salaryGroupDays] of it), so two devices, two calls or a start that moved by a few days
+  /// pay a period once and an owner's skip or lower ([setGoalPeriodAmount]) is never undone.
   void payGoals({required String period}) {
     final due = [
       for (final g in goals())
-        if (g.monthly > 0 && _contribAmount(_payId(g.id, period)) == null) _contribution(g.id, _payAmount(g), id: _payId(g.id, period)),
+        if (g.monthly > 0 && _paidPeriod(g.id, period) == null) _contribution(g.id, _payAmount(g), id: _payId(g.id, period)),
     ];
     if (due.isNotEmpty) _write(due);
   }
 
   static String _payId(String goalId, String period) => 'pay:$goalId:$period';
   static int _payAmount(Goal g) => g.monthly.clamp(0, Goal.maxContribution);
+  static final _isoDay = RegExp(r'^\d{4}-\d{2}-\d{2}$');
+
+  /// The period string of goal [goalId]'s pay row for [period]: the nearest `pay:<goalId>:<d>` row (deleted or not) with
+  /// |d − [period]| ≤ [salaryGroupDays] (ties: the earlier d), else null. One period's start can move by a few days
+  /// (salary parts imported in either order, a new period started a day off); periods are longer than that, so the next
+  /// one never matches. Adjustments and lookups use that row's string, so a skip set under the old start keeps working.
+  String? _paidPeriod(String goalId, String period) {
+    final prefix = _payId(goalId, '');
+    String? best;
+    var bestGap = salaryGroupDays + 1;
+    for (final r in db.select("SELECT id FROM goal_contrib WHERE goal_id = ? AND id LIKE 'pay:%'", [goalId])) {
+      if (r['id'] case final String id when id.startsWith(prefix)) {
+        final d = id.substring(prefix.length);
+        if (!_isoDay.hasMatch(d)) continue;
+        final gap = daysBetween(d, period).abs();
+        if (gap < bestGap || (gap == bestGap && best != null && d.compareTo(best) < 0)) (best, bestGap) = (d, gap);
+      }
+    }
+    return best;
+  }
 
   /// The live amount of contribution [id]: null when there is no such row, 0 when it is deleted or has no valid amount.
   int? _contribAmount(String id) {
@@ -887,7 +908,8 @@ class WalletRepo {
     if (cents > Goal.maxContribution) throw ArgumentError('The amount is too large.');
     final g = goals().where((g) => g.id == goalId).firstOrNull;
     if (g == null) throw ArgumentError('No such goal.');
-    final payId = _payId(goalId, period), adjId = 'adj:$goalId:$period';
+    final p = _paidPeriod(goalId, period) ?? period;
+    final payId = _payId(goalId, p), adjId = 'adj:$goalId:$p';
     final paid = _contribAmount(payId);
     final pay = paid ?? _payAmount(g);
     final adj = _contribAmount(adjId) ?? 0;
@@ -902,10 +924,15 @@ class WalletRepo {
     logEvent(_log, Level.INFO, 'goal.periodAmount', {'skip': cents == 0});
   }
 
-  /// PS: this pay period's savings per live goal: the pay row plus the adjustment when the pay row exists, else the
-  /// goal's monthly amount plus the adjustment. Pass it as `computePeriod(goalAmounts:)`.
+  /// PS: this pay period's savings per live goal: the pay row plus the adjustment when the goal is paid for [period]
+  /// ([_paidPeriod], under that row's own period string), else the goal's monthly amount plus the adjustment. Pass it
+  /// as `computePeriod(goalAmounts:)`.
   Map<String, int> goalPeriodAmounts(String period) => {
-        for (final g in goals()) g.id: (_contribAmount(_payId(g.id, period)) ?? g.monthly) + (_contribAmount('adj:${g.id}:$period') ?? 0),
+        for (final g in goals())
+          if (_paidPeriod(g.id, period) case final p?)
+            g.id: (_contribAmount(_payId(g.id, p)) ?? 0) + (_contribAmount('adj:${g.id}:$p') ?? 0)
+          else
+            g.id: g.monthly + (_contribAmount('adj:${g.id}:$period') ?? 0),
       };
 
   /// PS: takes [cents] (> 0, at most the saved total) out of goal [goalId], dated [date]. Without [toGoalId] it becomes
@@ -931,13 +958,19 @@ class WalletRepo {
 
   /// PS: the money taken out of goals into spending ([takeOutOfGoal] without a destination) dated in
   /// [[start], [endExclusive]), positive. Rows of deleted goals count too: that money became spending money.
-  int goalTakenOutBetween(String start, String endExclusive) {
-    var sum = 0;
+  int goalTakenOutBetween(String start, String endExclusive) => goalTakenOutByDate(start, endExclusive).values.fold(0, (s, v) => s + v);
+
+  /// [goalTakenOutBetween] per date (positive cents), for `periodDays(goalTakenOutByDate:)`: a take-out counts only from
+  /// its own day on.
+  Map<String, int> goalTakenOutByDate(String start, String endExclusive) {
+    final out = <String, int>{};
     for (final r in db.select(
-        "SELECT amount FROM goal_contrib WHERE id LIKE 'out:%' AND deleted = 0 AND date >= ? AND date < ?", [start, endExclusive])) {
-      if (r['amount'] case final int a) sum -= a.clamp(-Goal.maxContribution, Goal.maxContribution);
+        "SELECT date, amount FROM goal_contrib WHERE id LIKE 'out:%' AND deleted = 0 AND date >= ? AND date < ?", [start, endExclusive])) {
+      if ((r['date'], r['amount']) case (final String d, final int a)) {
+        out[d] = (out[d] ?? 0) - a.clamp(-Goal.maxContribution, Goal.maxContribution);
+      }
     }
-    return sum;
+    return out;
   }
 
   String addWish(String name, int price) {
