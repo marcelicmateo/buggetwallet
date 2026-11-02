@@ -28,6 +28,18 @@ Future<void> _show(WidgetTester t, WalletController wc, {Size size = const Size(
 
 void main() {
   group('RX4 the switch', () {
+    test('budgetView keeps spending, plan and tags; anything else falls back to spending', () {
+      final wc = budgetWallet();
+      addTearDown(wc.dispose);
+      wc.setBudgetView('tags');
+      expect(wc.budgetView, 'tags');
+      expect(wc.repo.localValue('budgetView'), 'tags');
+      wc.setBudgetView('bogus');
+      expect(wc.budgetView, 'tags', reason: 'an unknown view is ignored');
+      wc.repo.setLocalValue('budgetView', 'old');
+      expect(wc.budgetView, 'spending', reason: 'an unknown stored value reads as the default');
+    });
+
     tw('opens on Spending, Plan is one tap away and the choice is remembered on the device', (t) async {
       final wc = budgetWallet();
       addTearDown(wc.dispose);

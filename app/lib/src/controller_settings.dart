@@ -88,14 +88,16 @@ extension DeviceSettings on WalletController {
     notifyListeners();
   }
 
-  /// Budget tab's switch (RX4): 'spending' (default) or 'plan'. Device-local, never synced, remembered across starts.
-  String get budgetView => repo.localValue('budgetView') == 'plan' ? 'plan' : 'spending';
+  /// Budget tab's switch (RX4, UX-B): 'spending' (default), 'plan' or 'tags'. Device-local, never synced, remembered across starts.
+  String get budgetView => switch (repo.localValue('budgetView')) { final v? when _budgetViews.contains(v) => v, _ => 'spending' };
 
-  /// Chooses Spending or Plan on the Budget tab. Today's links call it before they switch tabs.
+  static const _budgetViews = {'plan', 'tags'};
+
+  /// Chooses Spending, Plan or Tags on the Budget tab. Today's links call it before they switch tabs.
   void setBudgetView(String view) {
-    if (view != 'spending' && view != 'plan') return;
+    if (view != 'spending' && !_budgetViews.contains(view)) return;
     if (view == budgetView) return;
-    repo.setLocalValue('budgetView', view == 'plan' ? 'plan' : null);
+    repo.setLocalValue('budgetView', view == 'spending' ? null : view);
     logEvent(_log, Level.INFO, 'budget.view', {'view': view});
     notifyListeners();
   }
