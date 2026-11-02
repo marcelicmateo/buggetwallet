@@ -4,6 +4,8 @@
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/screens/budget.dart';
+import 'package:budget_wallet/src/screens/plan_screen.dart';
+import 'package:budget_wallet/src/screens/save.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/widgets/dash.dart';
@@ -26,9 +28,13 @@ void tw(String name, Future<void> Function(WidgetTester tester) body, {Timeout? 
 Future<void> _show(WidgetTester t, WalletController wc, {Size size = const Size(400, 3000), double scale = 1}) =>
     pumpApp(t, Scaffold(body: BudgetScreen(wc: wc)), size: size, textScale: scale);
 
+/// Plan › Payday plan (it moved off the Budget tab in ENG E1).
+Future<void> _showPlan(WidgetTester t, WalletController wc, {Size size = const Size(400, 3000), double scale = 1}) =>
+    pumpApp(t, Scaffold(body: PlanScreen(wc: wc)), size: size, textScale: scale);
+
 void main() {
   group('RX4 the switch', () {
-    test('budgetView keeps spending, plan and tags; anything else falls back to spending', () {
+    test('budgetView keeps spending and tags; anything else falls back to spending', () {
       final wc = budgetWallet();
       addTearDown(wc.dispose);
       wc.setBudgetView('tags');
@@ -40,28 +46,26 @@ void main() {
       expect(wc.budgetView, 'spending', reason: 'an unknown stored value reads as the default');
     });
 
-    tw('opens on Spending, Plan is one tap away and the choice is remembered on the device', (t) async {
+    tw('Explore opens on Spending, Tags is one tap away and the choice is remembered on the device', (t) async {
       final wc = budgetWallet();
       addTearDown(wc.dispose);
       expect(wc.budgetView, 'spending');
       await _show(t, wc);
       expect(_key('budgetSwitch'), findsOneWidget);
       expect(_key('outTile'), findsOneWidget);
-      expect(_key('planTile'), findsNothing, reason: 'the Plan page is built but not shown');
+      expect(_key('budgetPlan'), findsNothing, reason: 'the plan moved to Plan');
       expect(t.widget<SegmentedButton<String>>(_key('budgetSwitch')).selected, {'spending'});
 
-      await t.tap(_key('budgetPlan'));
+      await t.tap(_key('budgetTags'));
       await t.pump(const Duration(milliseconds: 300));
-      expect(wc.budgetView, 'plan');
-      expect(wc.repo.localValue('budgetView'), 'plan', reason: 'device-local, not a synced setting');
-      expect(_key('planTile'), findsOneWidget);
+      expect(wc.budgetView, 'tags');
+      expect(wc.repo.localValue('budgetView'), 'tags', reason: 'device-local, not a synced setting');
       expect(_key('outTile'), findsNothing);
 
       // A new screen (an app restart) opens where the owner left it.
       await t.pumpWidget(const SizedBox());
       await _show(t, wc);
-      expect(_key('planTile'), findsOneWidget);
-      expect(t.widget<SegmentedButton<String>>(_key('budgetSwitch')).selected, {'plan'});
+      expect(t.widget<SegmentedButton<String>>(_key('budgetSwitch')).selected, {'tags'});
 
       await t.tap(_key('budgetSpending'));
       await t.pump(const Duration(milliseconds: 300));
@@ -70,27 +74,48 @@ void main() {
       expect(_key('outTile'), findsOneWidget);
     });
 
-    tw('the plan editor keeps what was typed while Spending is shown', (t) async {
+    tw('Plan opens on the payday plan, Saving is one tap away and the choice is remembered on the device', (t) async {
+      final wc = budgetWallet();
+      addTearDown(wc.dispose);
+      expect(wc.planView, 'payday');
+      await _showPlan(t, wc);
+      expect(_key('planSwitch'), findsOneWidget);
+      expect(_key('planTile'), findsOneWidget);
+      await t.tap(_key('planSaving'));
+      await t.pump(const Duration(milliseconds: 300));
+      expect(wc.planView, 'saving');
+      expect(wc.repo.localValue('planView'), 'saving');
+      expect(find.byType(SaveScreen), findsOneWidget);
+      await t.pumpWidget(const SizedBox());
+      await _showPlan(t, wc);
+      expect(t.widget<SegmentedButton<String>>(_key('planSwitch')).selected, {'saving'});
+      await t.tap(_key('planPayday'));
+      await t.pump(const Duration(milliseconds: 300));
+      expect(wc.repo.localValue('planView'), isNull, reason: 'the payday plan is the default: nothing stored');
+      wc.setPlanView('bogus');
+      expect(wc.planView, 'payday');
+    });
+
+    tw('the plan editor keeps what was typed while Saving is shown', (t) async {
       final wc = demoWallet();
       addTearDown(wc.dispose);
-      wc.setBudgetView('plan');
-      await _show(t, wc);
+      await _showPlan(t, wc);
       await openPlanEdit(t, 'rent');
       await t.enterText(find.widgetWithText(TextField, 'Rent'), '777');
-      await t.tap(_key('budgetSpending'));
+      await t.tap(_key('planSaving'));
       await t.pump(const Duration(milliseconds: 300));
-      await t.tap(_key('budgetPlan'));
+      await t.tap(_key('planPayday'));
       await t.pump(const Duration(milliseconds: 300));
       expect(t.widget<TextField>(find.widgetWithText(TextField, 'Rent')).controller!.text, '777');
     });
 
     tw('a search request (Ctrl+F, the app bar) lands on Spending', (t) async {
-      final wc = budgetWallet()..setBudgetView('plan');
+      final wc = budgetWallet()..setBudgetView('tags');
       addTearDown(wc.dispose);
       final request = ValueNotifier<int>(0);
       addTearDown(request.dispose);
       await pumpApp(t, Scaffold(body: BudgetScreen(wc: wc, searchRequest: request)), size: const Size(400, 3000));
-      expect(_key('planTile'), findsOneWidget);
+      expect(_key('budgetSwitch'), findsOneWidget);
       request.value++;
       await t.pump(const Duration(milliseconds: 300));
       expect(wc.budgetView, 'spending');
@@ -98,7 +123,8 @@ void main() {
       expect(find.byKey(const ValueKey('searchField')).evaluate().isNotEmpty || find.byType(TextField).evaluate().isNotEmpty, isTrue);
     });
 
-    tw("Today's links pick the page they mean: a held line and the setup link open Plan, the budget line opens Spending", (t) async {
+    tw("Today's links pick the page they mean: a held line and the setup link open Plan › Payday plan, the budget line opens Explore › Spending",
+        (t) async {
       final wc = budgetWallet();
       addTearDown(wc.dispose);
       await wc.repo.addAccount(name: 'Cash', currency: 'EUR', opening: 5000, openingDate: '2026-10-10');
@@ -113,7 +139,8 @@ void main() {
           size: const Size(400, 3000));
 
       // Spending first (the budget line), then Plan (the held line has no own opener here, so it uses the plan link).
-      wc.setBudgetView('plan');
+      wc.setBudgetView('tags');
+      wc.setPlanView('saving');
       await today();
       await t.ensureVisible(_key('budgetLine'));
       await t.tap(_key('budgetLine'));
@@ -125,7 +152,7 @@ void main() {
       await t.tap(_key('heldLine'));
       await t.pump();
       expect(opened, 'plan');
-      expect(wc.budgetView, 'plan');
+      expect(wc.planView, 'payday');
     });
   });
 
@@ -211,8 +238,7 @@ void main() {
     tw('the salary split, per day, the lines with a paid tick, each value editable in place', (t) async {
       final wc = demoWallet();
       addTearDown(wc.dispose);
-      wc.setBudgetView('plan');
-      await _show(t, wc);
+      await _showPlan(t, wc);
       final p = wc.period();
       expect(_key('planTile'), findsOneWidget);
       expect(find.byType(Donut), findsOneWidget);
@@ -292,8 +318,7 @@ void main() {
       addTearDown(wc.dispose);
       wc.repo.updateSettings({'rent': 40050});
       wc.reload();
-      wc.setBudgetView('plan');
-      await _show(t, wc);
+      await _showPlan(t, wc);
       final p = wc.period();
       expect(p.flexBudget, isNot(p.income));
       final tile = _key('planTile');
@@ -307,8 +332,7 @@ void main() {
     tw('the ring: Fixed and Saved with their exact values, weights in proportion', (t) async {
       final wc = demoWallet();
       addTearDown(wc.dispose);
-      wc.setBudgetView('plan');
-      await _show(t, wc);
+      await _showPlan(t, wc);
       final p = wc.period();
       final segs = t.widget<Donut>(find.byType(Donut)).segments;
       expect([for (final s in segs) s.label], ['Fixed', 'Saved', 'Spending']);
@@ -368,8 +392,11 @@ void main() {
             addTearDown(t.platformDispatcher.clearPlatformBrightnessTestValue);
             final wc = demoWallet();
             addTearDown(wc.dispose);
-            wc.setBudgetView(view);
-            await _show(t, wc, size: Size(w, 900), scale: scale);
+            if (view == 'plan') {
+              await _showPlan(t, wc, size: Size(w, 900), scale: scale);
+            } else {
+              await _show(t, wc, size: Size(w, 900), scale: scale);
+            }
             expect(find.byType(DashGrid), findsWidgets);
             await scrollThrough(t);
             expect(t.takeException(), isNull);

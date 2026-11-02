@@ -1,8 +1,7 @@
 // Stage RX5: the Bills tab as a Paper Tiles dashboard (Before payday, Per month, Per year, Until payday, To review, Expected bills with
 // one state chip each). Fixed clock (20 Oct 2026; the period ends 1 Nov), SYNTHETIC data only. Numbers come from core
 // (`beforePayday`, `billsCost`); these tests pin what the tiles show per state, that the anchors still jump, exact cents, and that
-// the page fits 320 dp at text 2.0, 360, 411 and 1280 dp, light and dark. Real Plex fonts (the test font is far wider).
-import 'dart:io';
+// the page fits 320 dp at text 2.0, 360, 411 and 1280 dp, light and dark. Real fonts (Manrope, JetBrains Mono) (the test font is far wider).
 
 import 'package:budget_wallet/main.dart';
 import 'package:budget_wallet/src/controller.dart';
@@ -12,11 +11,11 @@ import 'package:budget_wallet/src/tabs.dart';
 import 'package:budget_wallet/src/theme.dart';
 import 'package:budget_wallet/src/widgets/dash.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
+import 'support/fonts.dart';
 import 'support/layout.dart';
 import 'support/seams.dart';
 import 'support/wallet.dart';
@@ -24,13 +23,7 @@ import 'support/wallet.dart';
 const _t = Timeout(Duration(seconds: 90));
 
 Future<void> _loadFonts() async {
-  for (final (fam, prefix) in [('Inter', 'Inter'), ('IBM Plex Mono', 'IBMPlexMono')]) {
-    final l = FontLoader(fam);
-    for (final w in ['Regular', 'Medium', 'SemiBold']) {
-      l.addFont(File('assets/fonts/$prefix-$w.ttf').readAsBytes().then(ByteData.sublistView));
-    }
-    await l.load();
-  }
+  await loadAppFonts();
 }
 
 Finder _key(String k) => find.byKey(ValueKey(k));

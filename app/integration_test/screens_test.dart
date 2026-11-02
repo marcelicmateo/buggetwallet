@@ -14,6 +14,7 @@ import 'package:budget_wallet/src/screens/bills_tab.dart';
 import 'package:budget_wallet/src/screens/budget.dart' show BudgetScreen;
 import 'package:budget_wallet/src/screens/import_preview_sheet.dart';
 import 'package:budget_wallet/src/screens/key_backup.dart';
+import 'package:budget_wallet/src/screens/plan_screen.dart' show PlanScreen;
 import 'package:budget_wallet/src/screens/review.dart';
 import 'package:budget_wallet/src/screens/settings.dart';
 import 'package:budget_wallet/src/screens/tag_detail.dart';
@@ -29,7 +30,7 @@ import 'package:wallet_sync/wallet_sync.dart';
 
 import '../test/support/seams.dart';
 import 'demo_data.dart';
-import 'support/harness.dart' show Harness, navTab, pageList, settingsSection;
+import 'support/harness.dart' show Harness, goTab, navTab, pageList, settingsSection;
 
 /// Distinctive texts of the synthetic data: none of them may reach the log.
 const _private = [
@@ -95,27 +96,23 @@ void main() {
     await tester.pumpAndSettle();
 
     for (final (i, tab) in ['Budget', 'Bills', 'Save', 'Settings'].indexed) {
-      await tester.tap(navTab(tab));
-      await tester.pumpAndSettle();
+      await goTab(tester, tab);
       await binding.takeScreenshot('${i + 2}-${tab.toLowerCase()}');
     }
-    // RX4: Budget has two pages; Plan is the other one (the choice is remembered, the search below goes back to Spending).
-    await tester.tap(navTab('Budget'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('budgetPlan')));
+    // ENG E1: Plan has two pages, Payday plan and Saving (the choice is remembered).
+    await goTab(tester, 'Plan');
+    await tester.tap(find.byKey(const ValueKey('planPayday')));
     await tester.pumpAndSettle();
     await binding.takeScreenshot('2-budget-plan');
 
     // Stage Q: the payday forecast under the plan, the bills cost header, the Owed panel with its IOU sheet, the import preview and the
     // bank balance question.
-    await tester.tap(navTab('Bills'));
-    await tester.pumpAndSettle();
+    await goTab(tester, 'Bills');
     await binding.takeScreenshot('3-bills-top');
     await tester.ensureVisible(find.byKey(const ValueKey('recurringCost')));
     await tester.pumpAndSettle();
     await binding.takeScreenshot('3-bills-cost');
-    await tester.tap(navTab('Save'));
-    await tester.pumpAndSettle();
+    await goTab(tester, 'Save');
     await tester.ensureVisible(find.byKey(const ValueKey('owedPanel')));
     await tester.pumpAndSettle();
     await binding.takeScreenshot('4-save-owed');
@@ -156,8 +153,7 @@ void main() {
 
     // Bills tab (B4, P5): Coming up, To review, Expected bills, then the bills database: To review, Unpaid and Paid, and the sheet of the
     // one waiting for review.
-    await tester.tap(navTab('Bills'));
-    await tester.pumpAndSettle();
+    await goTab(tester, 'Bills');
     final bills = find.descendant(of: find.byType(BillsScreen), matching: find.byType(Scrollable)).first;
     await tester.scrollUntilVisible(find.text('Import bill file'), 300, scrollable: bills);
     await tester.pumpAndSettle();
@@ -198,8 +194,7 @@ void main() {
 
     // Settings (P5): one page on a phone, two panes on a wide window (a section is then picked in the list). The page that holds
     // the panels is looked up again each time: it is another list after a section is picked.
-    await tester.tap(navTab('Settings'));
-    await tester.pumpAndSettle();
+    await goTab(tester, 'Settings');
     Future<void> settings(SettingsSection section, Finder target, String shot) async {
       await settingsSection(tester, section);
       // The list only scrolls forward, and on a phone's one page the sections follow each other in page order (Sync and Backup come
@@ -212,18 +207,15 @@ void main() {
     }
 
     // Budget › Plan › Budgets per category (E1; UX-B1 moved it here from Settings): the editor with the saved budgets.
-    wc.setBudgetView('plan');
-    await tester.tap(navTab('Budget'));
-    await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Suggest from the last 6 months'), 300, scrollable: pageList(BudgetScreen));
+    wc.setPlanView('payday');
+    await goTab(tester, 'Plan');
+    await tester.scrollUntilVisible(find.text('Suggest from the last 6 months'), 300, scrollable: pageList(PlanScreen));
     await tester.pumpAndSettle();
     await binding.takeScreenshot('5-plan-budgets');
     // The Plan page keeps its scroll, and its lazy list builds nothing far from the window: back to the top for the forecast below.
-    tester.state<ScrollableState>(pageList(BudgetScreen)).position.jumpTo(0);
+    tester.state<ScrollableState>(pageList(PlanScreen)).position.jumpTo(0);
     await tester.pumpAndSettle();
-    wc.setBudgetView('spending');
-    await tester.tap(navTab('Settings'));
-    await tester.pumpAndSettle();
+    await goTab(tester, 'Settings');
 
     // Settings › Calendars (F3).
     await settings(SettingsSection.calendars, find.text('Import .ics file'), '5-settings-calendars');
@@ -260,8 +252,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Search (M5): the icon on Budget, a query, the ruled results, Esc closes.
-    await tester.tap(navTab('Budget'));
-    await tester.pumpAndSettle();
+    await goTab(tester, 'Budget');
     await tester.tap(find.byKey(const ValueKey('budgetSpending')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('searchOpen')));
@@ -275,9 +266,8 @@ void main() {
     expect(find.byKey(const ValueKey('searchField')), findsNothing);
 
     // Stage Q: the payday forecast under the plan (last on Budget: it scrolls the page).
-    await tester.tap(navTab('Budget'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('budgetPlan')));
+    await goTab(tester, 'Plan');
+    await tester.tap(find.byKey(const ValueKey('planPayday')));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const ValueKey('forecastPanel')));
     await tester.pumpAndSettle();
@@ -285,8 +275,7 @@ void main() {
     await binding.takeScreenshot('2-budget-forecast');
 
     // The weekly review (M4): the Today card opens it; one row is confirmed, then it closes and Done is left for the real flow.
-    await tester.tap(navTab('Today'));
-    await tester.pumpAndSettle();
+    await goTab(tester, 'Today');
     await tester.scrollUntilVisible(find.text('Start review'), 300,
         scrollable: find.descendant(of: find.byType(TodayScreen), matching: find.byType(Scrollable)).first);
     await tester.ensureVisible(find.text('Start review'));
@@ -321,9 +310,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
     await tester.pumpAndSettle();
-    // Plan was left scrolled down (its switch is out of view): choose Spending through the setting the switch writes.
-    wc.setBudgetView('spending');
-    await tester.pumpAndSettle();
+
     final catRow =
         find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('categoryRow_'));
     await tester.ensureVisible(catRow.first);
@@ -363,7 +350,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
     await tester.pumpAndSettle();
-    final spendingSwitch = find.byKey(const ValueKey('budgetSpending')); // the Plan page may be showing, or Spending scrolled down
+    final spendingSwitch = find.byKey(const ValueKey('budgetSpending')); // Spending may be scrolled down
     if (spendingSwitch.evaluate().isNotEmpty) await tester.tap(spendingSwitch);
     await tester.pumpAndSettle();
     tester.state<ScrollableState>(pageList(BudgetScreen)).position.jumpTo(0);
@@ -373,8 +360,7 @@ void main() {
     await tester.scrollUntilVisible(yenRow, 300, scrollable: pageList(BudgetScreen), maxScrolls: 60);
     await tester.pumpAndSettle();
     await binding.takeScreenshot('10-yen-row');
-    await tester.tap(navTab('Settings'));
-    await tester.pumpAndSettle();
+    await goTab(tester, 'Settings');
     await settings(SettingsSection.accounts, find.byKey(const ValueKey('walletCurrency')), '10-settings-accounts');
     Future<void> tapKey(String key) async {
       final f = find.byKey(ValueKey(key));
@@ -440,8 +426,7 @@ void main() {
         const ScannedCode(CodeKind.qr, 'https://porezna.gov.hr/rn?jir=11111111-2222-4333-8444-555555555555&datv=20260101_1000&izn=9999'));
     final t = wc.txs.firstWhere((x) => x.tx.description.contains('IKEA ZAGREB'));
     wc.setCategory(t.tx, 'Shopping', always: true);
-    await tester.tap(navTab('Today'));
-    await tester.pumpAndSettle();
+    await goTab(tester, 'Today');
 
     // Let the engine report frame timings (batched), then close the frame window.
     for (var i = 0; i < 20; i++) {

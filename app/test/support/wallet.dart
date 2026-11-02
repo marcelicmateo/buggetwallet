@@ -107,11 +107,11 @@ Finder planRow(String key) => find.byWidgetPredicate((w) {
               (key.startsWith('planLine_') && k.value == 'ledgerPlanLine_${key.substring(9)}'));
     });
 
-/// Budget › Plan: taps the value [key] so its field shows with Save and Cancel (one field at a time).
+/// Plan › Payday plan: taps the value [key] so its field shows with Save and Cancel (one field at a time).
 Future<void> openPlanEdit(WidgetTester tester, [String key = 'salary']) async {
   final row = planRow(key);
-  // On the Budget tab the plan sits behind the Spending | Plan switch: choose Plan first.
-  final plan = find.byKey(const ValueKey('budgetPlan'));
+  // On the Plan page the payday plan sits behind the Payday plan | Saving switch: choose it first.
+  final plan = find.byKey(const ValueKey('planPayday'));
   if (row.evaluate().isEmpty && plan.evaluate().isNotEmpty) {
     await tester.tap(plan);
     await tester.pump(const Duration(milliseconds: 300));
@@ -122,7 +122,7 @@ Future<void> openPlanEdit(WidgetTester tester, [String key = 'salary']) async {
   await tester.pump();
 }
 
-/// Budget › Plan: opens the Suggestions tile's sheet (the proposals with Accept / Not now); nothing happens without proposals.
+/// Plan › Payday plan: opens the Suggestions tile's sheet (the proposals with Accept / Not now); nothing happens without proposals.
 Future<void> openSuggestions(WidgetTester tester) async {
   final tile = find.byKey(const ValueKey('planSuggestionsTile'));
   if (tile.evaluate().isEmpty) return;

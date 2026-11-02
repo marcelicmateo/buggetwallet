@@ -30,7 +30,7 @@ class KeyDisplay extends StatefulWidget {
 class _KeyDisplayState extends State<KeyDisplay> {
   bool _text = false;
 
-  /// Plex Mono with a little letter spacing, so O, I and L stay apart.
+  /// JetBrains Mono with a little letter spacing, so O, I and L stay apart.
   TextStyle _keyStyle(BuildContext context) => numStyle.copyWith(fontSize: BwType.bodySize, letterSpacing: 1, color: context.c.ink);
 
   @override

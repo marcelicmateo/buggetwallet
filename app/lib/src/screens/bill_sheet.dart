@@ -331,7 +331,7 @@ class _BelongsSheet extends StatelessWidget {
           size: BwType.metaSize),
       const SizedBox(height: 8),
       if (list.isEmpty)
-        const EmptyNote('No expected bill to pick. Confirm one in Plan › Expected bills first.')
+        const EmptyNote('No expected bill to pick. Confirm one in Money › Expected bills first.')
       else
         Rows(children: [
           for (final r in list)

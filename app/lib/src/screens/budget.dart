@@ -3,19 +3,12 @@ import 'package:flutter/material.dart';
 import '../controller.dart';
 import '../layout.dart';
 import '../logging.dart';
-import '../tabs.dart' show JumpRequest;
-import '../widgets/jump_when_built.dart';
-import '../widgets/scroll_to.dart';
-import 'budgets.dart';
-import 'habits_panels.dart' show ExpectedIncomePanel;
-import 'payday_plan.dart';
 import 'spending.dart';
 import 'tags_window.dart';
 
-/// The Budget tab (RX4): two dashboards behind a **Spending | Plan** switch. Spending answers "where did it go?", Plan "where will
-/// the salary go?". The choice is remembered on the device (`wc.budgetView`, default Spending); Today's links pick the page they mean
-/// before the tab opens, and a search (Ctrl+F, the app bar) always lands on Spending. Both pages stay built (an [IndexedStack]), so
-/// the plan editor keeps what was typed while the other page is shown.
+/// Explore (ENG E1): two pages behind a **Spending | Tags** switch. Spending answers "where did it go?" (with Insights and search);
+/// the payday plan moved to Plan. The choice is remembered on the device (`wc.budgetView`, default Spending); a search (Ctrl+K, Ctrl+F,
+/// the app bar) always lands on Spending. Tags is built only while shown.
 class BudgetScreen extends StatefulWidget {
   final WalletController wc;
 
@@ -24,12 +17,7 @@ class BudgetScreen extends StatefulWidget {
   final void Function(int tab)? openTab;
   final VoidCallback? openBills;
 
-  /// Keeps the payday plan's State when the shell rebuilds the page.
-  final Key? planKey;
-
-  /// Today's income tile: scrolls Plan to Expected income.
-  final JumpRequest<bool>? incomeRequest;
-  const BudgetScreen({super.key, required this.wc, this.searchRequest, this.openTab, this.openBills, this.planKey, this.incomeRequest});
+  const BudgetScreen({super.key, required this.wc, this.searchRequest, this.openTab, this.openBills});
   @override
   State<BudgetScreen> createState() => _BudgetScreenState();
 }
@@ -37,20 +25,12 @@ class BudgetScreen extends StatefulWidget {
 class _BudgetScreenState extends State<BudgetScreen> {
   /// The page last built, so a controller change that is not the switch does not rebuild this level.
   String _shown = '';
-  final _planScroll = ScrollController();
-  final _incomeKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
     widget.wc.addListener(_changed);
     widget.searchRequest?.addListener(_search);
-    widget.incomeRequest?.addListener(_jumpIncome);
-    jumpWhenBuilt(widget.incomeRequest, () => mounted, _jumpIncome);
-  }
-
-  void _jumpIncome() {
-    if (mounted) scrollToKey(_planScroll, _incomeKey, alive: () => mounted);
   }
 
   @override
@@ -70,8 +50,6 @@ class _BudgetScreenState extends State<BudgetScreen> {
   void dispose() {
     widget.wc.removeListener(_changed);
     widget.searchRequest?.removeListener(_search);
-    widget.incomeRequest?.removeListener(_jumpIncome);
-    _planScroll.dispose();
     super.dispose();
   }
 
@@ -91,26 +69,15 @@ class _BudgetScreenState extends State<BudgetScreen> {
           logNav('budget.view', {'view': v});
           wc.setBudgetView(v);
         });
-    return IndexedStack(index: switch (view) { 'plan' => 1, 'tags' => 2, _ => 0 }, sizing: StackFit.expand, children: [
+    return IndexedStack(index: view == 'tags' ? 1 : 0, sizing: StackFit.expand, children: [
       SpendingScreen(wc: wc, searchRequest: widget.searchRequest, openTab: widget.openTab, openBills: widget.openBills, switcher: switcher),
-      MarginLine(
-        child: ListView(
-            controller: _planScroll,
-            padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, pageBottomPad),
-            children: gapped([
-              switcher,
-              PaydayPlan(key: widget.planKey, wc: wc),
-              ExpectedIncomePanel(key: _incomeKey, wc: wc),
-              BudgetsPanel(key: const ValueKey('budgetsPanel'), wc: wc),
-            ])),
-      ),
-      // Built only while shown: three long lists need not be laid out behind the other pages.
+      // Built only while shown: three long lists need not be laid out behind the other page.
       view == 'tags' ? TagsWindow(wc: wc, switcher: switcher) : const SizedBox.shrink(),
     ]);
   }
 }
 
-/// The Spending | Plan | Tags switch (`budgetSwitch`; segments `budgetSpending`, `budgetPlan`, `budgetTags`): the chosen segment has a tick and a tint.
+/// The Spending | Tags switch (`budgetSwitch`; segments `budgetSpending`, `budgetTags`).
 class BudgetSwitch extends StatelessWidget {
   final String view;
   final ValueChanged<String> onChanged;
@@ -123,7 +90,6 @@ class BudgetSwitch extends StatelessWidget {
         showSelectedIcon: true,
         segments: const [
           ButtonSegment(value: 'spending', label: Text('Spending', key: ValueKey('budgetSpending'), maxLines: 1)),
-          ButtonSegment(value: 'plan', label: Text('Plan', key: ValueKey('budgetPlan'), maxLines: 1)),
           ButtonSegment(value: 'tags', label: Text('Tags', key: ValueKey('budgetTags'), maxLines: 1)),
         ],
         selected: {view},

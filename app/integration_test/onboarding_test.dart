@@ -84,8 +84,8 @@ void main() {
 
     // No salary yet: the banner asks for it and links to Plan.
     expect(find.text('Planning on 0\u00A0€ a month'), findsOneWidget);
-    expect(find.textContaining('Enter your monthly salary in Budget'), findsOneWidget);
-    await t.tap(find.text('Open Budget'));
+    expect(find.textContaining('Enter your monthly salary in Plan'), findsOneWidget);
+    await t.tap(find.text('Open Plan'));
     await t.pumpAndSettle();
     expect(find.text('PAYDAY PLAN'), findsOneWidget);
     await goTab(t, 'Today');

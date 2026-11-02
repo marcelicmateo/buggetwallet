@@ -8,6 +8,8 @@ import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/screens/settings.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/screens/today.dart';
+import 'package:budget_wallet/src/tabs.dart';
+import 'package:budget_wallet/src/widgets/nav.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -18,7 +20,7 @@ import 'package:wallet_importer/wallet_importer.dart';
 
 import 'support/wallet.dart';
 
-const _tabLabels = ['Today', 'Budget', 'Bills', 'Save', 'Settings'];
+const _tabLabels = ['Overview', 'Money', 'Explore', 'Plan', 'Settings'];
 
 Future<void> _size(WidgetTester tester, double w, double h) async {
   tester.view.physicalSize = Size(w, h);
@@ -39,13 +41,21 @@ Future<void> _pumpShell(WidgetTester tester, WalletController wc,
   await tester.pump();
 }
 
-Finder get _bar => find.byType(NavigationBar);
-Finder get _rail => find.byType(NavigationRail);
+Finder get _bar => find.byKey(const ValueKey('navBar'));
+Finder get _rail => find.byKey(const ValueKey('rail'));
 Finder get _stack => find.byWidgetPredicate((w) => w is IndexedStack && w.children.length == 5);
 int _tab(WidgetTester tester) => tester.widget<IndexedStack>(_stack).index ?? 0;
 
 Future<void> _goTab(WidgetTester tester, int i) async {
   final nav = _bar.evaluate().isNotEmpty ? _bar : _rail;
+  if (i == Tabs.settings && _bar.evaluate().isNotEmpty) {
+    // A phone has the gear on Overview.
+    await tester.tap(find.descendant(of: nav, matching: find.text('Overview')).first, warnIfMissed: false);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.byKey(const ValueKey('openSettings')), warnIfMissed: false);
+    await tester.pump();
+    return;
+  }
   final f = find.descendant(of: nav, matching: find.text(_tabLabels[i])).first;
   await tester.ensureVisible(f);
   await tester.pump();
@@ -155,9 +165,10 @@ void main() {
       testWidgets('width $w: rail with labels, not extended', (tester) async {
         await _pumpShell(tester, emptyWallet(), w: w, h: 800);
         expect(_bar, findsNothing);
-        final r = tester.widget<NavigationRail>(_rail);
-        expect(r.extended, isFalse);
-        expect(r.labelType, isNot(NavigationRailLabelType.none));
+        expect(tester.getSize(_rail).width, lessThan(200), reason: 'not extended');
+        for (final l in _tabLabels) {
+          expect(find.descendant(of: _rail, matching: find.text(l)), findsOneWidget, reason: 'label $l');
+        }
         expect(tester.takeException(), isNull);
       });
     }
@@ -165,21 +176,24 @@ void main() {
       testWidgets('width $w: extended rail', (tester) async {
         await _pumpShell(tester, emptyWallet(), w: w, h: 800);
         expect(_bar, findsNothing);
-        expect(tester.widget<NavigationRail>(_rail).extended, isTrue);
+        expect(tester.getSize(_rail).width, 220, reason: 'extended');
         expect(tester.takeException(), isNull);
       });
     }
     testWidgets('selected tab is shown in the nav and kept by resizing across every boundary', (tester) async {
       await _pumpShell(tester, emptyWallet(), w: 400, h: 800);
-      await _goTab(tester, 3);
-      expect(_tab(tester), 3);
+      await _goTab(tester, Tabs.plan);
+      expect(_tab(tester), Tabs.plan);
       for (final w in [600.0, 1024.0, 599.0, 1300.0, 320.0]) {
         await _size(tester, w, 800);
-        expect(_tab(tester), 3, reason: 'at $w');
-        final sel = _bar.evaluate().isNotEmpty
-            ? tester.widget<NavigationBar>(_bar).selectedIndex
-            : tester.widget<NavigationRail>(_rail).selectedIndex;
-        expect(sel, 3, reason: 'nav at $w');
+        expect(_tab(tester), Tabs.plan, reason: 'at $w');
+        final sel = find.descendant(of: _bar.evaluate().isNotEmpty ? _bar : _rail, matching: find.byType(NavItem));
+        expect([
+          for (final e in tester.widgetList<NavItem>(sel))
+            if (e.selected) e.label
+        ], [
+          'Plan'
+        ], reason: 'nav at $w');
       }
       expect(tester.takeException(), isNull);
     });
@@ -233,7 +247,7 @@ void main() {
     testWidgets('Budget: one column at content 1039, two at 1040 and 1041', (tester) async {
       await _pumpShell(tester, demoWallet(clock: pinnedNoon), w: 1500, h: 900);
       final rail = tester.getSize(_rail).width;
-      await _goTab(tester, 1);
+      await _goTab(tester, Tabs.explore);
       for (final c in [1039.0, 1040.0, 1041.0]) {
         await _size(tester, rail + c, 900);
         expect(_twoColumns(_twoColOn(SpendingScreen)), c >= 1040, reason: 'Budget at content $c');
@@ -318,7 +332,7 @@ void main() {
   });
 
   group('rail period badge and sync spinner (N0)', () {
-    Offset today(WidgetTester tester) => tester.getTopLeft(find.descendant(of: _rail, matching: find.text('Today')).first);
+    Offset today(WidgetTester tester) => tester.getTopLeft(find.descendant(of: _rail, matching: find.text('Overview')).first);
 
     for (final w in [700.0, 1400.0]) {
       testWidgets('width $w: the spinner shows while syncing and nothing below it moves', (tester) async {
@@ -409,7 +423,7 @@ void main() {
     });
     testWidgets('typed text and focus in a Plan field survive compact -> expanded -> compact', (tester) async {
       await _pumpShell(tester, emptyWallet(), w: 400, h: 800);
-      await _goTab(tester, 1); // the payday plan is on Budget
+      await _goTab(tester, Tabs.plan); // the payday plan is on Plan
       await openPlanEdit(tester);
       final field = find.widgetWithText(TextField, 'Salary per month');
       await tester.ensureVisible(field);
@@ -459,7 +473,7 @@ void main() {
 
   group('keyboard shortcuts', () {
     for (final w in [400.0, 800.0, 1300.0]) {
-      testWidgets('Ctrl+1..5 switch tabs at $w', (tester) async {
+      testWidgets('Ctrl+1..4 switch destinations at $w', (tester) async {
         await _pumpShell(tester, emptyWallet(), w: w, h: 800);
         await _focusBody(tester);
         final keys = [
@@ -467,9 +481,8 @@ void main() {
           LogicalKeyboardKey.digit2,
           LogicalKeyboardKey.digit3,
           LogicalKeyboardKey.digit4,
-          LogicalKeyboardKey.digit5,
         ];
-        for (final i in [4, 2, 0, 3, 1]) {
+        for (final i in [3, 2, 0, 1]) {
           await _ctrl(tester, keys[i]);
           expect(_tab(tester), i, reason: 'Ctrl+${i + 1}');
         }
@@ -496,13 +509,13 @@ void main() {
         expect(tester.takeException(), isNull);
       });
     }
-    testWidgets('PINNED: Ctrl+1..5 while a dialog is open leave it open and do not switch the tab behind it', (tester) async {
+    testWidgets('PINNED: Ctrl+1..4 while a dialog is open leave it open and do not switch the tab behind it', (tester) async {
       await _pumpShell(tester, emptyWallet(), w: 1300, h: 800);
       await _focusBody(tester);
       await _ctrl(tester, LogicalKeyboardKey.keyN);
       await tester.pumpAndSettle();
       expect(find.byType(AddExpenseSheet), findsOneWidget);
-      for (final k in [LogicalKeyboardKey.digit2, LogicalKeyboardKey.digit5, LogicalKeyboardKey.comma]) {
+      for (final k in [LogicalKeyboardKey.digit2, LogicalKeyboardKey.digit4, LogicalKeyboardKey.comma]) {
         await _ctrl(tester, k);
         await tester.pumpAndSettle();
         expect(find.byType(AddExpenseSheet), findsOneWidget, reason: 'dialog stays open');
@@ -512,7 +525,7 @@ void main() {
     });
     testWidgets('plain digits and letters in a focused text field do not switch tabs or open sheets', (tester) async {
       await _pumpShell(tester, emptyWallet(), w: 1300, h: 800);
-      await _goTab(tester, 1); // the payday plan is on Budget
+      await _goTab(tester, Tabs.plan); // the payday plan is on Plan
       await openPlanEdit(tester);
       final field = find.widgetWithText(TextField, 'Salary per month');
       await tester.ensureVisible(field);
@@ -521,14 +534,14 @@ void main() {
       for (final (k, ch) in [
         (LogicalKeyboardKey.digit1, '1'),
         (LogicalKeyboardKey.digit2, '2'),
-        (LogicalKeyboardKey.digit5, '5'),
+        (LogicalKeyboardKey.digit4, '4'),
         (LogicalKeyboardKey.keyN, 'n'),
         (LogicalKeyboardKey.keyR, 'r'),
         (LogicalKeyboardKey.comma, ','),
       ]) {
         await tester.sendKeyEvent(k, character: ch);
         await tester.pump();
-        expect(_tab(tester), 1, reason: 'plain "$ch"');
+        expect(_tab(tester), Tabs.plan, reason: 'plain "$ch"');
         expect(find.byType(AddExpenseSheet), findsNothing, reason: 'plain "$ch"');
       }
       expect(tester.takeException(), isNull);

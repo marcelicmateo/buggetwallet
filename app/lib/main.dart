@@ -19,7 +19,7 @@ import 'src/screens/in_use.dart';
 import 'src/screens/key_backup.dart';
 import 'src/screens/onboarding.dart';
 import 'src/screens/period_report.dart';
-import 'src/screens/save.dart';
+import 'src/screens/plan_screen.dart';
 import 'src/screens/settings.dart';
 import 'src/screens/setup_wizard.dart';
 import 'src/screens/today.dart';
@@ -29,20 +29,18 @@ import 'src/tabs.dart';
 import 'src/theme.dart';
 import 'src/warm_up.dart';
 import 'src/widgets/common.dart';
+import 'src/widgets/nav.dart';
 import 'src/widgets/sheets.dart';
 
 final _log = Logger('bw.app');
 
-/// Adds the Inter and IBM Plex Mono licences (SIL OFL 1.1) to the licences page.
+/// Adds the Manrope and JetBrains Mono licences (SIL OFL 1.1) to the licences page.
 void registerFontLicense() {
-  LicenseRegistry.addLicense(() async* {
-    final text = await rootBundle.loadString('assets/fonts/OFL.txt');
-    yield LicenseEntryWithLineBreaks(['IBM Plex Mono'], text);
-  });
-  LicenseRegistry.addLicense(() async* {
-    final text = await rootBundle.loadString('assets/fonts/OFL-Inter.txt');
-    yield LicenseEntryWithLineBreaks(['Inter'], text);
-  });
+  for (final (name, file) in [('Manrope', 'OFL-Manrope.txt'), ('JetBrains Mono', 'OFL-JetBrainsMono.txt')]) {
+    LicenseRegistry.addLicense(() async* {
+      yield LicenseEntryWithLineBreaks([name], await rootBundle.loadString('assets/fonts/$file'));
+    });
+  }
 }
 
 Future<void> main() async {
@@ -244,15 +242,6 @@ class HomeShell extends StatefulWidget {
   State<HomeShell> createState() => _HomeShellState();
 }
 
-/// One list for the bottom bar and the rail.
-const _destinations = [
-  (label: 'Today', icon: Icons.account_balance_wallet_outlined, selected: Icons.account_balance_wallet),
-  (label: 'Budget', icon: Icons.bar_chart_outlined, selected: Icons.bar_chart),
-  (label: 'Bills', icon: Icons.receipt_long_outlined, selected: Icons.receipt_long),
-  (label: 'Save', icon: Icons.savings_outlined, selected: Icons.savings),
-  (label: 'Settings', icon: Icons.settings_outlined, selected: Icons.settings),
-];
-
 /// Label with its shortcut, for tooltips; the shortcut shows only where a keyboard is usual (desktop, web).
 String _hint(String label, String keys) => hasKeyboard ? '$label ($keys)' : label;
 
@@ -284,7 +273,6 @@ final _shortcuts = <ShortcutActivator, Intent>{
     LogicalKeyboardKey.digit2,
     LogicalKeyboardKey.digit3,
     LogicalKeyboardKey.digit4,
-    LogicalKeyboardKey.digit5,
   ].indexed)
     SingleActivator(k, control: true): _TabIntent(i),
   const SingleActivator(LogicalKeyboardKey.keyN, control: true): const _AddIntent(),
@@ -292,6 +280,7 @@ final _shortcuts = <ShortcutActivator, Intent>{
   const SingleActivator(LogicalKeyboardKey.f5): const _SyncIntent(),
   const SingleActivator(LogicalKeyboardKey.comma, control: true): const _SettingsIntent(),
   const SingleActivator(LogicalKeyboardKey.keyF, control: true): const _SearchIntent(),
+  const SingleActivator(LogicalKeyboardKey.keyK, control: true): const _SearchIntent(), // Ctrl+K and Ctrl+F: search in Explore
 };
 
 class _HomeShellState extends State<HomeShell> {
@@ -413,39 +402,37 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   Widget _page(int i) => switch (i) {
-        Tabs.today => TodayScreen(
+        Tabs.overview => TodayScreen(
             view: TodayView(widget.wc),
-            openPlan: () => _go(Tabs.budget, 'today'),
-            openSpending: () => _go(Tabs.budget, 'today'),
-            openSearch: () => _goThen(Tabs.budget, 'today', () => _searchRequest.value++),
+            openPlan: () => _go(Tabs.plan, 'today'),
+            openSpending: () => _go(Tabs.explore, 'today'),
+            openSearch: () => _goThen(Tabs.explore, 'today', () => _searchRequest.value++),
             addExpense: _addExpense,
             openBills: () {
-              _go(Tabs.bills, 'today');
-              _billsRequest.request(BillsAnchor.expected); // Today's Overdue tile: the Overdue chips are on the Expected bills rows
+              _go(Tabs.money, 'today');
+              _billsRequest.request(BillsAnchor.expected); // Overview's Overdue tile: the Overdue chips are on the Expected bills rows
             },
             openBillsReview: () {
-              _go(Tabs.bills, 'today');
+              _go(Tabs.money, 'today');
               _billsRequest.request(BillsAnchor.review);
             },
             openAccounts: () => widget.wc.openSettings(SettingsSection.accounts, via: 'today'),
             openSync: () => widget.wc.openSettings(SettingsSection.sync, via: 'today'),
             openIncome: () {
-              widget.wc.setBudgetView('plan');
-              _go(Tabs.budget, 'today');
+              widget.wc.setPlanView('payday');
+              _go(Tabs.plan, 'today');
               _incomeRequest.request(true);
             }),
-        Tabs.budget => BudgetScreen(
+        Tabs.money => BillsScreen(wc: widget.wc, request: _billsRequest),
+        Tabs.explore => BudgetScreen(
             wc: widget.wc,
             searchRequest: _searchRequest,
-            planKey: _paydayKey,
-            incomeRequest: _incomeRequest,
             openTab: (i) => _go(i, 'search'),
             openBills: () {
-              _go(Tabs.bills, 'search');
+              _go(Tabs.money, 'search');
               _billsRequest.request(BillsAnchor.expected);
             }),
-        Tabs.bills => BillsScreen(wc: widget.wc, request: _billsRequest),
-        Tabs.save => SaveScreen(wc: widget.wc),
+        Tabs.plan => PlanScreen(wc: widget.wc, planKey: _paydayKey, incomeRequest: _incomeRequest),
         _ => SettingsScreen(wc: widget.wc),
       };
 
@@ -496,12 +483,13 @@ class _HomeShellState extends State<HomeShell> {
     logNav('nav.tab', {'from': Tabs.names[tab], 'to': Tabs.names[i], 'via': via});
     AppLog.setScreen(Tabs.names[i]);
     // A page that was not built yet, or for older data, waits for its data (`_prepare`; at once when the background work is off).
-    // Today and Save (the wishlist) show the time of day (delivery hour, hours left): they get a fresh build when opened.
+    // Overview and Plan › Saving (the wishlist) show the time of day (delivery hour, hours left): they get a fresh build when opened
+    // (Plan builds Saving again when the switch moves to it, so the payday plan is not rebuilt on every visit).
     // The data they use is cached in the controller, so this is cheap.
     final stale = _pageKeys[i] != _pagesKey;
     if (stale && WarmUp.enabled) {
       _prepare(i);
-    } else if (stale || i == Tabs.today || i == Tabs.save) {
+    } else if (stale || i == Tabs.overview || (i == Tabs.plan && widget.wc.planView == 'saving')) {
       _build(i, _pagesKey!);
     }
     setState(() => tab = i);
@@ -554,7 +542,7 @@ class _HomeShellState extends State<HomeShell> {
     _SyncIntent: CallbackAction<_SyncIntent>(onInvoke: (_) => _key('sync', _syncNow)),
     _SettingsIntent: CallbackAction<_SettingsIntent>(onInvoke: (_) => _key('ctrlComma', () => _go(Tabs.settings, 'key'))),
     _SearchIntent:
-        CallbackAction<_SearchIntent>(onInvoke: (_) => _key('ctrlF', () => _goThen(Tabs.budget, 'key', () => _searchRequest.value++))),
+        CallbackAction<_SearchIntent>(onInvoke: (_) => _key('search', () => _goThen(Tabs.explore, 'key', () => _searchRequest.value++))),
   };
 
   // The parent rebuilds this widget when the wallet changes; build() then makes new pages if the data or the day moved on.
@@ -590,11 +578,19 @@ class _HomeShellState extends State<HomeShell> {
 
   Widget _logo(WalletColors c) => const LedgerLogo();
 
+  /// The gear in the Overview header (phones); the rail has Settings at its bottom.
+  Widget _settingsButton() => IconButton(
+        key: const ValueKey('openSettings'),
+        tooltip: _hint('Settings', 'Ctrl+,'),
+        icon: const Icon(Icons.settings_outlined),
+        onPressed: () => _key('gear', () => _go(Tabs.settings, 'gear')),
+      );
+
   Widget _searchButton() => IconButton(
         key: const ValueKey('appBarSearch'),
         tooltip: _hint('Search', 'Ctrl+F'),
         icon: const Icon(Icons.search),
-        onPressed: () => _key('appBarSearch', () => _goThen(Tabs.budget, 'appbar', () => _searchRequest.value++)),
+        onPressed: () => _key('appBarSearch', () => _goThen(Tabs.explore, 'appbar', () => _searchRequest.value++)),
       );
 
   /// The pay period as a small boxed label for the rail (the wide layouts have no app bar): one line when the rail is extended,
@@ -631,61 +627,84 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 
-  /// The rail: labels always shown, wide (extended) at expanded. It scrolls when the window is short.
+  /// The rail (from 600 dp): Add first, the four destinations, then search, the pay period, the sync spinner and Settings at the bottom.
+  /// Labels always show; the rail is wide (icon beside the label) at expanded. It scrolls when the window is short.
   Widget _rail(BuildContext context, LayoutSize size) {
     final c = context.c;
-    final extended = size == LayoutSize.expanded;
+    final wide = size == LayoutSize.expanded;
     final scale = MediaQuery.textScalerOf(context).scale(1);
+    final width = (wide ? 220 * scale : 80 * scale).clamp(wide ? 220.0 : 80.0, wide ? 320.0 : 160.0);
     return DecoratedBox(
       key: const ValueKey('rail'),
       position: DecorationPosition.foreground,
       decoration: BoxDecoration(border: Border(right: BorderSide(color: c.line))),
-      child: LayoutBuilder(
-        builder: (context, box) => SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: box.maxHeight),
-            child: IntrinsicHeight(
-              child: NavigationRail(
-                selectedIndex: tab,
-                onDestinationSelected: (i) => _go(i, 'rail'),
-                extended: extended,
-                minExtendedWidth: 220,
-                minWidth: (80 * scale).clamp(80.0, 160.0),
-                // An extended rail shows its labels by itself (Flutter allows no labelType there).
-                labelType: extended ? null : NavigationRailLabelType.all,
-                // The name never makes the rail wider than minExtendedWidth (so the content width does not depend on the font).
-                leading: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    SizedBox(
-                      width: extended ? 188 : null,
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        _logo(c),
-                        if (extended) ...[
-                          const SizedBox(width: 8),
-                          const Flexible(
-                              child: Text('Budget Wallet',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: BwType.headingSize))),
-                        ],
-                      ]),
-                    ),
-                    const SizedBox(height: 16),
-                    _searchButton(),
-                    const SizedBox(height: 4),
-                    _periodBadge(context, extended),
-                    _SyncSlot(active: widget.wc.syncing),
-                  ]),
+      child: ColoredBox(
+        color: c.surface,
+        child: SizedBox(
+          width: width,
+          child: LayoutBuilder(
+            builder: (context, box) => SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: box.maxHeight),
+                child: IntrinsicHeight(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 14),
+                        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                          _logo(c),
+                          if (wide) ...[
+                            const SizedBox(width: 8),
+                            const Flexible(
+                                child: Text('Budget Wallet',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: BwType.headingSize))),
+                          ],
+                        ]),
+                      ),
+                      // Wide: a full-width row ("Add  Ctrl N"); the narrow rail has room for the square only.
+                      Align(
+                          alignment: Alignment.center,
+                          widthFactor: wide ? null : 1,
+                          child: AddButton(
+                              onTap: () => _key('railAdd', _addExpense),
+                              wide: wide,
+                              tooltip: _hint('Add', 'Ctrl+N'),
+                              hint: wide ? 'Ctrl N' : null)),
+                      const SizedBox(height: 8),
+                      for (var i = 0; i < navDestinations.length; i++)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: NavItem(
+                            label: navDestinations[i].label,
+                            icon: tab == i ? navDestinations[i].selected : navDestinations[i].icon,
+                            iconKey: ValueKey('tab:${Tabs.names[i]}'),
+                            selected: tab == i,
+                            wide: wide,
+                            tooltip: _hint(navDestinations[i].label, 'Ctrl+${i + 1}'),
+                            onTap: () => _go(i, 'rail'),
+                          ),
+                        ),
+                      const Spacer(),
+                      Center(child: _searchButton()),
+                      const SizedBox(height: 4),
+                      Center(child: _periodBadge(context, wide)),
+                      Center(child: _SyncSlot(active: widget.wc.syncing)),
+                      const SizedBox(height: 4),
+                      NavItem(
+                        label: 'Settings',
+                        icon: tab == Tabs.settings ? Icons.settings : Icons.settings_outlined,
+                        iconKey: const ValueKey('tab:settings'),
+                        selected: tab == Tabs.settings,
+                        wide: wide,
+                        tooltip: _hint('Settings', 'Ctrl+,'),
+                        onTap: () => _go(Tabs.settings, 'rail'),
+                      ),
+                    ]),
+                  ),
                 ),
-                destinations: [
-                  for (final (i, d) in _destinations.indexed)
-                    NavigationRailDestination(
-                      icon: _railIcon(d.label, i, Icon(d.icon, key: ValueKey('tab:${Tabs.names[i]}'))),
-                      selectedIcon: _railIcon(d.label, i, Icon(d.selected, key: ValueKey('tab:${Tabs.names[i]}'))),
-                      label: Text(d.label),
-                    ),
-                ],
               ),
             ),
           ),
@@ -693,8 +712,6 @@ class _HomeShellState extends State<HomeShell> {
       ),
     );
   }
-
-  Widget _railIcon(String label, int i, Widget icon) => hasKeyboard ? Tooltip(message: _hint(label, 'Ctrl+${i + 1}'), child: icon) : icon;
 
   @override
   Widget build(BuildContext context) {
@@ -714,22 +731,20 @@ class _HomeShellState extends State<HomeShell> {
               titleSpacing: 16,
               // A 2 px rule under the header.
               bottom: PreferredSize(preferredSize: const Size.fromHeight(1), child: Container(height: 1, color: context.c.line)),
-              // With a rail, the logo and name sit in the rail.
-              title: compact
+              // With a rail, the logo and name sit in the rail. On a very narrow bar the gear, the search icon and the period take the room.
+              title: compact && width >= 360
                   ? Row(children: [
                       _logo(context.c),
-                      // On a very narrow bar the search icon and the period take the room: the logo stands for the name.
-                      if (width >= 360) ...[
-                        const SizedBox(width: 8),
-                        const Flexible(
-                            child: Text('Budget Wallet',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(fontWeight: FontWeight.w600, fontSize: BwType.headingSize))),
-                      ],
+                      const SizedBox(width: 8),
+                      const Flexible(
+                          child: Text('Budget Wallet',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontWeight: FontWeight.w800, fontSize: BwType.headingSize))),
                     ])
                   : null,
               actions: [
+                if (tab == Tabs.overview) _settingsButton(),
                 _searchButton(),
                 if (wc.syncing)
                   const Padding(
@@ -810,25 +825,8 @@ class _HomeShellState extends State<HomeShell> {
           ),
         ),
       ),
-      bottomNavigationBar: compact
-          ? NavBarFrame(
-              selected: tab,
-              count: _destinations.length,
-              child: NavigationBar(
-                selectedIndex: tab,
-                onDestinationSelected: (i) => _go(i, 'bar'),
-                destinations: [
-                  for (final (i, d) in _destinations.indexed)
-                    NavigationDestination(
-                        key: ValueKey('tab:${Tabs.names[i]}'),
-                        icon: Icon(d.icon),
-                        selectedIcon: Icon(d.selected),
-                        label: d.label,
-                        tooltip: _hint(d.label, 'Ctrl+${i + 1}')),
-                ],
-              ),
-            )
-          : null,
+      bottomNavigationBar:
+          compact ? BwNavBar(selected: tab, onSelect: (i) => _go(i, 'bar'), onAdd: () => _key('barAdd', _addExpense), hint: _hint) : null,
     );
   }
 }

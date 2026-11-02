@@ -1,5 +1,5 @@
-// Clean neutral theme contrast: every text pair >= 4.5:1, every non-text pair >= 3:1, every token opaque. Computed from the real
-// WalletColors values (spec: docs/context/UX_SPEC.md UX-C).
+// Engineer theme contrast (ENG E1): every text pair >= 4.5:1, every non-text pair >= 3:1, every token opaque. Computed from the real
+// WalletColors values (spec: docs/context/ENG_UI_SPEC.md §4.1/§4.2).
 import 'package:budget_wallet/src/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -34,21 +34,50 @@ void main() {
         'ink2/surface2 (chip)': (c.ink2, c.surface2),
         'muted/surface (tile label)': (c.muted, c.surface),
         'ink/desk': (c.ink, c.desk),
+        'ink/surface (panel)': (c.ink, c.surface),
+        'muted/surface2 (chip, input)': (c.muted, c.surface2),
+        'accent/surface (link on panel)': (c.accent, c.surface),
+        'bg on bad (badge)': (c.bg, c.bad),
+        'ink/accentSoft (nudge card)': (c.ink, c.accentSoft),
+        'bg on ink (active chip)': (c.bg, c.ink),
+        'ink on lineStrong (seg selected)': (c.ink, c.lineStrong),
+        'ink2/surface': (c.ink2, c.surface),
+        'ink2/surface2': (c.ink2, c.surface2),
+        'good/surface (pace up)': (c.good, c.surface),
+        'bad/surface (over)': (c.bad, c.surface),
       };
       text.forEach((n, p) => test('text $n >= 4.5', () => expect(contrastRatio(p.$1, p.$2), greaterThanOrEqualTo(4.5), reason: n)));
 
+      // Non-text pairs >= 3:1. Known spec misses are listed below instead, with what they are checked against.
       final nonText = <String, (Color, Color)>{
-        'lineStrong/bg': (c.lineStrong, c.bg),
+        'muted/bg (input and checkbox edge)': (c.muted, c.bg),
+        'lineStrong/bg (chip, button, axis)': (c.lineStrong, c.bg),
+        'lineStrong/surface': (c.lineStrong, c.surface),
         'accent/bg': (c.accent, c.bg),
         'pos/bg': (c.pos, c.bg),
         'neg/bg': (c.neg, c.bg),
         for (final n
-            in {'chartPos': c.chartPos, 'chartNeg': c.chartNeg, 'chart2': c.chart2, 's1': c.s1, 's2': c.s2, 's3': c.s3}.entries) ...{
+            in {'chartPos': c.chartPos, 'chartNeg': c.chartNeg, 'chart2': c.chart2, 's1': c.s1, 's2': c.s2, 's6': c.s6}.entries) ...{
           '${n.key}/bg': (n.value, c.bg),
           '${n.key}/surface': (n.value, c.surface),
         },
       };
       nonText.forEach((n, p) => test('non-text $n >= 3.0', () => expect(contrastRatio(p.$1, p.$2), greaterThanOrEqualTo(3.0), reason: n)));
+
+      // The spec's light data slots 3-5 (#1BAF7A, #EDA100, #E87BA4) are below 3:1 on the page (the spec's own dataviz-validator WARN). The
+      // spec accepts it because every chart that uses them shows its values or a table, so colour is never the only way to read them.
+      // They are the only exemption: every other pair above stays at 4.5 (text) / 3 (non-text). The floor only catches a slip.
+      test('light data slots 3-5: spec WARN, values always shown (floor 1.9); dark slots hold 3:1', () {
+        for (final s in [c.s3, c.s4, c.s5]) {
+          expect(contrastRatio(s, c.bg), greaterThanOrEqualTo(e.key == 'light' ? 1.9 : 3.0));
+        }
+      });
+
+      // `accentSoftLine` (the nudge card's border) is decorative: the card has its own fill and the text inside is checked above
+      // (ink/accentSoft), so the border is not needed to see the card. 1.4:1 light, 2.1:1 dark on the page.
+      test('accentSoftLine is decorative (floor 1.3)', () {
+        expect(contrastRatio(c.accentSoftLine, c.bg), greaterThanOrEqualTo(1.3));
+      });
 
       test('every token is fully opaque', () {
         final tokens = {
@@ -62,6 +91,12 @@ void main() {
           'lineStrong': c.lineStrong,
           'accent': c.accent,
           'accentSoft': c.accentSoft,
+          'accentSoftLine': c.accentSoftLine,
+          'chartGrid': c.chartGrid,
+          's4': c.s4,
+          's5': c.s5,
+          's6': c.s6,
+          for (final (i, h) in c.heat.indexed) 'heat$i': h,
           'pos': c.pos,
           'neg': c.neg,
           'good': c.good,
@@ -84,47 +119,36 @@ void main() {
     });
   }
 
-  // The chart colours are chart-only (not text, not status) and were checked with the dataviz validator (values in theme.dart).
-  group('chart tokens', () {
-    test('are not the status or accent colours', () {
+  // The data colours (spec §4.2) are chart-only (not text, not status), fixed per entity, six distinct slots.
+  group('data colours', () {
+    test('six distinct slots, none a status colour', () {
       for (final c in themes.values) {
-        final status = {c.bad.toARGB32(), c.good.toARGB32(), c.neg.toARGB32(), c.pos.toARGB32(), c.warnInk.toARGB32()};
-        expect(c.chart2.toARGB32(), isNot(anyOf(status)));
-        expect({c.chartPos.toARGB32(), c.chartNeg.toARGB32(), c.chart2.toARGB32()}.length, 3);
+        final slots = {c.s1, c.s2, c.s3, c.s4, c.s5, c.s6}.map((x) => x.toARGB32()).toSet();
+        expect(slots.length, 6);
+        expect(slots.intersection({c.bad.toARGB32(), c.good.toARGB32(), c.accent.toARGB32()}), isEmpty);
+        expect(c.heat.length, 5);
       }
-      expect(WalletColors.dark.chartPos, isNot(WalletColors.dark.pos));
-      // Light chartNeg equals `bad` on purpose (the same red: "Lost" is the polarity of "Saved"); only dark was moved to pass the validator.
-      expect(WalletColors.dark.chartNeg, isNot(WalletColors.dark.bad));
-      expect(WalletColors.dark.chartPos, isNot(WalletColors.dark.accent));
     });
 
-    test('hold the Clean neutral values', () {
+    test('the desk is the page colour, darker than a panel (dark) or equal to the page (light)', () {
+      for (final c in themes.values) {
+        expect(c.desk, c.bg);
+      }
+      expect(WalletColors.dark.desk.computeLuminance(), lessThan(WalletColors.dark.surface.computeLuminance()));
+    });
+
+    test('hold the spec values', () {
       const light = WalletColors.light, dark = WalletColors.dark;
-      expect([light.chartPos, light.chartNeg, light.chart2], const [Color(0xFF2F5FC4), Color(0xFFB3412F), Color(0xFFA8650F)]);
-      expect([dark.chartPos, dark.chartNeg, dark.chart2], const [Color(0xFF6F93E6), Color(0xFFD9705F), Color(0xFFC9892B)]);
-    });
-  });
-
-  // Dashboard tokens (RX2): the series are three different hues, never the status colours, and the desk is darker than a tile.
-  group('dashboard tokens', () {
-    test('series colours differ from each other and from the status colours', () {
-      for (final c in themes.values) {
-        final series = {c.s1.toARGB32(), c.s2.toARGB32(), c.s3.toARGB32()};
-        expect(series.length, 3);
-        expect(series.intersection({c.bad.toARGB32(), c.good.toARGB32(), c.neg.toARGB32()}), isEmpty);
-      }
-    });
-
-    test('the desk is darker than the tile ground in both themes', () {
-      for (final c in themes.values) {
-        expect(c.desk.computeLuminance(), lessThan(c.surface.computeLuminance()));
-      }
-    });
-
-    test('hold the Clean neutral series values', () {
-      const light = WalletColors.light, dark = WalletColors.dark;
-      expect([light.s1, light.s2, light.s3], const [Color(0xFF2F5FC4), Color(0xFFA8650F), Color(0xFF0B8A8F)]);
-      expect([dark.s1, dark.s2, dark.s3], const [Color(0xFF7C9CEB), Color(0xFFC9892B), Color(0xFF2BA8AE)]);
+      expect([light.s1, light.s2, light.s3, light.s4, light.s5, light.s6],
+          const [Color(0xFF2A78D6), Color(0xFFEB6530), Color(0xFF1BAF7A), Color(0xFFEDA100), Color(0xFFE87BA4), Color(0xFF6250D6)]);
+      expect([dark.s1, dark.s2, dark.s3, dark.s4, dark.s5, dark.s6],
+          const [Color(0xFF3987E5), Color(0xFFD95926), Color(0xFF199E70), Color(0xFFC98500), Color(0xFFD55181), Color(0xFF9085E9)]);
+      expect([light.lineStrong, dark.lineStrong, light.s2, light.chart2],
+          const [Color(0xFF7D91A2), Color(0xFF546A7C), Color(0xFFEB6530), Color(0xFFEB6530)]);
+      expect([light.bg, light.surface, light.line, light.ink, light.accent],
+          const [Color(0xFFF4F6F8), Color(0xFFFFFFFF), Color(0xFFE1E6EB), Color(0xFF121A21), Color(0xFF1F5FBF)]);
+      expect([dark.bg, dark.surface, dark.line, dark.ink, dark.accent],
+          const [Color(0xFF0F1418), Color(0xFF161D23), Color(0xFF26313A), Color(0xFFE8EEF2), Color(0xFF8DB8F5)]);
     });
   });
 }

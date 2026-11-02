@@ -27,8 +27,8 @@ class TodayView implements Listenable {
   @override
   void removeListener(VoidCallback listener) => _wc.removeListener(listener);
 
-  /// Picks the Budget tab's page (`'plan'` or `'spending'`) before Today switches to the tab.
-  void showBudgetView(String view) => _wc.setBudgetView(view);
+  /// Picks the page (`'plan'` = Plan › Payday plan, or `'spending'` = Explore › Spending) before Overview switches to it.
+  void showBudgetView(String view) => view == 'plan' ? _wc.setPlanView('payday') : _wc.setBudgetView(view);
 
   // ---------- reads ----------
   /// The Today number tiles' order and hidden ids (device-local, Settings > Look).

@@ -29,11 +29,11 @@ void main() {
     final wc = demoWallet(clock: pinnedNoon);
     await pumpApp(t, HomeShell(wc: wc));
     final spending = t.widget<SpendingScreen>(find.byType(SpendingScreen, skipOffstage: false));
-    await t.tap(find.text('Budget').last);
+    await t.tap(find.text('Explore').last);
     await t.pump();
     expect(identical(t.widget<SpendingScreen>(find.byType(SpendingScreen)), spending), isTrue);
     expect(find.byType(TodayScreen), findsNothing);
-    await t.tap(find.text('Today').last);
+    await t.tap(find.text('Overview').last);
     await t.pump();
     expect(find.byType(TodayScreen), findsOneWidget);
   });

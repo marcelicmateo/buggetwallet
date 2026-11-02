@@ -98,7 +98,7 @@ void main() {
       await pump(tester, InsightsScreen(wc: wc), size: const Size(400, 20000));
       await pickTag(tester, 'Shopping');
       expect(find.byKey(const ValueKey('catBudgetNone')), findsOneWidget);
-      expect(find.text('No budget set for this main tag. Add one in Budget › Plan.'), findsOneWidget);
+      expect(find.text('No budget set for this main tag. Add one in Plan › Payday plan.'), findsOneWidget);
     });
   });
 

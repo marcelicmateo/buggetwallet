@@ -51,18 +51,17 @@ void main() {
       }
       await _resize(t, Size(w, h));
       final kind = sizeFor(w);
-      expect(find.byType(NavigationRail), findsOneWidget);
-      expect(rail(t).extended, kind == LayoutSize.expanded);
-      expect(find.byType(NavigationBar), findsNothing);
+      expect(find.byKey(const ValueKey('rail')), findsOneWidget);
+      expect(railWidth(t) > 200, kind == LayoutSize.expanded);
+      expect(find.byKey(const ValueKey('navBar')), findsNothing);
       for (final tab in _tabs) {
         await goTab(t, tab);
         await Harness.shot(t, '$name-${tab.toLowerCase()}');
       }
       // Budget › Plan and the pay-period report (RX7), the other wide dashboards.
-      await goTab(t, 'Budget');
-      await tapVisible(t, find.byKey(const ValueKey('budgetPlan')));
+      await goTab(t, 'Plan');
+      await tapVisible(t, find.byKey(const ValueKey('planPayday')));
       await Harness.shot(t, '$name-plan');
-      await tapVisible(t, find.byKey(const ValueKey('budgetSpending')));
       await tapVisible(t, find.byKey(const ValueKey('periodBadgeTap')));
       expect(find.byKey(const ValueKey('reportKept')), findsOneWidget);
       await Harness.shot(t, '$name-period-report');
@@ -109,7 +108,7 @@ void main() {
     });
   }
 
-  itest('adaptive: Ctrl+1..5, Ctrl+N and resizing across the boundaries on the real app', (t) async {
+  itest('adaptive: Ctrl+1..4, Ctrl+, Ctrl+N and resizing across the boundaries on the real app', (t) async {
     final wc = await Harness.start(t);
     wc.repo.importBatch(demoBatch(wc.today()));
     await _resize(t, const Size(1280, 800));
@@ -128,9 +127,9 @@ void main() {
       await t.pumpAndSettle();
     }
 
-    await ctrl(LogicalKeyboardKey.digit5);
+    await ctrl(LogicalKeyboardKey.comma);
     expect(find.byType(SettingsScreen), findsOneWidget);
-    await ctrl(LogicalKeyboardKey.digit2);
+    await ctrl(LogicalKeyboardKey.digit3);
     expect(find.byType(SpendingScreen), findsOneWidget);
     await ctrl(LogicalKeyboardKey.keyN);
     expect(find.byType(AddExpenseSheet), findsOneWidget);
@@ -143,9 +142,9 @@ void main() {
       expect(identical(t.state(find.byType(SettingsScreen, skipOffstage: false)), plan), isTrue, reason: 'Settings at $s');
       expect(identical(t.state(find.byType(SpendingScreen, skipOffstage: false)), spending), isTrue, reason: 'Spending at $s');
     }
-    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.byKey(const ValueKey('navBar')), findsOneWidget);
     await Harness.checkLog();
   });
 }
 
-NavigationRail rail(WidgetTester t) => t.widget<NavigationRail>(find.byType(NavigationRail));
+double railWidth(WidgetTester t) => t.getSize(find.byKey(const ValueKey('rail'))).width;

@@ -4,8 +4,8 @@
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/file_chooser.dart';
 import 'package:budget_wallet/src/format.dart';
-import 'package:budget_wallet/src/screens/budget.dart';
 import 'package:budget_wallet/src/screens/goals.dart';
+import 'package:budget_wallet/src/screens/plan_screen.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/tabs.dart';
@@ -356,10 +356,9 @@ void main() {
 
     tw('Budget › Plan scrolls to Expected income when asked (what the line uses)', (tester) async {
       final wc = incomeWallet(confirm: true);
-      wc.setBudgetView('plan');
       final request = JumpRequest<bool>();
       addTearDown(request.dispose);
-      await pumpApp(tester, Scaffold(body: BudgetScreen(wc: wc, incomeRequest: request)), size: const Size(400, 700));
+      await pumpApp(tester, Scaffold(body: PlanScreen(wc: wc, incomeRequest: request)), size: const Size(400, 700));
       expect(find.byKey(const ValueKey('expectedIncomePanel')), findsNothing);
       request.request(true);
       for (var i = 0; i < 40 && find.byKey(const ValueKey('expectedIncomePanel')).evaluate().isEmpty; i++) {

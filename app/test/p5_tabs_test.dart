@@ -3,15 +3,17 @@
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/screens/bills_tab.dart';
-import 'package:budget_wallet/src/screens/budget.dart';
 import 'package:budget_wallet/src/screens/goals.dart';
+import 'package:budget_wallet/src/screens/plan_screen.dart';
 import 'package:budget_wallet/src/screens/save.dart';
 import 'package:budget_wallet/src/screens/settings.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/screens/wishlist.dart';
 import 'package:budget_wallet/src/tabs.dart';
+import 'package:budget_wallet/src/widgets/nav.dart';
 import 'package:budget_wallet/src/widgets/rebuild_when_shown.dart';
+import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -63,58 +65,89 @@ void main() {
   });
 
   group('the bar', () {
-    tw('five destinations in order, with their keys, labels and icons', (t) async {
+    tw('four destinations and Add in order, with their keys, labels and icons', (t) async {
       await pumpFull(t, _wallet(), 1.0, size: const Size(400, 900));
-      final nav = find.byType(NavigationBar);
+      final nav = _key('navBar');
       expect(nav, findsOneWidget);
-      expect(t.widget<NavigationBar>(nav).destinations.length, 5);
-      final labels = [for (final d in t.widgetList<NavigationDestination>(find.byType(NavigationDestination))) d.label];
-      expect(labels, ['Today', 'Budget', 'Bills', 'Save', 'Settings']);
-      for (final name in Tabs.names) {
+      final labels = [for (final d in navDestinations) d.label];
+      expect(labels, ['Overview', 'Money', 'Explore', 'Plan']);
+      // Left to right: Overview, Money, [+], Explore, Plan.
+      double x(Finder f) => t.getCenter(f).dx;
+      final order = [
+        for (final n in ['overview', 'money']) x(_key('tab:$n')),
+        x(_key('tab:add')),
+        for (final n in ['explore', 'plan']) x(_key('tab:$n')),
+      ];
+      expect(order, [...order]..sort(), reason: 'bar order');
+      expect(x(_key('tab:add')), closeTo(200, 1), reason: 'Add is in the centre');
+      for (final name in Tabs.names.take(4)) {
         expect(_key('tab:$name'), findsOneWidget);
+      }
+      expect(_key('tab:settings'), findsNothing, reason: 'Settings is not in the bar');
+      for (final l in labels) {
+        expect(find.descendant(of: nav, matching: find.text(l)), findsOneWidget, reason: l);
       }
       // Outlined when not selected, filled when selected.
-      expect(find.byIcon(Icons.account_balance_wallet), findsOneWidget);
-      expect(find.byIcon(Icons.bar_chart_outlined), findsOneWidget);
-      expect(find.byIcon(Icons.receipt_long_outlined), findsOneWidget);
-      expect(find.byIcon(Icons.savings_outlined), findsOneWidget);
-      expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
-      await tapTab(t, 'Save');
-      expect(find.byIcon(Icons.savings), findsOneWidget);
-      expect(find.byIcon(Icons.savings_outlined), findsNothing);
+      Finder inBar(IconData i) => find.descendant(of: nav, matching: find.byIcon(i));
+      expect(inBar(Icons.home), findsOneWidget);
+      expect(inBar(Icons.insights_outlined), findsOneWidget);
+      await tapTab(t, 'Explore');
+      expect(inBar(Icons.insights), findsOneWidget);
+      expect(inBar(Icons.insights_outlined), findsNothing);
     });
 
-    tw('the rail has the same five, in the same order', (t) async {
+    tw('the rail has Add first, the same four, and Settings at the bottom', (t) async {
       await pumpFull(t, _wallet(), 1.0, size: const Size(900, 800));
-      final rail = t.widget<NavigationRail>(find.byType(NavigationRail));
-      expect([for (final d in rail.destinations) (d.label as Text).data], ['Today', 'Budget', 'Bills', 'Save', 'Settings']);
-      for (final name in Tabs.names) {
-        expect(_key('tab:$name'), findsOneWidget);
-      }
+      expect(_key('rail'), findsOneWidget);
+      double y(Finder f) => t.getCenter(f).dy;
+      final order = [y(_key('tab:add')), for (final n in Tabs.names) y(_key('tab:$n'))];
+      expect(order, [...order]..sort(), reason: 'Add, Overview, Money, Explore, Plan, Settings from top to bottom');
+      expect(y(_key('tab:settings')), greaterThan(700), reason: 'Settings sits at the bottom');
+    });
+
+    tw('phone: the gear on Overview opens Settings; it is only on Overview', (t) async {
+      await pumpFull(t, _wallet(), 1.0, size: const Size(400, 900));
+      expect(_key('openSettings'), findsOneWidget);
+      await tapTab(t, 'Money');
+      expect(_key('openSettings'), findsNothing);
+      await tapTab(t, 'Settings');
+      expect(find.byType(SettingsScreen), findsOneWidget);
+    });
+
+    tw('[+] opens the Add expense sheet', (t) async {
+      await pumpFull(t, _wallet(), 1.0, size: const Size(400, 900));
+      await t.tap(_key('addButton'));
+      await t.pump(const Duration(milliseconds: 500));
+      expect(find.byType(AddExpenseSheet), findsOneWidget);
     });
   });
 
-  group('Budget', () {
-    tw('Budget opens on Spending; the payday plan is one tap away behind the switch', (t) async {
+  group('Explore', () {
+    tw('Explore opens on Spending with Insights and search', (t) async {
       await pumpFull(t, _wallet(), 1.0, size: const Size(400, 900));
-      await tapTab(t, 'Budget');
+      await tapTab(t, 'Explore');
       expect(find.byType(SpendingScreen), findsOneWidget);
       expect(_key('budgetSwitch'), findsOneWidget);
       expect(_key('outTile'), findsOneWidget);
-      expect(_key('planHeading'), findsNothing, reason: 'Plan is the other page');
-      await t.tap(_key('budgetPlan'));
-      await t.pump(const Duration(milliseconds: 300));
+      expect(_key('budgetPlan'), findsNothing, reason: 'the payday plan moved to Plan');
+      expect(_key('insightsOpen'), findsOneWidget);
+      expect(_key('searchOpen'), findsOneWidget);
+    });
+  });
+
+  group('Plan', () {
+    tw('Plan opens on the payday plan; Saving is one tap away', (t) async {
+      await pumpFull(t, _wallet(), 1.0, size: const Size(400, 900));
+      await tapTab(t, 'Plan');
+      expect(_key('planSwitch'), findsOneWidget);
       expect(_key('planHeading'), findsOneWidget);
       expect(_key('planRow_rent'), findsOneWidget);
       expect(_key('outTile'), findsNothing);
+      await t.tap(_key('planSaving'));
+      await t.pump(const Duration(milliseconds: 300));
+      expect(find.byType(SaveScreen), findsOneWidget);
+      expect(_key('planHeading'), findsNothing, reason: 'the payday plan is the other page');
       expect(t.takeException(), isNull);
-    });
-
-    tw('Insights and search stay on the page', (t) async {
-      await pumpFull(t, _wallet(), 1.0, size: const Size(400, 900));
-      await tapTab(t, 'Budget');
-      expect(_key('insightsOpen'), findsOneWidget);
-      expect(_key('searchOpen'), findsOneWidget);
     });
   });
 
@@ -368,19 +401,19 @@ void main() {
   });
 
   group('links from Today', () {
-    tw('the payday link ("Open Budget") opens Budget', (t) async {
+    tw('the payday link ("Open Plan") opens Plan › Payday plan', (t) async {
       final wc = habitsWallet();
       wc.updateSettings({'salaryConfirmed': false});
       addTearDown(wc.dispose);
       await pumpFull(t, wc, 1.0, size: const Size(400, 900));
-      final open = find.text('Open Budget');
+      final open = find.text('Open Plan');
       await _scrollInto(t, open, TodayScreen);
       await t.ensureVisible(open);
       await t.pump();
       await t.tap(open);
       await t.pumpAndSettle();
-      expect(find.byType(BudgetScreen), findsOneWidget);
-      expect(wc.budgetView, 'plan', reason: 'the link picks the Plan page');
+      expect(find.byType(PlanScreen), findsOneWidget);
+      expect(wc.planView, 'payday', reason: 'the link picks the payday plan');
       expect(_key('planHeading'), findsOneWidget);
     });
 
@@ -509,7 +542,7 @@ void main() {
     tw('1039 dp of content is one page, 1040 is two panes', (t) async {
       await pumpFull(t, _wallet(), 1.0, size: wide);
       await tapTab(t, 'Settings');
-      final rail = t.getSize(find.byType(NavigationRail)).width;
+      final rail = t.getSize(_key('rail')).width;
       for (final (c, panes) in [(1039.0, false), (1040.0, true), (1041.0, true)]) {
         t.view.physicalSize = Size(rail + c, 900);
         await t.pump();
@@ -560,7 +593,7 @@ void main() {
   });
 
   group('keys', () {
-    tw('Ctrl+1..5 switch the five tabs', (t) async {
+    tw('Ctrl+1..4 switch the four destinations, Ctrl+, Settings', (t) async {
       await pumpFull(t, _wallet(), 1.0, size: const Size(1300, 900));
       await t.pump();
       Future<void> ctrl(LogicalKeyboardKey k) async {
@@ -571,10 +604,9 @@ void main() {
       }
 
       final screens = <(LogicalKeyboardKey, Type)>[
-        (LogicalKeyboardKey.digit2, SpendingScreen),
-        (LogicalKeyboardKey.digit3, BillsScreen),
-        (LogicalKeyboardKey.digit4, SaveScreen),
-        (LogicalKeyboardKey.digit5, SettingsScreen),
+        (LogicalKeyboardKey.digit3, SpendingScreen),
+        (LogicalKeyboardKey.digit2, BillsScreen),
+        (LogicalKeyboardKey.digit4, PlanScreen),
         (LogicalKeyboardKey.digit1, TodayScreen),
       ];
       for (final (k, type) in screens) {

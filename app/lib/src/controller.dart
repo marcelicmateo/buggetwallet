@@ -1603,7 +1603,7 @@ class WalletController extends ChangeNotifier {
   /// The Settings place a link wants shown (a section, or Currencies inside Accounts); the Settings tab selects or scrolls to it.
   final JumpRequest<SettingsSection> settingsRequest = JumpRequest<SettingsSection>();
 
-  /// The wish the Wishlist tab shows highlighted after a toast's "Open" (cleared by the screen once it scrolled there).
+  /// The wish the Plan page (Saving) shows highlighted after a toast's "Open" (cleared by the screen once it scrolled there).
   final ValueNotifier<String?> highlightWish = ValueNotifier<String?>(null);
 
   /// Opens a tab from anywhere (a toast action, a row).
@@ -1615,10 +1615,11 @@ class WalletController extends ChangeNotifier {
     settingsRequest.request(section);
   }
 
-  /// Opens the Save tab on the wish [wishId].
+  /// Opens Plan › Saving on the wish [wishId].
   void openWish(String wishId, {String via = 'toast'}) {
     highlightWish.value = wishId;
-    openTab(Tabs.save, via: via);
+    setPlanView('saving');
+    openTab(Tabs.plan, via: via);
   }
 
   void decideWish(String id, String status) {

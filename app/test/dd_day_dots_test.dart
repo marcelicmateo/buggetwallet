@@ -1,6 +1,5 @@
 // Today's day dots (DD): one square per day of the pay period, Monday-first columns, counts line, spoken label, wrapping
 // under the number on a narrow, large-text screen. SYNTHETIC wallets on the fixed clock of `budgetWallet` (Tuesday 20 Oct 2026).
-import 'dart:io';
 
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/screens/today.dart';
@@ -8,10 +7,10 @@ import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/theme.dart';
 import 'package:budget_wallet/src/widgets/charts.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
+import 'support/fonts.dart';
 import 'support/wallet.dart';
 
 final _light = buildTheme(Brightness.light).extension<WalletColors>()!;
@@ -47,15 +46,9 @@ Finder get _anyDot => find.byWidgetPredicate((w) => w.key is ValueKey<String> &&
 
 Offset _at(WidgetTester tester, String date) => tester.getTopLeft(find.byKey(ValueKey('dayDot:$date')));
 
-/// The real IBM Plex fonts: the hero number's width decides beside or under, and the test font (Ahem) is far wider.
+/// The real Manrope and JetBrains Mono fonts: the hero number's width decides beside or under, and the test font (Ahem) is far wider.
 Future<void> _loadFonts() async {
-  for (final (fam, prefix) in [('Inter', 'Inter'), ('IBM Plex Mono', 'IBMPlexMono')]) {
-    final l = FontLoader(fam);
-    for (final w in ['Regular', 'Medium', 'SemiBold']) {
-      l.addFont(File('assets/fonts/$prefix-$w.ttf').readAsBytes().then(ByteData.sublistView));
-    }
-    await l.load();
-  }
+  await loadAppFonts();
 }
 
 void main() {

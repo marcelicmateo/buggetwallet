@@ -197,8 +197,8 @@ void main() {
     expect(find.descendant(of: goalTile('Bike synthetic goal'), matching: find.text('Reached')), findsOneWidget);
     expect(find.descendant(of: goalTile('Bike synthetic goal'), matching: find.text('600\u00A0€')), findsOneWidget);
 
-    await goTab(t, 'Budget');
-    await t.tap(find.byKey(const ValueKey('budgetPlan')));
+    await goTab(t, 'Plan');
+    await t.tap(find.byKey(const ValueKey('planPayday')));
     await t.pumpAndSettle();
     expect(find.text('Bike synthetic goal'), findsOneWidget, reason: 'a goal line in the payday plan');
     await goTab(t, 'Save');

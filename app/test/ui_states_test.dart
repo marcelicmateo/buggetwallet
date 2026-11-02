@@ -311,7 +311,7 @@ void main() {
       await t.pump(const Duration(milliseconds: 400));
       await t.tap(key('toastAction'));
       await t.pump();
-      expect(opened, Tabs.save);
+      expect(opened, Tabs.plan);
       expect(wc.highlightWish.value, wc.wish.single.id);
       await t.pump(const Duration(seconds: 4));
     });

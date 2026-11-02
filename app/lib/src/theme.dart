@@ -1,5 +1,5 @@
-// The Clean neutral theme (UX-C1, docs/context/UX_SPEC.md): near-white page, white cards lifted by a soft shadow (no borders), one calm blue
-// accent, Inter for text, IBM Plex Mono only for amounts. (It replaced the Ledger theme of docs/design/ledger-spec.md.)
+// The Engineer theme (ENG E1, docs/context/ENG_UI_SPEC.md §4): dark by default for this persona, light as its own set of steps (not a
+// flipped dark). Panels have a 1 px line border and no shadow, Manrope for text, JetBrains Mono for figures and eyebrows.
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -8,15 +8,21 @@ import 'package:flutter/material.dart';
 class WalletColors extends ThemeExtension<WalletColors> {
   final Color bg, surface, surface2, ink, ink2, muted, line, lineStrong, accent, accentSoft, pos, neg, good, bad, warnBg, warnInk, bar;
 
+  /// The nudge card ("3 not tagged yet"): [accentSoft] ground with this border.
+  final Color accentSoftLine;
+
+  /// Chart gridlines (recessive) and the one-hue sequential ramp for heatmaps ("less" to "more").
+  final Color chartGrid;
+  final List<Color> heat;
+
   /// Chart-only colours (never text or buttons; status stays `bad`/`good`). [chartPos] saved/spent bars, [chartNeg] lost, [chart2] the
-  /// second series that is not a polarity ("went out" next to "came in"). All three keep 3:1 on [bg] and [surface] in both themes
-  /// (`test/theme_contrast_test.dart`).
+  /// second series that is not a polarity ("went out" next to "came in").
   final Color chartPos, chartNeg, chart2;
 
-  /// Dashboard tiles (RX2, `widgets/dash.dart`): [desk] is the ground behind the tiles (the page colour, darker than [surface] in both themes); [s1] flexible spending,
-  /// [s2] bills and fixed costs, [s3] saved and goals (series colours: charts and fills only, never text; checked with the dataviz
-  /// validator, light and dark, 3:1 on bg and surface); [goodSoft]/[badSoft] are the chip grounds under `good` / `bad` text.
-  final Color desk, s1, s2, s3, goodSoft, badSoft;
+  /// Data colours (spec §4.2): six fixed slots, assigned by entity, for charts and fills only, never text. [desk] is the ground behind
+  /// dashboard tiles (the page colour); [goodSoft]/[badSoft] are the chip grounds under `good` / `bad` text. In the light set slots 3-5
+  /// are below 3:1 on the page (the spec's validator WARN): every chart that uses them shows its values or a table.
+  final Color desk, s1, s2, s3, s4, s5, s6, goodSoft, badSoft;
   const WalletColors({
     required this.bg,
     required this.surface,
@@ -28,6 +34,7 @@ class WalletColors extends ThemeExtension<WalletColors> {
     required this.lineStrong,
     required this.accent,
     required this.accentSoft,
+    required this.accentSoftLine,
     required this.pos,
     required this.neg,
     required this.good,
@@ -35,6 +42,8 @@ class WalletColors extends ThemeExtension<WalletColors> {
     required this.warnBg,
     required this.warnInk,
     required this.bar,
+    required this.chartGrid,
+    required this.heat,
     required this.chartPos,
     required this.chartNeg,
     required this.chart2,
@@ -42,68 +51,84 @@ class WalletColors extends ThemeExtension<WalletColors> {
     required this.s1,
     required this.s2,
     required this.s3,
+    required this.s4,
+    required this.s5,
+    required this.s6,
     required this.goodSoft,
     required this.badSoft,
   });
 
-  /// Clean neutral, light: near-white page, white cards.
+  /// Engineer, light. [ink2] is not in the spec: a step between ink and muted. Two spec values were moved for 3:1 (ENG E1 decision):
+  /// `lineStrong` #CBD3DA -> #7D91A2 and `s2` #EB6834 -> #EB6530 (same hues).
   static const light = WalletColors(
-    bg: Color(0xFFF6F7F9),
+    bg: Color(0xFFF4F6F8),
     surface: Color(0xFFFFFFFF),
-    surface2: Color(0xFFE7EAEF),
-    ink: Color(0xFF1F2933),
-    ink2: Color(0xFF3E4A57),
-    muted: Color(0xFF5B6673),
-    line: Color(0xFFE3E7ED),
-    lineStrong: Color(0xFF7F8A97),
-    accent: Color(0xFF2F5FC4),
-    accentSoft: Color(0xFFEAF0FC),
-    pos: Color(0xFF2F5FC4),
-    neg: Color(0xFFB3412F),
-    good: Color(0xFF2B7A4B),
-    bad: Color(0xFFB3412F),
+    surface2: Color(0xFFEEF2F6),
+    ink: Color(0xFF121A21),
+    ink2: Color(0xFF38444F),
+    muted: Color(0xFF56636F),
+    line: Color(0xFFE1E6EB),
+    lineStrong: Color(0xFF7D91A2),
+    accent: Color(0xFF1F5FBF),
+    accentSoft: Color(0xFFEAF1FC),
+    accentSoftLine: Color(0xFFBFD3F0),
+    pos: Color(0xFF1F5FBF),
+    neg: Color(0xFFC2412F),
+    good: Color(0xFF1F7A50),
+    bad: Color(0xFFC2412F),
     warnBg: Color(0xFFFBF0D2),
     warnInk: Color(0xFF5C4210),
-    bar: Color(0xFF2F5FC4),
-    chartPos: Color(0xFF2F5FC4),
-    chartNeg: Color(0xFFB3412F),
-    chart2: Color(0xFFA8650F),
-    desk: Color(0xFFF6F7F9),
-    s1: Color(0xFF2F5FC4),
-    s2: Color(0xFFA8650F),
-    s3: Color(0xFF0B8A8F),
-    goodSoft: Color(0xFFE7F4EC),
-    badSoft: Color(0xFFFBEAE6),
+    bar: Color(0xFF1F5FBF),
+    chartGrid: Color(0xFFEDF0F3),
+    heat: [Color(0xFFE3EDF9), Color(0xFFBBD3F1), Color(0xFF86B2E6), Color(0xFF4F8CD6), Color(0xFF2A65B3)],
+    chartPos: Color(0xFF2A78D6),
+    chartNeg: Color(0xFFC2412F),
+    chart2: Color(0xFFEB6530),
+    desk: Color(0xFFF4F6F8),
+    s1: Color(0xFF2A78D6),
+    s2: Color(0xFFEB6530),
+    s3: Color(0xFF1BAF7A),
+    s4: Color(0xFFEDA100),
+    s5: Color(0xFFE87BA4),
+    s6: Color(0xFF6250D6),
+    goodSoft: Color(0xFFE4F3EB),
+    badSoft: Color(0xFFFDF1EE),
   );
 
-  /// Clean neutral, dark.
+  /// Engineer, dark. [ink2] is not in the spec: a step between ink and muted. `lineStrong` #33404B -> #546A7C for 3:1 (same hue).
   static const dark = WalletColors(
-    bg: Color(0xFF14171C),
-    surface: Color(0xFF1C2027),
-    surface2: Color(0xFF262B34),
-    ink: Color(0xFFE6E9EE),
-    ink2: Color(0xFFBFC6D0),
-    muted: Color(0xFF9AA4B1),
-    line: Color(0xFF2A303A),
-    lineStrong: Color(0xFF6E7886),
-    accent: Color(0xFF8AAAF0),
-    accentSoft: Color(0xFF243049),
-    pos: Color(0xFF8AAAF0),
-    neg: Color(0xFFF0907D),
-    good: Color(0xFF6CC38F),
-    bad: Color(0xFFF0907D),
-    warnBg: Color(0xFF2F2916),
+    bg: Color(0xFF0F1418),
+    surface: Color(0xFF161D23),
+    surface2: Color(0xFF1B232A),
+    ink: Color(0xFFE8EEF2),
+    ink2: Color(0xFFC3CFD8),
+    muted: Color(0xFF9AAAB6),
+    line: Color(0xFF26313A),
+    lineStrong: Color(0xFF546A7C),
+    accent: Color(0xFF8DB8F5),
+    accentSoft: Color(0xFF172231),
+    accentSoftLine: Color(0xFF3B4B66),
+    pos: Color(0xFF8DB8F5),
+    neg: Color(0xFFF07167),
+    good: Color(0xFF3FB37F),
+    bad: Color(0xFFF07167),
+    warnBg: Color(0xFF2A2514),
     warnInk: Color(0xFFE6CF92),
-    bar: Color(0xFF8AAAF0),
-    chartPos: Color(0xFF6F93E6),
-    chartNeg: Color(0xFFD9705F),
-    chart2: Color(0xFFC9892B),
-    desk: Color(0xFF14171C),
-    s1: Color(0xFF7C9CEB),
-    s2: Color(0xFFC9892B),
-    s3: Color(0xFF2BA8AE),
-    goodSoft: Color(0xFF1F3328),
-    badSoft: Color(0xFF3A2421),
+    bar: Color(0xFF8DB8F5),
+    chartGrid: Color(0xFF222C34),
+    heat: [Color(0xFF1C2B3A), Color(0xFF24405C), Color(0xFF2E5C86), Color(0xFF3A7BB5), Color(0xFF5C9CE0)],
+    chartPos: Color(0xFF3987E5),
+    chartNeg: Color(0xFFF07167),
+    chart2: Color(0xFFD95926),
+    desk: Color(0xFF0F1418),
+    s1: Color(0xFF3987E5),
+    s2: Color(0xFFD95926),
+    s3: Color(0xFF199E70),
+    s4: Color(0xFFC98500),
+    s5: Color(0xFFD55181),
+    s6: Color(0xFF9085E9),
+    goodSoft: Color(0xFF14281F),
+    badSoft: Color(0xFF2E1D1C),
   );
 
   @override
@@ -129,40 +154,42 @@ double _luminance(Color c) {
   return 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b);
 }
 
-const sansFamily = 'Inter';
-const monoFamily = 'IBM Plex Mono';
+const sansFamily = 'Manrope';
+const monoFamily = 'JetBrains Mono';
 
-/// Money and other figures: IBM Plex Mono with tabular figures, so columns line up.
+/// Money and other figures: JetBrains Mono with tabular figures, so columns line up.
 const numStyle = TextStyle(
   fontFamily: monoFamily,
   fontFamilyFallback: ['monospace'],
   fontFeatures: [FontFeature.tabularFigures()],
 );
 
-/// Axis, date and name labels in charts: Inter with tabular figures (mono is for amounts only).
+/// Axis, date and name labels in charts: Manrope with tabular figures.
 const labelStyle = TextStyle(fontFamily: sansFamily, fontFeatures: [FontFeature.tabularFigures()]);
 
-/// Type scale: the only font sizes in the app. Nothing is under 12 dp except [eyebrow] (ALL CAPS, 11 dp, letter-spaced).
-/// Sizes are plain constants (usable in `const TextStyle`); the styles below add family, weight and spacing.
+/// Type scale (spec §4.3): the only font sizes in the app. Nothing is under 11 dp. Sizes are plain constants (usable in
+/// `const TextStyle`); the styles below add family, weight and spacing.
 class BwType {
   const BwType._();
   static const double eyebrowSize = 11;
-  static const double metaSize = 12.5;
+  static const double metaSize = 13;
   static const double bodySize = 14;
   static const double headingSize = 16;
-  static const double titleSize = 19;
+  static const double titleSize = 22;
   static const double amountSize = 15;
-  static const double amountMdSize = 20;
+  static const double amountMdSize = 22;
   static const double displaySize = 26;
   static const double entrySize = 30;
-  static const double heroSize = 78;
+  static const double heroSize = 52;
+  static const double heroWideSize = 64;
 
-  /// Section labels and table heads: sans, caps, a little wide (mono is for amounts only).
+  /// Section labels and table heads: mono, caps, 0.1 em apart.
   static const eyebrow = TextStyle(
-    fontFamily: sansFamily,
+    fontFamily: monoFamily,
+    fontFamilyFallback: ['monospace'],
     fontSize: eyebrowSize,
-    letterSpacing: eyebrowSize * 0.06,
-    fontWeight: FontWeight.w600,
+    letterSpacing: eyebrowSize * 0.1,
+    fontWeight: FontWeight.w500,
   );
 
   /// Secondary lines: dates, categories, explainers.
@@ -173,10 +200,10 @@ class BwType {
   static const bodyStrong = TextStyle(fontSize: bodySize, fontWeight: FontWeight.w600);
 
   /// Sub-headings and button labels.
-  static const heading = TextStyle(fontSize: headingSize, fontWeight: FontWeight.w600, letterSpacing: -0.2);
+  static const heading = TextStyle(fontSize: headingSize, fontWeight: FontWeight.w800);
 
   /// Screen and dialog titles.
-  static const title = TextStyle(fontSize: titleSize, fontWeight: FontWeight.w600, letterSpacing: -0.2);
+  static const title = TextStyle(fontSize: titleSize, fontWeight: FontWeight.w800, letterSpacing: -0.44);
 
   /// Money in lists (mono, tabular), and the larger figures in rows and sheets.
   static const amount = TextStyle(
@@ -186,26 +213,15 @@ class BwType {
       fontSize: amountSize,
       fontWeight: FontWeight.w500);
 
-  /// The one big number on Today.
+  /// The one big number on Overview.
   static const hero = TextStyle(fontSize: heroSize);
 }
 
-/// The notebook margin line of the old Ledger theme: kept as a layout gutter, no longer drawn (Clean neutral has no margin rule).
+/// The notebook margin line of the old Ledger theme: kept as a layout gutter, no longer drawn.
 Color marginLineColor(Brightness b) => Colors.transparent;
 
-/// Corner radius of cards, tiles and panels.
-const double cardRadius = 14;
-
-/// The soft shadow that lifts a white card off the page (cards have no border). Dark: a deeper, tighter shadow on a lighter surface.
-List<BoxShadow> cardShadow(Brightness b) => b == Brightness.light
-    ? const [
-        BoxShadow(color: Color(0x0F1F2933), blurRadius: 2, offset: Offset(0, 1)),
-        BoxShadow(color: Color(0x141F2933), blurRadius: 14, offset: Offset(0, 4)),
-      ]
-    : const [
-        BoxShadow(color: Color(0x66000000), blurRadius: 2, offset: Offset(0, 1)),
-        BoxShadow(color: Color(0x40000000), blurRadius: 14, offset: Offset(0, 4)),
-      ];
+/// Corner radius of panels and tiles (spec §4.4). A panel has a 1 px `line` border and no shadow.
+const double cardRadius = 18;
 
 /// Accent-outlined button style (what used to be the tonal button).
 ButtonStyle accentOutlined(BuildContext context) {
@@ -218,13 +234,13 @@ ButtonStyle accentOutlined(BuildContext context) {
 
 ThemeData buildTheme(Brightness b) {
   final w = b == Brightness.light ? WalletColors.light : WalletColors.dark;
-  final scheme = ColorScheme.fromSeed(seedColor: const Color(0xFF1F3FA8), brightness: b).copyWith(
+  final scheme = ColorScheme.fromSeed(seedColor: w.accent, brightness: b).copyWith(
     primary: w.accent,
-    onPrimary: b == Brightness.light ? w.surface : w.bg,
+    onPrimary: w.bg,
     primaryContainer: w.accentSoft,
     onPrimaryContainer: w.ink,
     secondary: w.accent,
-    onSecondary: b == Brightness.light ? w.surface : w.bg,
+    onSecondary: w.bg,
     secondaryContainer: w.accentSoft,
     onSecondaryContainer: w.ink,
     tertiary: w.accent,
@@ -256,9 +272,10 @@ ThemeData buildTheme(Brightness b) {
   final tt = base.textTheme.apply(fontFamily: sansFamily, bodyColor: w.ink, displayColor: w.ink);
   OutlinedBorder shape(double r) => RoundedRectangleBorder(borderRadius: BorderRadius.circular(r));
   OutlineInputBorder field(Color c, double width) =>
-      OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: c, width: width));
-  final shadow = b == Brightness.light ? const Color(0x331F2933) : const Color(0xB3000000);
+      OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: c, width: width));
   const w6 = FontWeight.w600;
+  // A panel-style edge for sheets, dialogs and menus: 1 px line, no shadow.
+  OutlinedBorder panel(BorderRadiusGeometry r) => RoundedRectangleBorder(borderRadius: r, side: BorderSide(color: w.line));
   final onAccent = scheme.onPrimary;
   return base.copyWith(
     scaffoldBackgroundColor: w.bg,
@@ -283,38 +300,9 @@ ThemeData buildTheme(Brightness b) {
     highlightColor: w.accentSoft,
     splashFactory: NoSplash.splashFactory,
     iconTheme: IconThemeData(color: w.ink),
-    // Navigation: white bar with a hairline on top (drawn by the shell) and the selected tab as an accent-soft pill; the rail is
-    // white with a hairline on its right (drawn by the shell) and the same pill.
-    navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: w.surface,
-      surfaceTintColor: Colors.transparent,
-      shadowColor: Colors.transparent,
-      elevation: 0,
-      height: 68,
-      indicatorColor: w.accentSoft,
-      indicatorShape: const StadiumBorder(),
-      iconTheme:
-          WidgetStateProperty.resolveWith((s) => IconThemeData(size: 22, color: s.contains(WidgetState.selected) ? w.accent : w.ink2)),
-      labelTextStyle: WidgetStateProperty.resolveWith((s) => TextStyle(
-          fontFamily: sansFamily,
-          fontSize: BwType.metaSize,
-          fontWeight: s.contains(WidgetState.selected) ? w6 : FontWeight.w500,
-          color: s.contains(WidgetState.selected) ? w.accent : w.ink2)),
-    ),
-    navigationRailTheme: NavigationRailThemeData(
-      backgroundColor: w.surface,
-      elevation: 0,
-      minWidth: 80,
-      indicatorColor: w.accentSoft,
-      indicatorShape: const StadiumBorder(),
-      selectedIconTheme: IconThemeData(color: w.accent),
-      unselectedIconTheme: IconThemeData(color: w.ink2),
-      selectedLabelTextStyle: TextStyle(fontFamily: sansFamily, fontSize: BwType.metaSize, fontWeight: w6, color: w.accent),
-      unselectedLabelTextStyle: TextStyle(fontFamily: sansFamily, fontSize: BwType.metaSize, fontWeight: FontWeight.w500, color: w.ink2),
-    ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: w.surface,
+      fillColor: w.surface2,
       isDense: true,
       border: field(w.lineStrong, 1),
       enabledBorder: field(w.lineStrong, 1),
@@ -338,7 +326,7 @@ ThemeData buildTheme(Brightness b) {
         disabledBackgroundColor: w.surface2,
         disabledForegroundColor: w.muted,
         minimumSize: const Size(64, 44),
-        shape: shape(10),
+        shape: shape(12),
         elevation: 0,
         textStyle: const TextStyle(fontFamily: sansFamily, fontSize: BwType.headingSize, fontWeight: w6),
       ),
@@ -348,7 +336,7 @@ ThemeData buildTheme(Brightness b) {
         foregroundColor: w.ink,
         side: BorderSide(color: w.lineStrong),
         minimumSize: const Size(64, 44),
-        shape: shape(10),
+        shape: shape(12),
         textStyle: const TextStyle(fontFamily: sansFamily, fontSize: BwType.headingSize, fontWeight: w6),
       ),
     ),
@@ -356,53 +344,52 @@ ThemeData buildTheme(Brightness b) {
       style: TextButton.styleFrom(
         foregroundColor: w.accent,
         minimumSize: const Size(44, 44),
-        shape: shape(10),
+        shape: shape(12),
         textStyle: const TextStyle(fontFamily: sansFamily, fontSize: BwType.headingSize, fontWeight: w6),
       ),
     ),
-    iconButtonTheme: IconButtonThemeData(style: IconButton.styleFrom(foregroundColor: w.ink, shape: shape(10))),
+    iconButtonTheme: IconButtonThemeData(style: IconButton.styleFrom(foregroundColor: w.ink, shape: shape(12))),
+    // Seg toggle (spec §4.4): the chosen segment is a lineStrong fill with ink text and a check icon.
     segmentedButtonTheme: SegmentedButtonThemeData(
       style: ButtonStyle(
         shape: WidgetStatePropertyAll(shape(10)),
-        side: WidgetStatePropertyAll(BorderSide(color: w.lineStrong)),
+        side: WidgetStatePropertyAll(BorderSide(color: w.line)),
         minimumSize: const WidgetStatePropertyAll(Size(44, 44)),
-        // The chosen segment is a solid accent fill with its check icon (accentSoft is too close to the page to be a cue).
-        backgroundColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? w.accent : Colors.transparent),
-        foregroundColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? onAccent : w.ink),
-        iconColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? onAccent : w.ink),
-        textStyle: const WidgetStatePropertyAll(TextStyle(fontFamily: sansFamily, fontSize: BwType.bodySize, fontWeight: w6)),
+        backgroundColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? w.lineStrong : w.bg),
+        foregroundColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? w.ink : w.muted),
+        iconColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? w.ink : w.muted),
+        textStyle: const WidgetStatePropertyAll(TextStyle(fontFamily: sansFamily, fontSize: BwType.metaSize, fontWeight: w6)),
       ),
       selectedIcon: const Icon(Icons.check),
     ),
+    // Range chips: outline; the chosen one is an ink fill with bg text.
     chipTheme: ChipThemeData(
-      shape: shape(8),
+      shape: shape(10),
       side: BorderSide(color: w.lineStrong),
       backgroundColor: Colors.transparent,
-      selectedColor: w.accent,
-      checkmarkColor: onAccent,
+      selectedColor: w.ink,
+      checkmarkColor: w.bg,
       surfaceTintColor: Colors.transparent,
       labelStyle: TextStyle(fontFamily: sansFamily, color: w.ink, fontWeight: FontWeight.w500),
-      secondaryLabelStyle: TextStyle(fontFamily: sansFamily, color: onAccent, fontWeight: w6),
+      secondaryLabelStyle: TextStyle(fontFamily: sansFamily, color: w.bg, fontWeight: w6),
       iconTheme: IconThemeData(color: w.ink, size: 18),
     ),
     dialogTheme: DialogThemeData(
       backgroundColor: w.surface,
       surfaceTintColor: Colors.transparent,
-      elevation: 6,
-      shadowColor: shadow,
-      shape: shape(16),
-      titleTextStyle: TextStyle(fontFamily: sansFamily, fontSize: BwType.titleSize, fontWeight: w6, color: w.ink),
+      elevation: 0,
+      shape: panel(BorderRadius.circular(cardRadius)),
+      titleTextStyle: TextStyle(fontFamily: sansFamily, fontSize: BwType.headingSize + 2, fontWeight: FontWeight.w800, color: w.ink),
       contentTextStyle: TextStyle(fontFamily: sansFamily, fontSize: BwType.bodySize, color: w.ink2, height: 1.4),
     ),
     bottomSheetTheme: BottomSheetThemeData(
       backgroundColor: w.surface,
       surfaceTintColor: Colors.transparent,
       modalBackgroundColor: w.surface,
-      modalElevation: 8,
-      elevation: 8,
-      shadowColor: shadow,
+      modalElevation: 0,
+      elevation: 0,
       showDragHandle: false,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+      shape: panel(const BorderRadius.vertical(top: Radius.circular(cardRadius))),
       modalBarrierColor: Colors.black.withValues(alpha: 0.4),
     ),
     snackBarTheme: SnackBarThemeData(
@@ -420,11 +407,11 @@ ThemeData buildTheme(Brightness b) {
     switchTheme: SwitchThemeData(
       thumbColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? onAccent : w.ink2),
       trackColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? w.accent : w.surface2),
-      trackOutlineColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? w.accent : w.lineStrong),
+      trackOutlineColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? w.accent : w.muted),
     ),
     checkboxTheme: CheckboxThemeData(
       shape: shape(4),
-      side: BorderSide(color: w.lineStrong, width: 1.5),
+      side: BorderSide(color: w.muted, width: 1.5),
       fillColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? w.accent : Colors.transparent),
       checkColor: WidgetStatePropertyAll(onAccent),
     ),
@@ -434,11 +421,8 @@ ThemeData buildTheme(Brightness b) {
     popupMenuTheme: PopupMenuThemeData(
       color: w.surface,
       surfaceTintColor: Colors.transparent,
-      elevation: 4,
-      shadowColor: shadow,
-      // Dark: the surface is hardly lighter than the page, so the menu gets a hairline.
-      shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12), side: b == Brightness.dark ? BorderSide(color: w.line) : BorderSide.none),
+      elevation: 0,
+      shape: panel(BorderRadius.circular(12)),
     ),
     listTileTheme: ListTileThemeData(iconColor: w.ink2, textColor: w.ink),
     textSelectionTheme: TextSelectionThemeData(cursorColor: w.accent, selectionColor: w.accent.withValues(alpha: 0.3)),

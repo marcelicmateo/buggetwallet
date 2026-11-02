@@ -39,9 +39,10 @@ void main() {
       expect(find.byType(AddExpenseSheet), findsOneWidget);
     });
 
-    testWidgets('rail layouts: no add button in the rail or bottom right', (tester) async {
+    testWidgets('rail layouts: Add is the first item of the rail, there is no floating button', (tester) async {
       await pumpFull(tester, demoWallet(clock: pinnedNoon), 1.0, size: const Size(1280, 800));
-      expect(find.byType(NavigationRail), findsOneWidget);
+      expect(find.byKey(const ValueKey('rail')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('rail')), matching: find.byKey(const ValueKey('addButton'))), findsOneWidget);
       expect(find.byType(FloatingActionButton), findsNothing);
       expect(find.byKey(const ValueKey('addFab')), findsNothing);
       expect(find.byKey(const ValueKey('addExpense')), findsOneWidget);

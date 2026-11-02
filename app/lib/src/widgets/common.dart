@@ -10,7 +10,7 @@ import 'tag_picker.dart';
 export '../layout.dart' show gapped;
 export '../theme.dart' show numStyle;
 
-/// A section card: white surface lifted by a soft shadow, radius 14, no border. With [color] it is a flat tinted band with a 3 px bar on
+/// A section panel: `surface` with a 1 px `line` border, radius 18, no shadow. With [color] it is a flat tinted band with a 3 px bar on
 /// the left (warning / info); the content keeps its own icon and words. Vertical padding comes from [padding]; the sides get 16 dp.
 class Panel extends StatelessWidget {
   final List<Widget> children;
@@ -25,18 +25,13 @@ class Panel extends StatelessWidget {
     final bar = color == c.warnBg ? c.warnInk : c.accent;
     final radius = BorderRadius.circular(cardRadius);
     // The ground is a Material (not a coloured DecoratedBox) so ListTiles and InkWells inside still paint their ink.
-    return DecoratedBox(
-      decoration: BoxDecoration(borderRadius: radius, boxShadow: band ? null : cardShadow(Theme.of(context).brightness)),
-      child: Material(
-        color: color ?? c.surface,
-        shape: RoundedRectangleBorder(
-            borderRadius: radius,
-            side: !band && Theme.of(context).brightness == Brightness.dark ? BorderSide(color: c.line) : BorderSide.none),
-        child: Container(
-          foregroundDecoration: band ? BoxDecoration(borderRadius: radius, border: Border(left: BorderSide(color: bar, width: 3))) : null,
-          padding: padding + const EdgeInsets.symmetric(horizontal: 16),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: gapped(children, gap: 12)),
-        ),
+    return Material(
+      color: color ?? c.surface,
+      shape: RoundedRectangleBorder(borderRadius: radius, side: band ? BorderSide.none : BorderSide(color: c.line)),
+      child: Container(
+        foregroundDecoration: band ? BoxDecoration(borderRadius: radius, border: Border(left: BorderSide(color: bar, width: 3))) : null,
+        padding: padding + const EdgeInsets.symmetric(horizontal: 16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: gapped(children, gap: 12)),
       ),
     );
   }
@@ -858,18 +853,4 @@ class ToastClearer extends NavigatorObserver {
 
   @override
   void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) => onPopped?.call();
-}
-
-/// The bottom bar with a hairline on top. (The selected tab is the theme's accent-soft pill; [selected] and [count] are kept for callers.)
-class NavBarFrame extends StatelessWidget {
-  final int selected, count;
-  final Widget child;
-  const NavBarFrame({super.key, required this.selected, required this.count, required this.child});
-  @override
-  Widget build(BuildContext context) {
-    return Stack(children: [
-      child,
-      Positioned(left: 0, right: 0, top: 0, height: 1, child: IgnorePointer(child: ColoredBox(color: context.c.line))),
-    ]);
-  }
 }

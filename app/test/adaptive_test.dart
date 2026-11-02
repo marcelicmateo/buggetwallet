@@ -2,8 +2,7 @@
 // content width, no overflow on any tab, page State kept across tab switches and resizes, Today's columns, sheets as
 // dialogs and the keyboard shortcuts. More edge cases: adaptive_edge_test.dart. All data is SYNTHETIC.
 import 'package:budget_wallet/src/layout.dart';
-import 'package:budget_wallet/src/screens/budget.dart';
-import 'package:budget_wallet/src/screens/save.dart';
+import 'package:budget_wallet/src/screens/plan_screen.dart';
 import 'package:budget_wallet/src/screens/settings.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/screens/today.dart';
@@ -35,18 +34,18 @@ void main() {
       testWidgets('$name: the right navigation and a centered content column', (tester) async {
         await pumpFull(tester, demoWallet(clock: pinnedNoon), scale, size: size);
         final kind = _kind(size);
-        expect(find.byType(NavigationBar), kind == LayoutSize.compact ? findsOneWidget : findsNothing);
-        expect(find.byType(NavigationRail), kind == LayoutSize.compact ? findsNothing : findsOneWidget);
+        expect(find.byKey(const ValueKey('navBar')), kind == LayoutSize.compact ? findsOneWidget : findsNothing);
+        expect(find.byKey(const ValueKey('rail')), kind == LayoutSize.compact ? findsNothing : findsOneWidget);
         if (kind != LayoutSize.compact) {
-          expect(tester.widget<NavigationRail>(find.byType(NavigationRail)).extended, kind == LayoutSize.expanded);
+          expect(tester.getSize(find.byKey(const ValueKey('rail'))).width > 200, kind == LayoutSize.expanded);
         }
         final box = tester.getRect(find.byType(TodayScreen));
-        final railRight = kind == LayoutSize.compact ? 0.0 : tester.getRect(find.byType(NavigationRail)).right;
+        final railRight = kind == LayoutSize.compact ? 0.0 : tester.getRect(find.byKey(const ValueKey('rail'))).right;
         expect(box.width, lessThanOrEqualTo(maxContentWidth(kind)));
         expect(box.left - railRight, closeTo(size.width - box.right, 1.0), reason: 'centered');
         // The labels are there (perf_test and screens find tabs by label).
-        for (final t in _tabs) {
-          expect(find.descendant(of: find.byType(kind == LayoutSize.compact ? NavigationBar : NavigationRail), matching: find.text(t)),
+        for (final t in ['Overview', 'Money', 'Explore', 'Plan']) {
+          expect(find.descendant(of: find.byKey(ValueKey(kind == LayoutSize.compact ? 'navBar' : 'rail')), matching: find.text(t)),
               findsOneWidget);
         }
       });
@@ -182,12 +181,14 @@ void main() {
       await tester.pump();
     }
 
-    testWidgets('Ctrl+1..5 switch tabs, Ctrl+N opens Add expense', (tester) async {
+    testWidgets('Ctrl+1..4 switch destinations, Ctrl+, Settings, Ctrl+N opens Add expense', (tester) async {
       await pumpFull(tester, demoWallet(clock: pinnedNoon), 1.0, size: const Size(1280, 800));
       await tester.pump();
       await ctrl(tester, LogicalKeyboardKey.digit4);
-      expect(find.byType(SaveScreen), findsOneWidget);
-      await ctrl(tester, LogicalKeyboardKey.digit5);
+      expect(find.byType(PlanScreen), findsOneWidget);
+      await ctrl(tester, LogicalKeyboardKey.digit3);
+      expect(find.byType(SpendingScreen), findsOneWidget);
+      await ctrl(tester, LogicalKeyboardKey.comma);
       expect(find.byType(SettingsScreen), findsOneWidget);
       await ctrl(tester, LogicalKeyboardKey.digit1);
       expect(find.byType(TodayScreen), findsOneWidget);
@@ -198,7 +199,7 @@ void main() {
 
     testWidgets('a plain "1" is not a shortcut: the Plan field keeps its focus and the tab stays', (tester) async {
       await pumpFull(tester, demoWallet(clock: pinnedNoon), 1.0, size: const Size(1280, 800));
-      await tapTab(tester, 'Budget'); // the payday plan is on Budget
+      await tapTab(tester, 'Plan'); // the payday plan is on Plan
       await openPlanEdit(tester, 'rent');
       final field = find.widgetWithText(TextField, 'Rent');
       await tester.ensureVisible(field);
@@ -206,7 +207,7 @@ void main() {
       await tester.enterText(field, '1');
       await tester.sendKeyEvent(LogicalKeyboardKey.digit1);
       await tester.pump();
-      expect(find.byType(BudgetScreen), findsOneWidget);
+      expect(find.byType(PlanScreen), findsOneWidget);
       expect(tester.widget<TextField>(field).controller!.text, '1');
     });
   });

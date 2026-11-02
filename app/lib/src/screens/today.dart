@@ -81,7 +81,7 @@ class TodayScreen extends StatelessWidget {
     final suggestions = view.suggestionCount();
     final tight = view.tightestBudget();
     final toReview = view.billsToReview();
-    // The Budget tab has two pages (Spending | Plan): each link picks the one it means before the tab opens.
+    // Plan and Explore each have two pages: each link picks the one it means before the page opens.
     void toPlan() {
       view.showBudgetView('plan');
       openPlan();
@@ -794,11 +794,11 @@ class _SetupTile extends StatelessWidget {
                       Text('Planning on ${moneyExact(s.salary, cur)} a month', style: bold),
                       Text(
                           s.salary > 0
-                              ? 'Check this matches a normal month of pay. Fix it in Budget if not.'
-                              : 'Enter your monthly salary in Budget so the daily budget can be worked out.',
+                              ? 'Check this matches a normal month of pay. Fix it in Plan if not.'
+                              : 'Enter your monthly salary in Plan so the daily budget can be worked out.',
                           style: meta),
                       Wrap(alignment: WrapAlignment.spaceBetween, spacing: 8, runSpacing: 8, children: [
-                        OutlinedButton(onPressed: openPlan, child: const Text('Open Budget')),
+                        OutlinedButton(onPressed: openPlan, child: const Text('Open Plan')),
                         FilledButton(onPressed: () => view.updateSettings({'salaryConfirmed': true}), child: const Text('Looks right')),
                       ]),
                     ], gap: 6)),
