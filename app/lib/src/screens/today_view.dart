@@ -31,6 +31,8 @@ class TodayView implements Listenable {
   void showBudgetView(String view) => _wc.setBudgetView(view);
 
   // ---------- reads ----------
+  /// The Today number tiles' order and hidden ids (device-local, Settings > Look).
+  ({List<String> order, Set<String> hidden}) get tiles => _wc.todayTiles;
   WalletSettings get settings => _wc.settings;
   String get currency => _wc.currency;
   DateTime get now => _wc.now;

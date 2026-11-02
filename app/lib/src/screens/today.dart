@@ -101,6 +101,28 @@ class TodayScreen extends StatelessWidget {
         if (x.due.compareTo(today) < 0) x.bill.id
     }.length;
 
+    // UX-B B4: the number tiles by id; null = nothing to show.
+    final numberTiles = <String, Widget?>{
+      'left': f.ended ? null : _LeftTile(f),
+      'payday': f.ended ? null : _PaydayTile(f),
+      'before': p.beforePaydayCount > 0 || p.beforePayday > 0
+          ? _BeforePaydayTile(f, () => _openUpcoming(context, view))
+          : suggestions > 0
+              ? _CalendarCheckTile(suggestions, () => _openUpcoming(context, view))
+              : null,
+      'budget': tight == null ? null : _BudgetTile(tight, view.categoryTable.label(tight.category), f.cur, toSpending),
+      'held': held.isEmpty ? null : _HeldTile(held, f.cur, openAccounts ?? toPlan),
+      'income': p.expectedIncome.isEmpty ? null : _IncomeDueTile(f, openIncome),
+      'reviewed': f.reviewTile ? _ReviewTile(f, review) : null,
+      'foreign': p.foreignByCurrency.isEmpty
+          ? null
+          : DashItem(span: 2, child: ForeignNote(p.foreignByCurrency, key: const ValueKey('foreignNote'), onSetRate: view.openCurrencies)),
+      // On four columns both take the whole row: a two-cell button beside a tall list left the cells under it empty (RX8).
+      'add': DashItem(span: wide ? 4 : 2, child: _AddExpenseButton(view, addExpense)),
+      'recent': DashItem(span: wide ? 4 : 2, child: _RecentTile(view, recent, f.cur, openSearch)),
+    };
+    final (:order, :hidden) = view.tiles;
+
     return ColoredBox(
       color: context.c.desk,
       child: ListView(
@@ -123,24 +145,9 @@ class TodayScreen extends StatelessWidget {
             if (review.due) DashItem(span: 2, child: _ReviewCard(view, review, toSpending, chooser)),
             if (f.s.savedFor != p.start && view.goals.isNotEmpty) DashItem(span: 2, child: _PaydayChecklist(f)),
             if (f.deliveryHour) DashItem(span: 2, child: _DeliveryHourPanel(f)),
-            // The numbers.
-            if (!f.ended) _LeftTile(f),
-            if (!f.ended) _PaydayTile(f),
-            if (p.beforePaydayCount > 0 || p.beforePayday > 0)
-              _BeforePaydayTile(f, () => _openUpcoming(context, view))
-            else if (suggestions > 0)
-              _CalendarCheckTile(suggestions, () => _openUpcoming(context, view)),
-            if (tight != null) _BudgetTile(tight, view.categoryTable.label(tight.category), f.cur, toSpending),
-            if (held.isNotEmpty) _HeldTile(held, f.cur, openAccounts ?? toPlan),
-            if (p.expectedIncome.isNotEmpty) _IncomeDueTile(f, openIncome),
-            if (f.reviewTile) _ReviewTile(f, review),
-            if (p.foreignByCurrency.isNotEmpty)
-              DashItem(
-                  span: 2, child: ForeignNote(p.foreignByCurrency, key: const ValueKey('foreignNote'), onSetRate: view.openCurrencies)),
-            // Add expense, then the last payments.
-            // On four columns both take the whole row: a two-cell button beside a tall list left the cells under it empty (RX8).
-            DashItem(span: wide ? 4 : 2, child: _AddExpenseButton(view, addExpense)),
-            DashItem(span: wide ? 4 : 2, child: _RecentTile(view, recent, f.cur, openSearch)),
+            // The numbers: the owner's choice and order (Settings > Look); a tile still shows only when it has something to say.
+            for (final id in order)
+              if (!hidden.contains(id) && numberTiles[id] != null) numberTiles[id]!,
           ]),
         ],
       ),
