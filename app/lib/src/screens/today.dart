@@ -140,7 +140,6 @@ class TodayScreen extends StatelessWidget {
             if (overdue > 0) _OverdueTile(overdue, openBills),
             for (final h in view.headsUpLines()) _HeadsUpTile(f, h),
             if (review.due) DashItem(span: 2, child: _ReviewCard(view, review, toSpending, chooser)),
-            if (f.s.savedFor != p.start && view.goals.isNotEmpty) DashItem(span: 2, child: _PaydayChecklist(f)),
             if (f.deliveryHour) DashItem(span: 2, child: _DeliveryHourPanel(f)),
             // Not hideable: without it the owner would not know some spending is left out.
             if (p.foreignByCurrency.isNotEmpty)
@@ -627,33 +626,6 @@ class _ReviewCard extends StatelessWidget {
           child: const Text('Start review'),
         ),
       ]));
-}
-
-/// "Pay yourself first": move the month's savings, tick it off.
-class _PaydayChecklist extends StatelessWidget {
-  const _PaydayChecklist(this.f);
-  final _TodayFigures f;
-  @override
-  Widget build(BuildContext context) {
-    final p = f.p, cur = f.cur, view = f.view;
-    return Tile(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-      const HeadingRow(Heading('Payday checklist', size: BwType.headingSize), Tag('pay yourself first')),
-      const SizedBox(height: 6),
-      Text('Move ${moneyExact(p.goalMonthly, cur)} to your savings account before you spend anything else.',
-          style: const TextStyle(fontSize: BwType.bodySize)),
-      Rows(children: [for (final g in view.goals) LineItem(g.name, moneyExact(g.monthly, cur), leading: const CheckSquare())]),
-      const SizedBox(height: 6),
-      OutlinedButton.icon(
-        icon: const Icon(Icons.check),
-        label: Text('I moved ${moneyExact(p.goalMonthly, cur)}'),
-        onPressed: () {
-          view.paydayDone(p.start);
-          toast(context, 'Savings logged');
-        },
-      ),
-    ]));
-  }
 }
 
 /// How a typical delivery order compares with today's money, in the hours people order.

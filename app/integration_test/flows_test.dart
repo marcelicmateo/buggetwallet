@@ -230,7 +230,7 @@ void main() {
     await Harness.checkLog();
   });
 
-  itest('Payday checklist and the "Salary landed" banner', (t) async {
+  itest('Goals are paid by themselves and the "Salary landed" banner', (t) async {
     final today = todayIso();
     final payday = addDays(today, -1);
     final wc = await Harness.start(t,
@@ -245,12 +245,7 @@ void main() {
     expect(find.textContaining('Salary landed on'), findsNothing);
     expect(find.textContaining('${shortDate(payday)} – '), findsOneWidget, reason: 'the period chip in the app bar');
 
-    await scrollTo(t, find.text('Payday checklist'), TodayScreen);
-    expect(find.text('Move 200\u00A0€ to your savings account before you spend anything else.'), findsOneWidget);
-    await tapVisible(t, find.text('I moved 200\u00A0€'));
-    expect(find.text('Savings logged'), findsOneWidget);
-    expect(wc.goals.map((g) => g.saved), [10000, 10000]);
-    expect(wc.settings.savedFor, payday);
+    expect(wc.goals.map((g) => g.saved), [20000, 20000], reason: 'once for the first period, once for the new month');
     expect(find.text('Payday checklist'), findsNothing);
     await Harness.checkLog();
   });

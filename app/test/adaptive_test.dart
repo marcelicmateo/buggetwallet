@@ -111,7 +111,8 @@ void main() {
       final hero = rectOf(tester, 'heroTile');
       final tiles = find.byType(Tile);
       final rects = [for (var i = 0; i < tiles.evaluate().length; i++) tester.getRect(tiles.at(i))];
-      expect(rects.any((r) => r.width < hero.width / 3), isTrue, reason: 'a tile a quarter of the hero wide: four columns');
+      // A two-cell tile (setup) is half the hero, which spans four cells. (Number tiles can be stretched to fill a row.)
+      expect(rectOf(tester, 'setupPanel').width, lessThan(hero.width * 0.6), reason: 'four columns');
       expect(rects.where((r) => r != hero && r.top < hero.bottom - 1), isEmpty, reason: 'nothing beside the hero');
       expect(hero.height, lessThan(hero.width / 3));
     });

@@ -85,8 +85,8 @@ Finder _byName(String n) => find.byWidgetPredicate((w) => w.runtimeType.toString
 /// Today is a tile grid: four columns when the hero fills the whole row and a tile under it is a quarter of that width.
 bool _todayWide(WidgetTester tester) {
   final hero = tester.getRect(find.byKey(const ValueKey('heroTile')));
-  final tiles = find.byType(Tile);
-  return [for (var i = 0; i < tiles.evaluate().length; i++) tester.getRect(tiles.at(i))].any((r) => r.width < hero.width / 3);
+  // The two-cell setup tile is half the hero when the hero spans four cells (number tiles can be stretched to fill a row).
+  return tester.getRect(find.byKey(const ValueKey('setupPanel'))).width < hero.width * 0.6;
 }
 
 Finder _twoColOn(Type screen) =>

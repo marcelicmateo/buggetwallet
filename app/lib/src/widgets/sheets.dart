@@ -772,7 +772,29 @@ class _GoalSheetState extends State<GoalSheet> {
   late final monthly = TextEditingController(text: centsToFieldText(g?.monthly ?? 5000, blankZero: true));
   late final saved = TextEditingController(text: centsToFieldText(g?.saved ?? 0, blankZero: true));
   final add = TextEditingController();
-  String? error;
+  late final periodAmt = TextEditingController(text: centsToFieldText(_periodNow, blankZero: false));
+  final takeAmt = TextEditingController();
+  String? error, periodError, takeError;
+  bool takingOut = false;
+  String takeTo = 'spending'; // 'spending' or another goal's id
+
+  int get _periodNow => g == null ? 0 : widget.wc.goalPeriodAmounts()[g!.id] ?? 0;
+
+  /// Take out (PS): into this period's spending money or another goal; core refuses more than is saved.
+  void _takeOut() {
+    final c = parseMoney(takeAmt.text);
+    if (c == null || c <= 0) return setState(() => takeError = 'Enter an amount, like 50.');
+    final toGoal = takeTo == 'spending' ? null : takeTo;
+    final to = toGoal == null ? null : widget.wc.goals.where((x) => x.id == toGoal).firstOrNull;
+    try {
+      widget.wc.takeOutOfGoal(g!.id, c, toGoalId: toGoal);
+    } on ArgumentError catch (e) {
+      return setState(() => takeError = '${e.message}');
+    }
+    final cur = widget.wc.currency;
+    toast(context, to == null ? '${moneyExact(c, cur)} is now spending money' : '${moneyExact(c, cur)} moved to ${to.name}');
+    Navigator.pop(context, 'saved');
+  }
 
   String hint() {
     final t = parseMoney(target.text) ?? 0,
@@ -790,7 +812,8 @@ class _GoalSheetState extends State<GoalSheet> {
     final keepsNone = g != null && g!.target == 0;
     final t = keepsNone && target.text.trim().isEmpty ? 0 : parseMoney(target.text);
     final targetOk = t != null && (t > 0 || keepsNone);
-    final m = _amount(monthly), sv = _amount(saved), ad = _amount(add);
+    final m = _amount(monthly), sv = _amount(saved), ad = _amount(add), pa = _amount(periodAmt);
+    if (g != null && pa == null) return setState(() => periodError = 'This pay period: enter an amount, like 50.');
     final bad = !targetOk
         ? 'Target'
         : m == null
@@ -805,12 +828,22 @@ class _GoalSheetState extends State<GoalSheet> {
       setState(() => error = '$bad: enter an amount, like 500.');
       return;
     }
+    // The period amount first: it moves the saved total, so an untouched "Put aside so far" must follow it, not undo it.
+    var base = sv!;
+    if (g != null && pa != _periodNow) {
+      try {
+        widget.wc.setGoalPeriodAmount(g!.id, pa!);
+      } on ArgumentError catch (e) {
+        return setState(() => periodError = '${e.message}');
+      }
+      if (base == g!.saved) base = widget.wc.goals.where((x) => x.id == g!.id).firstOrNull?.saved ?? base;
+    }
     widget.wc.saveGoal(
       id: g?.id,
       name: name.text.trim().isEmpty ? 'Goal' : name.text.trim(),
       target: t!,
       monthly: m!,
-      saved: sv! + ad!,
+      saved: base + ad!,
       sort: g?.sort,
     );
     Navigator.pop(context, 'saved');
@@ -818,7 +851,8 @@ class _GoalSheetState extends State<GoalSheet> {
 
   @override
   Widget build(BuildContext context) {
-    void upd(String _) => setState(() => error = null);
+    void upd(String _) => setState(() => error = periodError = takeError = null);
+    final cur = widget.wc.currency;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Heading(g == null ? 'New goal' : 'Edit goal'),
       const SizedBox(height: 14),
@@ -849,6 +883,71 @@ class _GoalSheetState extends State<GoalSheet> {
             onChanged: upd,
             decoration: InputDecoration(
                 labelText: 'Add money now', hintText: 'e.g. a bonus or tax refund', suffixText: currencySymbol(widget.wc.currency))),
+      ],
+      if (g != null) ...[
+        const SizedBox(height: 10),
+        MoneyField(
+            key: const ValueKey('goalPeriodAmount'),
+            controller: periodAmt,
+            onChanged: upd,
+            decoration: InputDecoration(
+                labelText: 'This pay period',
+                helperText: 'Less than each month? The difference is spending money this period.',
+                helperMaxLines: 3,
+                suffixText: currencySymbol(cur))),
+        if (periodError != null) ...[
+          const SizedBox(height: 6),
+          StatusLabel(key: const ValueKey('goalPeriodError'), good: false, text: periodError!)
+        ],
+        Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton.icon(
+                key: const ValueKey('goalSkipPeriod'),
+                icon: const Icon(Icons.skip_next),
+                label: const Text('Skip this period'),
+                onPressed: () {
+                  periodAmt.text = '0';
+                  _save();
+                })),
+        if (g!.saved > 0)
+          Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: TextButton.icon(
+                  key: const ValueKey('goalTakeOut'),
+                  icon: const Icon(Icons.output),
+                  label: const Text('Take out'),
+                  onPressed: () => setState(() => takingOut = !takingOut))),
+        if (takingOut) ...[
+          MoneyField(
+              key: const ValueKey('takeOutAmount'),
+              controller: takeAmt,
+              onChanged: upd,
+              decoration: InputDecoration(labelText: 'Take out (${moneyExact(g!.saved, cur)} saved)', suffixText: currencySymbol(cur))),
+          const SizedBox(height: 8),
+          const Muted('Where does it go?', size: BwType.metaSize),
+          const SizedBox(height: 4),
+          Wrap(spacing: 8, runSpacing: 4, children: [
+            for (final (id, label) in [
+              ('spending', 'This period\'s spending money'),
+              for (final o in widget.wc.goals)
+                if (o.id != g!.id) (o.id, o.name)
+            ])
+              ChoiceChip(
+                key: ValueKey('takeOutTo:$id'),
+                label: Text(label),
+                selected: takeTo == id,
+                onSelected: (_) => setState(() => takeTo = id),
+              ),
+          ]),
+          if (takeError != null) ...[
+            const SizedBox(height: 6),
+            StatusLabel(key: const ValueKey('takeOutError'), good: false, text: takeError!)
+          ],
+          const SizedBox(height: 8),
+          Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: OutlinedButton(key: const ValueKey('takeOutConfirm'), onPressed: _takeOut, child: const Text('Take it out'))),
+        ],
       ],
       const SizedBox(height: 8),
       Muted(hint()),

@@ -73,7 +73,6 @@ class TodayView implements Listenable {
 
   // ---------- actions ----------
   void startNewMonth(String date) => _wc.startNewMonth(date);
-  void paydayDone(String periodStart) => _wc.paydayDone(periodStart);
   void updateSettings(Map<String, Object?> changes) => _wc.updateSettings(changes);
   void setSetupCollapsed(bool v, List<String> steps) => _wc.setSetupCollapsed(v, steps);
   void snoozeKeyBackup() => _wc.snoozeKeyBackup();

@@ -800,6 +800,7 @@ class WalletController extends ChangeNotifier {
     if (_seenDay == null || d == _seenDay) return;
     logEvent(_log, Level.INFO, 'day.changed', {'from': _seenDay, 'to': d});
     _seenDay = d;
+    if (_payGoals()) _changed(); // a salary can fall in or out of "recent" with the day
     notifyListeners();
     _widgetMayHaveChanged();
   }
@@ -829,6 +830,21 @@ class WalletController extends ChangeNotifier {
     } catch (e, st) {
       logError(_log, 'db.persistFailed', e, st);
     }
+  }
+
+  /// PS: pays the running pay period's goals (`payGoals` writes only the missing rows, so a reload after it writes nothing). The
+  /// period is the saved start or the last salary; a wallet with neither has no pay period yet and saves nothing by itself.
+  /// Returns true when a row was written (the goals are read again).
+  bool _payGoals() {
+    if (!goals.any((g) => g.monthly > 0)) return false;
+    final start = settings.periodStart ?? salaryPaydays(wholeTxs, today(), currency: currency).lastOrNull;
+    if (start == null) return false;
+    repo.payGoals(period: start);
+    final after = repo.goals();
+    final wrote = after.fold(0, (a, g) => a + g.saved) != goals.fold(0, (a, g) => a + g.saved);
+    goals = after;
+    if (wrote) logEvent(_log, Level.INFO, 'goals.autoPaid', {'goals': goals.length});
+    return wrote;
   }
 
   void reload() {
@@ -869,6 +885,7 @@ class WalletController extends ChangeNotifier {
     final (g, w) = timed('wc.goalsWish', () => (repo.goals(), repo.wishlist()));
     goals = g;
     wish = w;
+    _payGoals();
     dataVersion++;
     _memo.clear();
     _seenDay = _memoDay = today();
@@ -963,13 +980,25 @@ class WalletController extends ChangeNotifier {
   /// takes `payeeAliases:` gets it, so a slip spelled differently is covered, listed and counted like the bill it belongs to.
   Map<String, String> payeeAliases() => _cached(const MemoKey('payeeAliases'), repo.payeeAliases);
 
+  /// PS: this pay period's savings per goal id (a skipped or lowered goal shows its own amount). Cached per data version.
+  Map<String, int> goalPeriodAmounts() =>
+      _cached(const MemoKey('goalAmounts'), () => repo.goalPeriodAmounts(effectiveSettings.periodStart!));
+
+  String _periodEnd() => nextPayday(effectiveSettings.periodStart!, effectiveSettings.paydayDay);
+
   /// The budget of the running pay period. Confirmed recurring bills are reserved in it (`reservedBills`, `dueBills`).
   PeriodBudget period() => _cached(
       const MemoKey('period'),
       () => timed(
           'wc.period',
           () => computePeriod(txs, effectiveSettings, goals, today(),
-              bills: recurringBills(), planned: plannedOpen(), table: categoryTable, matchRows: rawExpanded, payeeAliases: payeeAliases()),
+              bills: recurringBills(),
+              planned: plannedOpen(),
+              table: categoryTable,
+              matchRows: rawExpanded,
+              payeeAliases: payeeAliases(),
+              goalAmounts: goalPeriodAmounts(),
+              goalTakenOut: repo.goalTakenOutBetween(effectiveSettings.periodStart!, _periodEnd())),
           warnMs: 50));
 
   /// One entry per day of the running pay period: within the day's money, over, today or to come (Today's day dots).
@@ -978,7 +1007,13 @@ class WalletController extends ChangeNotifier {
       () => timed(
           'wc.periodDays',
           () => core.periodDays(txs, effectiveSettings, goals, today(),
-              bills: recurringBills(), planned: plannedOpen(), table: categoryTable, matchRows: rawExpanded, payeeAliases: payeeAliases()),
+              bills: recurringBills(),
+              planned: plannedOpen(),
+              table: categoryTable,
+              matchRows: rawExpanded,
+              payeeAliases: payeeAliases(),
+              goalAmounts: goalPeriodAmounts(),
+              goalTakenOut: repo.goalTakenOutBetween(effectiveSettings.periodStart!, _periodEnd())),
           warnMs: 100));
 
   /// Saved or lost per pay period (salary to salary), oldest first; the last one is still running.
@@ -1516,10 +1551,15 @@ class WalletController extends ChangeNotifier {
     _changed();
   }
 
-  void paydayDone(String periodStart) {
-    repo.payGoals(period: periodStart);
-    repo.updateSettings({'savedFor': periodStart});
-    logEvent(_log, Level.INFO, 'payday.done', {'periodStart': periodStart, 'goals': goals.length});
+  /// PS: this pay period's amount for goal [id] (0 = skip). Throws core's owner-readable [ArgumentError].
+  void setGoalPeriodAmount(String id, int cents) {
+    repo.setGoalPeriodAmount(id, effectiveSettings.periodStart!, cents);
+    _changed();
+  }
+
+  /// PS: takes [cents] out of goal [id] into this pay period's spending money, or into goal [toGoalId]. Throws [ArgumentError].
+  void takeOutOfGoal(String id, int cents, {String? toGoalId}) {
+    repo.takeOutOfGoal(id, cents, date: today(), toGoalId: toGoalId);
     _changed();
   }
 

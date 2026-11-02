@@ -42,7 +42,7 @@ WalletController _busy() {
   final wc = _wallet();
   wc.repo.saveGoal(name: 'Emergency fund', target: 300000, saved: 123456, monthly: 10000, sort: 1);
   wc.repo.saveGoal(name: 'Open ended', target: 0, saved: 5000, monthly: 0, sort: 2);
-  wc.repo.saveGoal(name: 'Overdrawn', target: 100000, saved: -2550, monthly: 5000, sort: 3);
+  wc.repo.saveGoal(name: 'Overdrawn', target: 100000, saved: -2550, monthly: 0, sort: 3);
   wc.repo.saveGoal(name: 'Done', target: 40000, saved: 40000, monthly: 0, sort: 4);
   final now = DateTime.now().millisecondsSinceEpoch;
   wc.repo.applyRemote([
@@ -56,6 +56,11 @@ WalletController _busy() {
   wc.repo.addIou(person: 'Sam', direction: IouDirection.lent, amount: 4505, currency: 'EUR', date: '2026-10-10');
   wc.repo.addIou(person: 'Alex', direction: IouDirection.borrowed, amount: 3500, currency: 'EUR', date: '2026-10-11');
   wc.repo.addIou(person: 'Pat', direction: IouDirection.lent, amount: 3000, currency: 'USD', date: '2026-10-12');
+  wc.reload();
+  // The payday auto-save paid this period on reload; skipping it keeps the totals these tests were written with.
+  for (final g in wc.goals) {
+    if (g.monthly > 0) wc.repo.setGoalPeriodAmount(g.id, wc.effectiveSettings.periodStart!, 0);
+  }
   wc.reload();
   return wc;
 }

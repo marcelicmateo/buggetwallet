@@ -691,6 +691,82 @@ void main() {
         expect(wc.goals.single.saved, 10100);
       });
 
+      group('this pay period (PS)', () {
+        /// A wallet whose period started today, so the goal is paid once (+ monthly).
+        Goal paid(WalletController wc, {int saved = 5000, int monthly = 2000}) {
+          makeGoal(wc, saved: saved, monthly: monthly);
+          wc.startNewMonth(wc.today());
+          return wc.goals.single;
+        }
+
+        testWidgets('the field shows this period\'s amount; Skip sets it to 0 and the money comes back to spending', (tester) async {
+          final wc = _wc();
+          final g = paid(wc);
+          final before = wc.period().flexBudget;
+          expect(g.saved, 7000);
+          await _open(tester, GoalSheet(wc: wc, goal: g));
+          expect(tester.widget<TextField>(_field('This pay period')).controller!.text, '20');
+          await _tap(tester, find.byKey(const ValueKey('goalSkipPeriod')));
+          await _settle(tester);
+          expect(wc.goalPeriodAmounts()[g.id], 0);
+          expect(wc.goals.single.saved, 5000, reason: 'Put aside so far was not typed over');
+          expect(wc.period().flexBudget, before + 2000);
+        });
+
+        testWidgets('a lower amount in the field is this period only', (tester) async {
+          final wc = _wc();
+          final g = paid(wc);
+          await _open(tester, GoalSheet(wc: wc, goal: g));
+          await tester.enterText(_field('This pay period'), '5');
+          await save(tester);
+          await _settle(tester);
+          expect(wc.goalPeriodAmounts()[g.id], 500);
+          expect(wc.goals.single.saved, 5500);
+          expect(wc.goals.single.monthly, 2000);
+        });
+
+        testWidgets('core\'s refusal shows under the field and nothing is saved', (tester) async {
+          final wc = _wc();
+          final g = paid(wc, saved: 0);
+          wc.takeOutOfGoal(g.id, 2000);
+          await _open(tester, GoalSheet(wc: wc, goal: wc.goals.single));
+          await _tap(tester, find.byKey(const ValueKey('goalSkipPeriod')));
+          expect(find.byKey(const ValueKey('goalPeriodError')), findsOneWidget);
+          expect(wc.goalPeriodAmounts()[g.id], 2000);
+          await _settle(tester);
+        });
+
+        testWidgets('Take out: to spending, to another goal, and too much is refused', (tester) async {
+          final wc = _wc();
+          final g = paid(wc);
+          wc.repo.saveGoal(name: 'Bike', target: 50000, saved: 0, monthly: 0);
+          wc.reload();
+          final bike = wc.goals.firstWhere((x) => x.name == 'Bike');
+          final before = wc.period().flexBudget;
+          await _open(tester, GoalSheet(wc: wc, goal: g));
+          await _tap(tester, find.byKey(const ValueKey('goalTakeOut')));
+          await tester.enterText(find.byKey(const ValueKey('takeOutAmount')), '500');
+          await _tap(tester, find.byKey(const ValueKey('takeOutConfirm')));
+          expect(find.byKey(const ValueKey('takeOutError')), findsOneWidget);
+          await tester.enterText(find.byKey(const ValueKey('takeOutAmount')), '10');
+          await _tap(tester, find.byKey(const ValueKey('takeOutTo:spending')));
+          await _tap(tester, find.byKey(const ValueKey('takeOutConfirm')));
+          await _settle(tester);
+          expect(wc.goals.firstWhere((x) => x.id == g.id).saved, 6000);
+          expect(wc.period().flexBudget, before + 1000);
+
+          await _open(tester, GoalSheet(wc: wc, goal: wc.goals.firstWhere((x) => x.id == g.id)));
+          await _tap(tester, find.byKey(const ValueKey('goalTakeOut')));
+          await tester.enterText(find.byKey(const ValueKey('takeOutAmount')), '20');
+          await _tap(tester, find.byKey(ValueKey('takeOutTo:${bike.id}')));
+          await _tap(tester, find.byKey(const ValueKey('takeOutConfirm')));
+          await _settle(tester);
+          expect(wc.goals.firstWhere((x) => x.id == g.id).saved, 4000);
+          expect(wc.goals.firstWhere((x) => x.id == bike.id).saved, 2000);
+          expect(wc.period().flexBudget, before + 1000, reason: 'a move leaves spending money alone');
+        });
+      });
+
       testWidgets('Delete removes the goal once, even on a double tap', (tester) async {
         final wc = _wc();
         final o = await _open(tester, GoalSheet(wc: wc, goal: makeGoal(wc)));
