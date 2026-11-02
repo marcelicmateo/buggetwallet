@@ -31,7 +31,6 @@ class _ProjectScreenState extends State<ProjectScreen> {
   int? _year; // null = all years
   bool _reviewing = false;
 
-
   /// Rows of the review list before "Show more".
   int _shown = 25;
 
