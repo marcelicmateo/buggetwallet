@@ -105,8 +105,8 @@ void main() {
   group('Today columns', () {
     Rect rectOf(WidgetTester tester, String key) => tester.getRect(find.byKey(ValueKey(key)));
 
-    testWidgets('1280: four tile columns, the hero is one short row across all of them', (tester) async {
-      await pumpFull(tester, demoWallet(clock: pinnedNoon), 1.0, size: const Size(1280, 800));
+    testWidgets('1200: four tile columns, the hero is one short row across all of them', (tester) async {
+      await pumpFull(tester, demoWallet(clock: pinnedNoon), 1.0, size: const Size(1200, 800));
       final hero = rectOf(tester, 'heroTile');
       final tiles = find.byType(Tile);
       final rects = [for (var i = 0; i < tiles.evaluate().length; i++) tester.getRect(tiles.at(i))];

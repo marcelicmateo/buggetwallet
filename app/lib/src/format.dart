@@ -255,6 +255,15 @@ String shortDate(String iso) {
   return '${p[2]} ${_months[p[1] - 1]}';
 }
 
+/// "8.4 h": [tenths] of an hour (core's `hoursTenths`), one decimal in the current number style, grouped past 999.
+String hoursText(int tenths) => '${_group(tenths ~/ 10)}${numberStyle.decimal}${tenths % 10}\u00A0h';
+
+/// "Mon 2 Nov": the weekday and short date of [iso].
+String weekdayShortDate(String iso) {
+  final p = _ymd(iso);
+  return '${_weekdays[DateTime.utc(p[0], p[1], p[2]).weekday - 1].substring(0, 3)} ${shortDate(iso)}';
+}
+
 /// Whether [iso] is a real `YYYY-MM-DD` calendar date.
 bool isCalendarDate(String iso) {
   final m = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(iso);
