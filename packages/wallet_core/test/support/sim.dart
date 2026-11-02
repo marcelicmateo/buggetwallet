@@ -87,6 +87,26 @@ const entityTables = {
   'review': ('reviews', ['done', 'deleted']),
   'payee_alias': ('payee_aliases', ['alias', 'payee', 'deleted']),
   'fx_day': ('fx_days', ['cur', 'date', 'per_eur', 'source', 'deleted']),
+  'loan': (
+    'loans',
+    [
+      'name',
+      'principal',
+      'rate_bp',
+      'months',
+      'first_due',
+      'payment',
+      'account_id',
+      'payee_key',
+      'reference',
+      'goal_id',
+      'tag_id',
+      'closed_at',
+      'deleted',
+    ]
+  ),
+  'loanrate': ('loan_rates', ['loan_id', 'from_date', 'rate_bp', 'payment', 'deleted']),
+  'loancheck': ('loan_checks', ['loan_id', 'date', 'balance', 'deleted']),
 };
 
 const dataTables = [
@@ -109,7 +129,10 @@ const dataTables = [
   'iou_parts',
   'reviews',
   'payee_aliases',
-  'fx_days'
+  'fx_days',
+  'loans',
+  'loan_rates',
+  'loan_checks',
 ];
 
 /// Every row of the data tables (and the field clocks), in a stable order, as plain maps.

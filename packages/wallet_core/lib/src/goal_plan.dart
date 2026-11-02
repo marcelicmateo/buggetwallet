@@ -138,7 +138,8 @@ List<GoalLever> goalLevers(List<CategorizedTx> expanded, WalletSettings st, Cate
     final sorted = [...v]..sort();
     final over6 = 2 * last3 - 3 * (sorted[5] + sorted[6]); // 6 × (mean − median)
     final cut = over6 > 0 ? over6 ~/ 600 * 100 : 0;
-    if ((cut > 0 ? lever(GoalLeverKind.tag, e.key, cut) : null) case final l?) tags.add(l);
+    if (cut == 0) continue;
+    if (lever(GoalLeverKind.tag, e.key, cut) case final l?) tags.add(l);
   }
   final ins = [
     for (final r in incomes)

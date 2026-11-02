@@ -23,7 +23,7 @@ extension WalletRepoMeta on WalletRepo {
   void _migrate() {
     final from = int.tryParse(_meta('schema') ?? '') ?? 1;
     if (from >= WalletRepo.schemaVersion) return;
-    var replay = 0, rehinted = 0, perKey = 0;
+    var replay = 0, rehinted = 0, perKey = 0, loans = 0;
     if (!_created) {
       replay = db.select('SELECT COUNT(*) AS n FROM sync_cursor').first['n'] as int;
       db.execute('DELETE FROM sync_cursor');
@@ -36,6 +36,7 @@ extension WalletRepoMeta on WalletRepo {
         ]);
       }
       if (from < 8) perKey = WalletRepoSettings(this)._migratePerKeySettings();
+      if (from < 21) loans = WalletRepoLoans(this)._migrateLegacyLoan();
     }
     _setMeta('schema', '${WalletRepo.schemaVersion}');
     logEvent(_log, Level.INFO, 'repo.migrate', {
@@ -44,7 +45,8 @@ extension WalletRepoMeta on WalletRepo {
       'new': _created,
       'replayDevices': replay,
       'rehinted': rehinted,
-      'perKeySettings': perKey
+      'perKeySettings': perKey,
+      'legacyLoan': loans,
     });
     if (rehinted > 0) _reconcileLocal();
   }

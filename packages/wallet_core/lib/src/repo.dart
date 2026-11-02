@@ -15,6 +15,7 @@ import 'dates.dart';
 import 'ecb.dart';
 import 'hlc.dart';
 import 'import_preview.dart';
+import 'loans.dart';
 import 'logs.dart';
 import 'matching.dart';
 import 'models.dart';
@@ -37,6 +38,7 @@ part 'repo_changes.dart';
 part 'repo_blobs.dart';
 part 'repo_import.dart';
 part 'repo_iou.dart';
+part 'repo_loans.dart';
 part 'repo_match.dart';
 part 'repo_patch.dart';
 part 'repo_meta.dart';
@@ -201,7 +203,8 @@ class WalletRepo {
   /// export account), the synced entity `fx_day` (table `fx_days`, ECB rates the wallet needs) and the device-local,
   /// never-synced cache table `ecb_rates`; no data migration. Version 21 (ENG E6): `goals` gains the big-purchase
   /// fields `price`, `deposit_permille`, `costs_permille`, `loan_rate_bp`, `loan_months`, `compare_line_id`, `bought_at`,
-  /// `loan_id` (`goalPlan`); no data migration, older builds ignore them.
+  /// `loan_id` (`goalPlan`), the entities `loan`, `loanrate`, `loancheck`; the old `loan` setting becomes one loan row
+  /// (`Loan.legacyId`). Older builds ignore all of it.
   static const schemaVersion = 21;
 
   /// Device-local, set once by the schema-15 migration ([_migrateBlobTables]): the next sync runs PUT every cached file
@@ -568,7 +571,10 @@ class WalletRepo {
 
   /// The stored settings ([_readSettings]: per-key budget and pattern rows, legacy maps only as a fallback), with the
   /// wallet's ECB rates ([WalletSettings.ecb], `ecbRates`) for the money paths.
-  WalletSettings settings() => _readSettings(db, table: categoryTable(), ecb: ecbRates());
+  WalletSettings settings() {
+    final (lines, moved) = _loanPlanLines();
+    return _readSettings(db, table: categoryTable(), ecb: ecbRates(), loanLines: lines, legacyLoanMoved: moved);
+  }
 
   /// Built-ins plus the stored category rows ([categoryRows], deleted ones included: a row pointing at one falls back).
   CategoryTable categoryTable() => CategoryTable.from(categoryRows(includeDeleted: true));

@@ -221,6 +221,23 @@ export 'src/insights.dart'
         TagSlice,
         tagTrend;
 export 'src/loan.dart' show LoanLeft, loanLeft;
+export 'src/loans.dart'
+    show
+        Loan,
+        LoanCheck,
+        LoanCheckCols,
+        LoanCols,
+        LoanMonth,
+        LoanPaymentMatch,
+        loanPaymentOn,
+        loanPayments,
+        LoanRate,
+        LoanRateCols,
+        loanSchedule,
+        LoanState,
+        loanState,
+        loanWhatIf,
+        LoanWhatIf;
 export 'src/local_db.dart' show localDbKey, localDbKeyInfo, openKeyed, WalletDbKeyException;
 export 'src/logs.dart'
     show
@@ -313,6 +330,7 @@ export 'src/repo.dart'
         WalletRepoFx,
         WalletRepoImport,
         WalletRepoIou,
+        WalletRepoLoans,
         WalletRepoMatch,
         WalletRepoMeta,
         WalletRepoPatch,
