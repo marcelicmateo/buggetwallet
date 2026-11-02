@@ -377,8 +377,7 @@ amount alone; a matched row's main tag is the fixed "Loan" tag).
 - `goalLevers(...)`: main tags whose last 3-month mean exceeds their 12-month median (cut = the difference,
   rounded down to whole euros) and confirmed expected income not yet assigned; each with months saved. Read-only.
 - Plan: the fixed-costs total = rent + subscriptions + own fixed lines + Σ open loans' current payment (each loan
-  its own line). Migration: `WalletSettings.loan`/`loanEnd` → one `loan` row (principal/rate unknown = null;
-  `loanLeft` keeps working from `payment` + end month until they are filled in).
+  its own line). No automatic migration (lead 2026-11-02, after review: a late-upgrading device would overwrite newer edits): the old `loan` setting keeps counting until the owner converts it; `repo.convertLegacyLoan(...)` is one owner write that creates the row `loan:settings` (payment = the setting) and sets the setting to 0; `loanLeft` keeps reading the setting until then.
 - Tests: three published annuity examples (values as literals); 0 %; schedule ends at exactly 0; a balance check
   mid-way; a rate change mid-way; extra payment; Undo of "bought" restores everything; migration of the old single
   loan; a paid-off loan leaves the plan; a payment matched by reference with an amount that differs (the lender
