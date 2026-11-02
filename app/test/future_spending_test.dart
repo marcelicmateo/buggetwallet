@@ -821,12 +821,12 @@ void main() {
       expect(wc.period().reservedPlanned, reservedBefore);
     });
 
-    test('updatePlanned: clearCategory removes the category, null alone leaves it', () {
+    test('patching a planned cost: a null category clears it, leaving the column out keeps it', () {
       final wc = fw();
       final id = wc.plannedOpen().firstWhere((p) => p.title == 'Dentist').id;
-      wc.updatePlanned(id, title: 'Dentist');
+      wc.patchField(PlannedCols.entity, id, PlannedCols.title, 'Dentist');
       expect(wc.plannedOpen().firstWhere((p) => p.id == id).category, 'Health & care');
-      wc.updatePlanned(id, clearCategory: true);
+      wc.patchField(PlannedCols.entity, id, PlannedCols.category, null);
       expect(wc.plannedOpen().firstWhere((p) => p.id == id).category, isNull);
     });
 

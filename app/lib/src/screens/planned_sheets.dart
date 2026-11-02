@@ -8,6 +8,7 @@ import '../logging.dart';
 import '../theme.dart';
 import '../widgets/category_picker.dart';
 import '../widgets/common.dart';
+import '../widgets/field_editor.dart';
 import '../widgets/sheets.dart';
 
 /// "Calendar", "Bill" or "Planned by you": where a planned cost came from; "Warranty" and "Return by" for a bill's dates.
@@ -38,27 +39,18 @@ class PlannedFormSheet extends StatefulWidget {
 }
 
 class _PlannedFormSheetState extends State<PlannedFormSheet> {
-  late final TextEditingController _title = TextEditingController(text: widget.edit?.title ?? widget.suggestion?.title ?? '');
-  late final TextEditingController _amount = TextEditingController(text: _initialAmount());
-  late String _date = widget.edit?.date ?? widget.suggestion?.date ?? widget.date ?? widget.wc.today();
+  /// The draft the field editors keep (title, amount, date); the category is the dropdown below.
+  late final Map<Col, Object?> _draft = {
+    PlannedCols.title: widget.edit?.title ?? widget.suggestion?.title ?? '',
+    PlannedCols.amount: widget.edit?.amount ?? widget.suggestion?.suggested,
+    PlannedCols.date: widget.edit?.date ?? widget.suggestion?.date ?? widget.date ?? widget.wc.today(),
+  };
   late String? _category = widget.edit?.category ?? widget.suggestion?.category;
   String? _error;
 
-  String _initialAmount() {
-    final a = widget.edit?.amount ?? widget.suggestion?.suggested;
-    return a == null ? '' : centsToFieldText(a);
-  }
-
-  @override
-  void dispose() {
-    _title.dispose();
-    _amount.dispose();
-    super.dispose();
-  }
-
   void _save() {
-    final title = _title.text.trim();
-    final amount = parseMoney(_amount.text);
+    final title = (_draft[PlannedCols.title] as String).trim(), date = _draft[PlannedCols.date] as String;
+    final amount = _draft[PlannedCols.amount] as int?;
     if (title.isEmpty) {
       setState(() => _error = 'Give it a name, like "Car insurance".');
       return;
@@ -72,57 +64,48 @@ class _PlannedFormSheetState extends State<PlannedFormSheet> {
       // The category is sent only when the owner changed it: the one shown is the resolved one, so a cost whose stored category was
       // deleted must not get the fallback written back by an edit of something else.
       final old = widget.edit!.category;
-      wc.updatePlanned(widget.edit!.id,
-          title: title,
-          date: _date,
-          amount: amount,
-          category: _category != old ? _category : null,
-          clearCategory: _category == null && old != null);
+      final refusal = wc.patchFields(PlannedCols.entity, widget.edit!.id, {
+        PlannedCols.title: title,
+        PlannedCols.date: date,
+        PlannedCols.amount: amount,
+        if (_category != old) PlannedCols.category: _category,
+      });
+      if (refusal != null) return setState(() => _error = refusal);
     } else if (widget.suggestion != null) {
-      wc.confirmSuggestion(widget.suggestion!, amount: amount, title: title, date: _date, category: _category);
+      wc.confirmSuggestion(widget.suggestion!, amount: amount, title: title, date: date, category: _category);
     } else {
-      wc.addPlannedCost(title: title, date: _date, amount: amount, category: _category);
+      wc.addPlannedCost(title: title, date: date, amount: amount, category: _category);
     }
     Navigator.pop(context, 'saved');
   }
 
   @override
   Widget build(BuildContext context) {
-    final cur = widget.wc.currency;
     final editing = widget.edit != null;
-    final today = widget.wc.today();
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Heading(editing ? 'Change planned cost' : 'Planned cost'),
       const SizedBox(height: 12),
-      TextField(
-        key: const ValueKey('plannedTitle'),
-        controller: _title,
-        autofocus: !editing,
-        textCapitalization: TextCapitalization.sentences,
-        decoration: const InputDecoration(labelText: 'What', hintText: 'Car insurance'),
-      ),
-      const SizedBox(height: 12),
-      MoneyField(
-        fieldKey: const ValueKey('plannedAmount'),
-        controller: _amount,
-        style: numStyle.copyWith(fontSize: BwType.displaySize, fontWeight: FontWeight.w500),
-        decoration: InputDecoration(labelText: 'Amount', suffixText: currencySymbol(cur), hintText: amountHint),
-      ),
-      const SizedBox(height: 12),
-      DateField(
-        key: const ValueKey('plannedDate'),
-        label: 'Date',
-        value: _date,
-        onPick: () async {
-          final d = await showDatePicker(
-              context: context,
-              initialDate: parseIso(_date),
-              firstDate: parseIso(addDays(today, -60)),
-              lastDate: parseIso(addDays(today, 730)));
-          if (d != null) setState(() => _date = isoDate(d));
-        },
-      ),
-      const SizedBox(height: 12),
+      for (final c in <Col>[PlannedCols.title, PlannedCols.amount, PlannedCols.date]) ...[
+        FieldEditor(c,
+            key: ValueKey(c),
+            id: 'planned${fieldId(c).replaceRange(0, 1, fieldId(c)[0].toUpperCase())}',
+            label: c == PlannedCols.title ? 'What' : null,
+            hint: c == PlannedCols.title ? 'Car insurance' : null,
+            autofocus: c == PlannedCols.title && !editing,
+            value: _draft[c],
+            today: widget.wc.today(),
+            autoSave: true,
+            lengths: false,
+            large: c == PlannedCols.amount,
+            capitalize: TextCapitalization.sentences, onSave: (v) {
+          setState(() {
+            _draft[c] = v;
+            _error = null;
+          });
+          return null;
+        }),
+        const SizedBox(height: 12),
+      ],
       DropdownButtonFormField<String?>(
         key: const ValueKey('plannedCategory'),
         isExpanded: true,

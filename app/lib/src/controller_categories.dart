@@ -20,13 +20,13 @@ extension CategoriesDb on WalletController {
   }
 
   Future<void> renameCategory(String id, String name) async {
-    await repo.updateCategory(id, name: name);
+    repo.patch(CategoryCols.entity, id, {CategoryCols.name: name});
     logEvent(_catLog, Level.INFO, 'categories.rename', {'builtIn': categories.containsKey(id)});
     _changed();
   }
 
   Future<void> setCategoryHidden(String id, bool hidden) async {
-    await repo.updateCategory(id, hidden: hidden);
+    repo.patch(CategoryCols.entity, id, {CategoryCols.hidden: hidden});
     logEvent(_catLog, Level.INFO, 'categories.hide', {'hidden': hidden, 'builtIn': categories.containsKey(id)});
     _changed();
   }
@@ -58,7 +58,7 @@ extension CategoriesDb on WalletController {
     for (var k = 0; k < order.length; k++) {
       final pos = distinct ? slots[k] : base + k;
       if (t.position(order[k]) != pos) {
-        await repo.updateCategory(order[k], position: pos);
+        repo.patch(CategoryCols.entity, order[k], {CategoryCols.position: pos});
         written++;
       }
     }

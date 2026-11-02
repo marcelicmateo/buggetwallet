@@ -90,12 +90,6 @@ extension IouDb on WalletController {
     return id;
   }
 
-  /// Changes an IOU (see core's `updateIou`; [clearNote] / [clearTx] remove those fields).
-  void updateIou(String id, {String? person, IouDirection? direction, int? amount, String? date, String? note, bool clearNote = false}) {
-    repo.updateIou(id, person: person, direction: direction, amount: amount, date: date, note: note, clearNote: clearNote);
-    _changed();
-  }
-
   void closeIou(String id, {bool closed = true}) {
     repo.closeIou(id, closed: closed);
     _changed();

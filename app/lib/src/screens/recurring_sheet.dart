@@ -8,6 +8,7 @@ import '../logging.dart';
 import '../theme.dart';
 import '../widgets/category_picker.dart';
 import '../widgets/common.dart';
+import '../widgets/field_editor.dart';
 import '../widgets/sheets.dart';
 
 /// How often a bill comes, in words: "every week", "every 2 weeks", "monthly", "every 3 months", "yearly" ("every 45 days" for a custom one).
@@ -82,15 +83,19 @@ class RecurringFormSheet extends StatefulWidget {
 class _RecurringFormSheetState extends State<RecurringFormSheet> {
   RecurringBill? get _b => widget.edit;
   bool get _income => widget.income || (_b?.isIncome ?? false);
-  late final TextEditingController _name = TextEditingController(text: _b?.label ?? '');
-  late final TextEditingController _amount = TextEditingController(text: _b == null ? '' : centsToFieldText(_b!.expectedAmount));
-  late final TextEditingController _min = TextEditingController(text: _b?.hasRange == true ? centsToFieldText(_b!.minAmount!) : '');
-  late final TextEditingController _max = TextEditingController(text: _b?.hasRange == true ? centsToFieldText(_b!.maxAmount!) : '');
+
+  /// The draft the field editors keep; Save writes it (a new bill through `addRecurringBill`, an old one through one `patch`).
+  late final Map<Col, Object?> _draft = {
+    RecurringCols.label: _b?.label ?? '',
+    RecurringCols.expectedAmount: _b?.expectedAmount,
+    RecurringCols.minAmount: _b?.hasRange == true ? _b!.minAmount : null,
+    RecurringCols.maxAmount: _b?.hasRange == true ? _b!.maxAmount : null,
+    RecurringCols.nextDue: _b?.nextDue.isNotEmpty == true && isCalendarDate(_b!.nextDue) ? _b!.nextDue : widget.wc.today(),
+  };
   late final TextEditingController _count = TextEditingController(text: _countText());
   late bool _range = _b?.hasRange ?? false;
   late bool _ends = _b?.endsOn != null;
   late int _days = _b?.intervalDays ?? RecurringPeriod.monthly.days;
-  late String _due = _b?.nextDue.isNotEmpty == true && isCalendarDate(_b!.nextDue) ? _b!.nextDue : widget.wc.today();
   late String? _category = _b?.category;
   late final List<RulePayee> _payees = _income ? widget.wc.incomePayees() : widget.wc.recentPayees();
   String? _payee;
@@ -105,10 +110,6 @@ class _RecurringFormSheetState extends State<RecurringFormSheet> {
 
   @override
   void dispose() {
-    _name.dispose();
-    _amount.dispose();
-    _min.dispose();
-    _max.dispose();
     _count.dispose();
     super.dispose();
   }
@@ -117,18 +118,18 @@ class _RecurringFormSheetState extends State<RecurringFormSheet> {
 
   void _save() {
     final wc = widget.wc;
-    int amount;
-    int? lo, hi;
+    final d = _draft;
+    final int amount;
+    final lo = d[RecurringCols.minAmount] as int?, hi = d[RecurringCols.maxAmount] as int?;
     if (_range) {
-      lo = parseMoney(_min.text);
-      hi = parseMoney(_max.text);
       if (lo == null || hi == null) return _fail('Enter both ends of the range, like 40 and 70.');
       amount = hi;
     } else {
-      final a = parseMoney(_amount.text);
+      final a = d[RecurringCols.expectedAmount] as int?;
       if (a == null) return _fail(invalidAmountMessage);
       amount = a;
     }
+    final due = d[RecurringCols.nextDue] as String, name = d[RecurringCols.label] as String;
     final b = _b;
     // Editing: a plan whose count was blank when the sheet opened (finished, or an end that does not read) and is still blank keeps its stored end.
     final keepEnd = b != null && b.endsOn != null && _ends && _count.text.trim().isEmpty && _openCount.isEmpty;
@@ -139,61 +140,75 @@ class _RecurringFormSheetState extends State<RecurringFormSheet> {
     }
     final category = _category;
     if (category == null) return _fail(_income ? 'Pick a main tag for the income.' : 'Pick a main tag for the bill.');
-    try {
-      if (b == null) {
+    if (b == null) {
+      try {
         wc.addRecurringBill(
-            label: _name.text,
+            label: name,
             category: category,
             amount: amount,
-            minAmount: lo,
-            maxAmount: hi,
+            minAmount: _range ? lo : null,
+            maxAmount: _range ? hi : null,
             intervalDays: _days,
-            firstDue: _due,
+            firstDue: due,
             payee: _payee,
             instalments: _income ? null : count,
             direction: _income ? RecurringBill.directionIn : RecurringBill.directionOut);
-      } else {
-        // The last due date is worked out (calendar months for a monthly bill) only when the count, the due date or the interval changed.
-        final endChanged =
-            count != null && (_count.text.trim() != _openCount || _due != b.nextDue || _days != b.intervalDays || b.endsOn == null);
-        final newEnd = endChanged ? RecurringBill.lastDueFor(_due, _days, count) : null;
-        wc.updateRecurringBill(b.id,
-            label: _name.text.trim() != b.label ? _name.text : null,
-            category: category != b.category ? category : null,
-            amount: amount,
-            minAmount: lo,
-            maxAmount: hi,
-            clearRange: !_range && (b.minAmount != null || b.maxAmount != null),
-            intervalDays: _days,
-            nextDue: _due,
-            endsOn: newEnd != b.endsOn ? newEnd : null,
-            clearEnd: !_ends && b.endsOn != null);
+      } on ArgumentError catch (e) {
+        return _fail('${e.message}');
       }
-    } on ArgumentError catch (e) {
-      return _fail('${e.message}');
+    } else {
+      // The last due date is worked out (calendar months for a monthly bill) only when the count, the due date or the interval changed.
+      final endChanged =
+          count != null && (_count.text.trim() != _openCount || due != b.nextDue || _days != b.intervalDays || b.endsOn == null);
+      final newEnd = endChanged ? RecurringBill.lastDueFor(due, _days, count) : null;
+      final refusal = wc.updateRecurringBill(b.id, {
+        if (name.trim() != b.label) RecurringCols.label: name,
+        if (category != b.category) RecurringCols.category: category,
+        RecurringCols.expectedAmount: amount,
+        // The range is written as a pair; both null clears it.
+        RecurringCols.minAmount: _range ? lo : null,
+        RecurringCols.maxAmount: _range ? hi : null,
+        RecurringCols.intervalDays: _days,
+        RecurringCols.nextDue: due,
+        if (!_ends && b.endsOn != null)
+          RecurringCols.endsOn: null
+        else if (newEnd != null && newEnd != b.endsOn)
+          RecurringCols.endsOn: newEnd,
+      });
+      if (refusal != null) return _fail(refusal);
     }
     Navigator.pop(context, 'saved');
   }
 
+  Widget _field(Col c, String id, {String? label, String? hint, bool first = false, bool large = false}) => FieldEditor(c,
+          key: ValueKey(c),
+          id: id,
+          label: label,
+          hint: hint,
+          autofocus: first,
+          value: _draft[c],
+          today: widget.wc.today(),
+          autoSave: true,
+          lengths: false,
+          large: large,
+          capitalize: TextCapitalization.sentences, onSave: (v) {
+        setState(() {
+          _draft[c] = v;
+          _error = null;
+        });
+        return null;
+      });
+
   @override
   Widget build(BuildContext context) {
     final wc = widget.wc;
-    final cur = wc.currency;
     final editing = _b != null;
-    final today = wc.today();
     final selected = RecurringPeriod.of(_days);
     final income = _income;
     return Column(key: ValueKey(income ? 'incomeSheet' : 'recurringSheet'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Heading(income ? (editing ? 'Change income' : 'Add income') : (editing ? 'Change bill' : 'Add bill')),
       const SizedBox(height: 12),
-      TextField(
-        key: const ValueKey('recurringName'),
-        controller: _name,
-        autofocus: !editing,
-        maxLength: 40,
-        textCapitalization: TextCapitalization.sentences,
-        decoration: InputDecoration(labelText: 'Name', hintText: income ? 'Side job' : 'Car insurance', counterText: ''),
-      ),
+      _field(RecurringCols.label, 'recurringName', label: 'Name', hint: income ? 'Side job' : 'Car insurance', first: !editing),
       const SizedBox(height: 12),
       DropdownButtonFormField<String?>(
         key: const ValueKey('recurringCategory'),
@@ -214,24 +229,11 @@ class _RecurringFormSheetState extends State<RecurringFormSheet> {
         onChanged: (v) => setState(() => _range = v),
       ),
       if (_range) ...[
-        MoneyField(
-          fieldKey: const ValueKey('recurringMin'),
-          controller: _min,
-          decoration: InputDecoration(labelText: 'From', suffixText: currencySymbol(cur), hintText: amountHint),
-        ),
+        _field(RecurringCols.minAmount, 'recurringMin', label: 'From'),
         const SizedBox(height: 12),
-        MoneyField(
-          fieldKey: const ValueKey('recurringMax'),
-          controller: _max,
-          decoration: InputDecoration(labelText: 'To', suffixText: currencySymbol(cur), hintText: amountHint),
-        ),
+        _field(RecurringCols.maxAmount, 'recurringMax', label: 'To'),
       ] else
-        MoneyField(
-          fieldKey: const ValueKey('recurringAmount'),
-          controller: _amount,
-          style: numStyle.copyWith(fontSize: BwType.displaySize, fontWeight: FontWeight.w500),
-          decoration: InputDecoration(labelText: 'Amount', suffixText: currencySymbol(cur), hintText: amountHint),
-        ),
+        _field(RecurringCols.expectedAmount, 'recurringAmount', large: true),
       const SizedBox(height: 12),
       const Eyebrow('How often'),
       const SizedBox(height: 6),
@@ -247,19 +249,7 @@ class _RecurringFormSheetState extends State<RecurringFormSheet> {
           ChoiceChip(key: const ValueKey('recurringPeriod:custom'), label: Text('Every $_days days'), selected: true, onSelected: (_) {}),
       ]),
       const SizedBox(height: 12),
-      DateField(
-        key: const ValueKey('recurringDue'),
-        label: editing ? 'Next due' : 'First due',
-        value: _due,
-        onPick: () async {
-          final d = await showDatePicker(
-              context: context,
-              initialDate: parseIso(_due),
-              firstDate: parseIso(addDays(today, -400)),
-              lastDate: parseIso(addDays(today, 365 * 5)));
-          if (d != null) setState(() => _due = isoDate(d));
-        },
-      ),
+      _field(RecurringCols.nextDue, 'recurringDue', label: editing ? 'Next due' : 'First due'),
       const SizedBox(height: 12),
       if (editing)
         InputDecorator(
