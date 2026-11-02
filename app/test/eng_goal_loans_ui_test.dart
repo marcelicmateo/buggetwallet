@@ -53,6 +53,12 @@ String _loan(WalletController wc, String first, {List<String> paid = const []}) 
   return id;
 }
 
+/// Answers "Loan payment?" yes for the oldest ask of [loanId] (later rows of the same lender then match silently).
+void _confirmFirst(WalletController wc, String loanId) {
+  final ask = wc.loanAsks(loanId).first;
+  expect(wc.confirmLoanPayment(loanId, ask.payment.txId), isNull);
+}
+
 Future<void> _settle(WidgetTester t) async {
   await t.pump();
   await t.pump(const Duration(milliseconds: 400));
@@ -236,6 +242,7 @@ void main() {
     _test('the numbers are loanSchedule and loanState', (t) async {
       final wc = _wallet();
       final id = _loan(wc, '2026-08-15', paid: ['2026-08-15', '2026-09-15']);
+      _confirmFirst(wc, id);
       await pumpApp(t, LoanScreen(wc: wc, loanId: id), size: _big);
       final l = wc.loanOf(id)!;
       final sched = loanSchedule(l, const [], const []);
@@ -252,6 +259,40 @@ void main() {
       expect(sched.last.balance, 0);
       expect(_key('loanChart'), findsOneWidget);
       expect(_key('loanPay:${wc.loanView(id)!.payments.first.txId}'), findsOneWidget);
+    });
+
+    _test('Loan payment?: the first match asks; Yes matches it, then Unlink and Undo', (t) async {
+      final wc = _wallet();
+      final id = _loan(wc, '2026-09-15', paid: ['2026-09-15']);
+      final tx = wc.loanAsks(id).single.payment.txId;
+      expect(wc.loanView(id)!.payments, isEmpty, reason: 'not matched before the owner says yes');
+      await pumpApp(t, LoanScreen(wc: wc, loanId: id), size: _big);
+      expect(find.text('Loan payment?'), findsOneWidget);
+      await t.tap(_key('loanAskYes:$tx'));
+      await _settle(t);
+      expect(wc.loanView(id)!.payments.single.txId, tx);
+      expect(_key('loanAsk:$tx'), findsNothing);
+      expect(_key('loanPay:$tx'), findsOneWidget);
+      await t.tap(_key('loanUnlink:$tx'));
+      await _settle(t);
+      expect(wc.loanView(id)!.payments, isEmpty);
+      expect(_key('loanPay:$tx'), findsNothing);
+      await t.pump(const Duration(seconds: 1)); // the first toast leaves before the next one slides in
+      await t.tap(_key('toastUndo'));
+      await _settle(t);
+      expect(wc.loanView(id)!.payments.single.txId, tx);
+    });
+
+    _test('Loan payment? No: the row is never matched to the loan again', (t) async {
+      final wc = _wallet();
+      final id = _loan(wc, '2026-09-15', paid: ['2026-09-15']);
+      final tx = wc.loanAsks(id).single.payment.txId;
+      await pumpApp(t, LoanScreen(wc: wc, loanId: id), size: _big);
+      await t.tap(_key('loanAskNo:$tx'));
+      await _settle(t);
+      expect(wc.loanAsks(id), isEmpty);
+      expect(wc.loanView(id)!.payments, isEmpty);
+      expect(_key('loanAsk:$tx'), findsNothing);
     });
 
     _test('"Not seen yet" shows once a month is more than 3 days past due', (t) async {
@@ -273,6 +314,8 @@ void main() {
       wc.repo.importBatch(
           ImportBatch(source: 'pbz', transactions: [syntheticTx('2026-09-15', -50000, 'Trajni nalog', 'LENDER SYNTHETIC 123')]));
       wc.reload();
+      await pumpApp(t, LoanScreen(wc: wc, loanId: id), size: _big);
+      _confirmFirst(wc, id);
       await pumpApp(t, LoanScreen(wc: wc, loanId: id), size: _big);
       expect(find.text('Amount changed'), findsOneWidget);
     });
@@ -335,6 +378,7 @@ void main() {
       wc.repo.importBatch(
           ImportBatch(source: 'pbz', transactions: [syntheticTx('2026-09-16', -2000, 'POS plaćanje', 'OTHER SHOP SYNTHETIC')]));
       wc.reload();
+      _confirmFirst(wc, id);
       final paid = wc.wholeTxs.firstWhere((c) => c.tx.description.contains('LENDER'));
       final other = wc.wholeTxs.firstWhere((c) => c.tx.description.contains('OTHER SHOP'));
       expect(wc.loanOfPayment(paid.tx.id)!.id, id);

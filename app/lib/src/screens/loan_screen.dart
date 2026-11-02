@@ -182,8 +182,9 @@ class _LoanScreenState extends State<LoanScreen> {
   }
 
   Widget _payments(BuildContext context, LoanView v) {
-    final cur = wc.currency, l = v.loan;
+    final cur = wc.currency, l = v.loan, c = context.c;
     final known = (l.payeeKey ?? '').isNotEmpty || (l.reference ?? '').length >= loanReferenceMin;
+    final asks = wc.loanAsks(l.id);
     final recent = v.payments.reversed.take(12).toList();
     return Panel(key: const ValueKey('loanPayments'), children: [
       const Text('Payments', style: BwType.heading),
@@ -198,22 +199,89 @@ class _LoanScreenState extends State<LoanScreen> {
                 child: const Text('Add the lender'))),
       ] else ...[
         if (v.schedule.isNotEmpty) Muted('${v.state.paidMonths} of ${v.schedule.length} payments found', key: const ValueKey('loanFound')),
-        if (v.state.notSeen.isNotEmpty || recent.isNotEmpty)
+        for (final a in asks) _ask(context, l, a),
+        if (v.state.notSeen.isNotEmpty)
           DashRows(rows: [
             for (final d in v.state.notSeen.reversed.take(6))
               DashRowData(key: ValueKey('notSeen:$d'), title: 'Due ${shortDateOrRaw(d)}', chip: const StateChip.date('Not seen yet')),
+          ]),
+        if (recent.isNotEmpty)
+          Column(children: [
             for (final p in recent)
-              DashRowData(
-                  key: ValueKey('loanPay:${p.txId}'),
-                  title: shortDateOrRaw(p.date),
-                  amount: moneyExact(p.amount, cur),
-                  chip: p.amountChanged ? const StateChip.over(text: 'Amount changed') : null),
+              RuledRow(
+                key: ValueKey('loanPay:${p.txId}'),
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: SplitRow(
+                  start: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(shortDateOrRaw(p.date), style: const TextStyle(fontSize: BwType.bodySize)),
+                    if (p.amountChanged) const Padding(padding: EdgeInsets.only(top: 2), child: StateChip.over(text: 'Amount changed')),
+                  ]),
+                  end: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Flexible(child: Text(moneyExact(p.amount, cur), textAlign: TextAlign.end, style: numStyle)),
+                    IconButton(
+                        key: ValueKey('loanUnlink:${p.txId}'),
+                        icon: Icon(Icons.link_off, size: 20, color: c.ink2),
+                        tooltip: 'Unlink this payment',
+                        onPressed: () => _unlink(l, p)),
+                  ]),
+                ),
+              ),
           ])
-        else
+        else if (v.state.notSeen.isEmpty && asks.isEmpty)
           const Muted('No payment found yet.', key: ValueKey('loanNoPayments')),
         const Muted("Found by the lender's name or reference."),
       ],
     ]);
+  }
+
+  /// "Loan payment?": a bank row the lender's name or reference finds, not answered yet. Yes (the loan, when several fit) or No.
+  Widget _ask(BuildContext context, Loan l, ({LoanPaymentMatch payment, List<Loan> loans}) a) {
+    final c = context.c, p = a.payment, cur = wc.currency;
+    final several = a.loans.length > 1;
+    final messenger = ScaffoldMessenger.of(context);
+    final wide = layoutOf(context) != LayoutSize.compact, accessible = MediaQuery.accessibleNavigationOf(context);
+    void yes(Loan to) {
+      final err = wc.confirmLoanPayment(to.id, p.txId);
+      toastOn(messenger, err ?? 'Marked as a payment on ${to.name}',
+          wide: wide,
+          accessible: accessible,
+          actionLabel: err == null ? 'Undo' : null,
+          onAction: err == null ? () => wc.unlinkLoanPayment([to.id], p.txId) : null);
+    }
+
+    return Container(
+      key: ValueKey('loanAsk:${p.txId}'),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: c.accentSoft, borderRadius: BorderRadius.circular(12), border: Border.all(color: c.accentSoftLine)),
+      child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: gapped([
+            const Text('Loan payment?', style: TextStyle(fontWeight: FontWeight.w700)),
+            Text('${shortDateOrRaw(p.date)} · ${moneyExact(p.amount, cur)}', style: numStyle),
+            if (several) Muted('It could be a payment on ${a.loans.map((x) => x.name).join(' or ')}.'),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              for (final to in several ? a.loans : [l])
+                FilledButton(
+                    key: ValueKey(several ? 'loanAskYes:${p.txId}:${to.id}' : 'loanAskYes:${p.txId}'),
+                    onPressed: () => yes(to),
+                    child: Text(several ? 'Yes, ${to.name}' : 'Yes')),
+              OutlinedButton(
+                  key: ValueKey('loanAskNo:${p.txId}'),
+                  onPressed: () {
+                    final err = wc.unlinkLoanPayment([for (final x in a.loans) x.id], p.txId);
+                    toastOn(messenger, err ?? 'Not a loan payment', wide: wide, accessible: accessible);
+                  },
+                  child: const Text('No')),
+            ]),
+          ], gap: 6)),
+    );
+  }
+
+  /// Unlink a matched payment; the toast's Undo confirms it again.
+  void _unlink(Loan l, LoanPaymentMatch p) {
+    final err = wc.unlinkLoanPayment([l.id], p.txId);
+    toast(context, err ?? 'Unlinked',
+        actionLabel: err == null ? 'Undo' : null, onAction: err == null ? () => wc.confirmLoanPayment(l.id, p.txId) : null);
   }
 
   Widget _check_(BuildContext context, LoanView v) {

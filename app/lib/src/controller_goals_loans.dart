@@ -229,8 +229,8 @@ extension GoalsLoans on WalletController {
     if (l == null) return null;
     final rates = repo.loanRates(id), checks = repo.loanChecks(id);
     final schedule = loanSchedule(l, rates, checks);
-    final payments = loanPayments(l, rates, checks, [for (final c in wholeTxs) c.tx], currency: currency);
-    return LoanView(l, rates, checks, schedule, payments, loanState(schedule, [for (final p in payments) p.date], today()));
+    // Which rows pay the loan is core's decision (confirmed asks and silent matches), not a text match here.
+    return LoanView(l, rates, checks, schedule, repo.loanMatchedPayments(id), loanState(schedule, repo.loanMatchedDates(id), today()));
   }
 
   /// `YYYY-MM` of the loan's last scheduled payment; null while its amount, length or first payment date is unknown.
@@ -239,13 +239,41 @@ extension GoalsLoans on WalletController {
     return s.isEmpty ? null : monthOf(s.last.due);
   }
 
-  /// The loan whose payments (found by lender or reference) include payment [txId]; null when none.
+  /// The loan whose matched payments include payment [txId]; null when none.
   Loan? loanOfPayment(String txId) {
-    final rows = [for (final c in wholeTxs) c.tx];
     for (final l in repo.loans()) {
-      if ((l.payeeKey ?? '').isEmpty && (l.reference ?? '').length < loanReferenceMin) continue;
-      if (loanPayments(l, repo.loanRates(l.id), repo.loanChecks(l.id), rows, currency: currency).any((m) => m.txId == txId)) return l;
+      if (repo.loanMatchedPayments(l.id).any((m) => m.txId == txId)) return l;
     }
+    return null;
+  }
+
+  /// The "Loan payment?" asks that name loan [loanId] (oldest first); each lists every loan the row may belong to.
+  List<({LoanPaymentMatch payment, List<Loan> loans})> loanAsks(String loanId) => [
+        for (final a in repo.pendingLoanPayments())
+          if (a.loans.any((l) => l.id == loanId)) a
+      ];
+
+  /// "Loan payment?" yes (or Undo of [unlinkLoanPayment]): row [txId] pays loan [loanId]. Returns core's refusal text or null.
+  String? confirmLoanPayment(String loanId, String txId) {
+    try {
+      repo.confirmLoanPayment(loanId, txId);
+    } on ArgumentError catch (e) {
+      return '${e.message}';
+    }
+    _changed();
+    return null;
+  }
+
+  /// "Loan payment?" no, or Unlink: row [txId] is not a payment of the loans [loanIds]. Returns core's refusal text or null.
+  String? unlinkLoanPayment(Iterable<String> loanIds, String txId) {
+    try {
+      for (final id in loanIds) {
+        repo.unlinkLoanPayment(id, txId);
+      }
+    } on ArgumentError catch (e) {
+      return '${e.message}';
+    }
+    _changed();
     return null;
   }
 
