@@ -54,6 +54,32 @@ void main() {
       expect(usual(10000, 20000, months: 5), isEmpty);
     });
 
+    test('a split payment counts each part under its own main tag', () {
+      const t = Tx(id: 'split', source: 'pbz', date: '2026-11-03', amount: -30000, description: 'POS LIDL');
+      final fs = only(
+          FindingKind.aboveUsual,
+          run([
+            ...monthly('2025-11', 12, 10000),
+            ...monthly('2025-11', 12, 10000, 'Eating out'),
+            const CategorizedTx(t, 'Groceries', BudgetKind.flex, amount: -15000, part: 0, parts: 2),
+            const CategorizedTx(t, 'Eating out', BudgetKind.flex, amount: -15000, part: 1, parts: 2),
+          ]));
+      expect(fs.map((f) => (f.subjectKey, f.ratioPermille)), [('Eating out', 1500), ('Groceries', 1500)]);
+    });
+
+    test('a hand-added entry matched away by its bank row counts once', () {
+      final fs = only(
+          FindingKind.aboveUsual,
+          run([
+            ...monthly('2025-11', 12, 10000),
+            const CategorizedTx(Tx(id: 'm', source: 'manual', date: '2026-11-02', amount: -14000, manual: true, matchedTo: 'b'),
+                'Groceries', BudgetKind.flex),
+            const CategorizedTx(
+                Tx(id: 'b', source: 'pbz', date: '2026-11-03', amount: -14000, description: 'POS LIDL'), 'Groceries', BudgetKind.flex),
+          ]));
+      expect(fs.single.ratioPermille, 1400);
+    });
+
     test('refunds subtracted; transfers, IOU-linked rows and other currencies count nowhere', () {
       final base = monthly('2025-11', 12, 10000);
       expect(only(FindingKind.aboveUsual, run([...base, row('2026-11-03', -14000, 'Groceries')])), hasLength(1));
@@ -78,7 +104,7 @@ void main() {
 
     test('max ÷ min weekday mean ≥ 1.6: at fires, below does not', () {
       final f = week(1600).single;
-      expect((f.id, f.ratioPermille, f.n, f.from, f.to), ('weeklyRhythm:all:2026-10', 1600, 12, '2025-11-01', '2026-10-31'));
+      expect((f.id, f.ratioPermille, f.n, f.from, f.to), ('weeklyRhythm:all', 1600, 12, '2025-11-01', '2026-10-31'));
       expect(f.series, [for (var w = 1; w <= 7; w++) ('$w', w == 6 ? 1600 : 1000)]);
       expect(week(1599), isEmpty);
       expect(week(3000).single.ratioPermille, 3000);
@@ -110,7 +136,7 @@ void main() {
     test('|r| ≥ 0.5 by integer sums: exactly 0.5 fires, a little weaker does not', () {
       final f = pair(100).single;
       expect((f.id, f.subjectKey, f.otherKey, f.strengthPermille, f.n),
-          ('movesTogether:Eating out:Groceries:2026-10', 'Eating out', 'Groceries', 500, 12));
+          ('movesTogether:Eating out:Groceries', 'Eating out', 'Groceries', 500, 12));
       expect(f.series.length, 12);
       expect(f.otherSeries.length, 12);
       expect(pair(101), isEmpty);
@@ -140,32 +166,56 @@ void main() {
         nextDue: '2026-12-05',
         status: status,
         direction: direction);
-    List<CategorizedTx> rows(String from, int months, int first, int last) => [
-          for (var k = 0; k < months; k++)
-            row('${plus(from, k)}-05', -(k == months - 1 ? last : first), 'Bills & subscriptions', desc: desc)
-        ];
 
-    test('latest full month ≥ 125 % of the earliest, 12 months before: at fires, below does not', () {
-      final f = only(FindingKind.slowCreep, run(rows('2025-10', 13, 1000, 1250), bills: [bill()])).single;
-      expect((f.id, f.ratioPermille, f.n, f.from, f.to), ('slowCreep:rec:test:2026-10', 1250, 13, '2025-10-01', '2026-10-31'));
-      expect(only(FindingKind.slowCreep, run(rows('2025-10', 13, 1000, 1249), bills: [bill()])), isEmpty);
+    /// One payment on the 5th of [months] months from [from]: [first] cents, the last [lastN] months [last].
+    List<CategorizedTx> rows(String from, int months, int first, int last, {int lastN = 3}) => [
+          for (var k = 0; k < months; k++)
+            row('${plus(from, k)}-05', -(k >= months - lastN ? last : first), 'Bills & subscriptions', desc: desc)
+        ];
+    List<Finding> creep(List<CategorizedTx> r, [RecurringBill? b]) => only(FindingKind.slowCreep, run(r, bills: [b ?? bill()]));
+
+    test('median of the last 3 full months ≥ 125 % of the first 3, 12 months before: at fires, below does not', () {
+      final f = creep(rows('2025-08', 15, 1000, 1250)).single;
+      expect((f.id, f.ratioPermille, f.n, f.from, f.to), ('slowCreep:rec:test:2026-10', 1250, 15, '2025-08-01', '2026-10-31'));
+      expect(creep(rows('2025-08', 15, 1000, 1249)), isEmpty);
     });
 
-    test('11 months apart, the running month, other statuses, an income and no payee never fire', () {
-      expect(only(FindingKind.slowCreep, run(rows('2025-11', 12, 1000, 2000), bills: [bill()])), isEmpty);
-      // The rise lands this month (not full yet): the latest full month is the old amount.
-      expect(only(FindingKind.slowCreep, run(rows('2025-10', 14, 1000, 2000), bills: [bill()])), isEmpty);
+    test('3 months 12 before needed; the running month, other statuses, an income and no payee never fire', () {
+      expect(creep(rows('2025-09', 14, 1000, 2000)), isEmpty); // only 2025-09 and 2025-10 are 12 months before
+      // The rise lands this month (not full yet): the latest full months are the old amount.
+      expect(creep(rows('2025-08', 16, 1000, 2000, lastN: 1)), isEmpty);
       for (final b in [bill(status: 'candidate'), bill(direction: 'in'), bill(payee: '')]) {
-        expect(only(FindingKind.slowCreep, run(rows('2025-10', 13, 1000, 2000), bills: [b])), isEmpty);
+        expect(creep(rows('2025-08', 15, 1000, 2000), b), isEmpty);
       }
     });
 
+    test('a monthly bill that slips across a month end (two cycles in one month) does not fire', () {
+      final r = [
+        // 5000 a month from 2025-07 (so the first 3 months exist), paid 2026-08-29, nothing in 2026-09, twice in 2026-10.
+        for (var k = 0; k < 13; k++) row('${plus('2025-07', k)}-05', -5000, 'Bills & subscriptions', desc: desc),
+        for (final d in ['2026-08-29', '2026-10-01', '2026-10-30']) row(d, -5000, 'Bills & subscriptions', desc: desc),
+      ];
+      expect(creep(r), isEmpty);
+    });
+
+    test('a split payment of the bill counts once, as the whole payment', () {
+      final r = rows('2025-08', 12, 1000, 1000);
+      for (final m in ['2026-08', '2026-09', '2026-10']) {
+        final t = Tx(id: 'split-$m', source: 'pbz', date: '$m-05', amount: -1250, description: desc);
+        r.addAll([
+          CategorizedTx(t, 'Bills & subscriptions', BudgetKind.fixed, amount: -600, part: 0, parts: 2),
+          CategorizedTx(t, 'Eating out', BudgetKind.flex, amount: -650, part: 1, parts: 2),
+        ]);
+      }
+      expect(creep(r).single.ratioPermille, 1250);
+    });
+
     test('rows of other payees, currencies or hand-added never count', () {
-      final r = rows('2025-10', 13, 1000, 1000)
+      final r = rows('2025-08', 15, 1000, 1000)
         ..add(row('2026-10-06', -900, 'Bills & subscriptions', desc: desc, currency: 'USD'))
         ..add(row('2026-10-07', -900, 'Bills & subscriptions', desc: desc, source: 'manual'))
         ..add(row('2026-10-08', -900, 'Bills & subscriptions', desc: 'POS SPOTIFY'));
-      expect(only(FindingKind.slowCreep, run(r, bills: [bill()])), isEmpty);
+      expect(creep(r), isEmpty);
     });
   });
 
@@ -229,10 +279,21 @@ void main() {
       expect(hidden.map((f) => f.id), a.skip(1).map((f) => f.id));
     });
 
-    test('perf: about 10k rows well under 200 ms once warm', () {
-      run(rows);
+    test('perf: about 10k rows and confirmed bills well under 200 ms once warm', () {
+      final bills = [
+        for (final d in ['POS NETFLIX.COM', 'Naplata kredita 0000000000'])
+          RecurringBill(
+              id: 'rec:$d',
+              payee: merchantKey(Tx(id: 'k', source: 'pbz', date: today, amount: -1, description: d)),
+              label: 'Bill',
+              category: 'Bills & subscriptions',
+              expectedAmount: 1000,
+              nextDue: today,
+              status: 'confirmed')
+      ];
+      run(rows, bills: bills);
       final sw = Stopwatch()..start();
-      run(rows);
+      run(rows, bills: bills);
       sw.stop();
       // ignore: avoid_print
       print('findings on ${rows.length} rows: ${sw.elapsedMilliseconds} ms');
@@ -307,16 +368,16 @@ void main() {
         final a = device('a', key), b = device('b', key);
         await a.repo.dismissFinding('aboveUsual:Groceries:2026-11');
         await round();
-        await b.repo.dismissFinding('weeklyRhythm:all:2026-10');
+        await b.repo.dismissFinding('weeklyRhythm:all');
         await round();
         await round();
         for (final d in [a, b]) {
-          expect(d.repo.settings().dismissedFindings, ['aboveUsual:Groceries:2026-11', 'weeklyRhythm:all:2026-10'], reason: d.name);
+          expect(d.repo.settings().dismissedFindings, ['aboveUsual:Groceries:2026-11', 'weeklyRhythm:all'], reason: d.name);
         }
         await b.repo.undismissFinding('aboveUsual:Groceries:2026-11');
         await round();
         await round();
-        expect(a.repo.settings().dismissedFindings, ['weeklyRhythm:all:2026-10']);
+        expect(a.repo.settings().dismissedFindings, ['weeklyRhythm:all']);
       }, timeout: const Timeout(Duration(seconds: 60)));
     });
   });

@@ -707,9 +707,11 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   file comment (lead-approved 2026-11-02): spending by `countsAsSpending` per main tag; W12 = 12 months before this one,
   tracked from the first counted row; aboveUsual 4·now ≥ 5·median and +2000 (≥ 6 months, median > 0); weeklyRhythm
   5·max ≥ 8·min weekday means, min > 0; movesTogether top 8 tags, last 24 months, ≥ 12 shared nonzero months, 4·Sxy² ≥ Sxx·Syy;
-  slowCreep confirmed bills' payee rows per month, 4·latest ≥ 5·earliest ≥ 12 months apart; seasonality ≥ 3 full years;
+  slowCreep confirmed bills' payee rows per month, 4·median(last 3 full months) ≥ 5·median(first 3 months
+  ≥ 12 months before); seasonality ≥ 3 full years;
   milestone levels (days 100/365/+365, payments 100/500/1000/+1000, streak 4/12/26/52/+52) with the month reached as
-  window end. id `<kind>:<subject>[:<other>]:<window end YYYY-MM>`; logs counts per kind. Tests `test/eng_findings_test.dart`,
+  window end. id `<kind>:<subject>[:<other>]:<window end YYYY-MM>` (weeklyRhythm and movesTogether: no month, so a
+  dismissal holds for good); merchant keys cached per description; logs counts per kind. Tests `test/eng_findings_test.dart`,
   `test/eng_hours_test.dart` (+ `eng_*_spec_test.dart`).
 - `search.dart` — `searchAll(query, txs:, goals:, wishlist:, bills:, planned:)` → `SearchResult` (`txs` newest first capped at
   `searchTxLimit` 200, `goals`, `wishlist`, `bills`, `planned`, `billsDb` (stored bills: payee, description, item

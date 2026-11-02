@@ -10,14 +10,16 @@
 //   fires when 4·now ≥ 5·median and now − median ≥ 2000 cents. Window end = this month.
 // - weeklyRhythm: whole spending (subject `all`) over the tracked months of W12 (≥ 6); mean per ISO weekday = its sum ÷
 //   how many of that weekday the months hold; fires when 5·Smax·Nmin ≥ 8·Smin·Nmax with Smin > 0 (lead 2026-11-02: a weekday
-//   with no spending at all never fires, so sparse data stays quiet). Window end = last full month.
+//   with no spending at all never fires, so sparse data stays quiet). A standing pattern: id `weeklyRhythm:all`, no window month.
 // - movesTogether: the last 24 full tracked months, the top 8 main tags by spend there; a shared month = both tags
 //   nonzero; ≥ 12 shared months; |r| ≥ 0.5 ⇔ 4·Sxy² ≥ Sxx·Syy (Sxx, Syy > 0), r in permille (signed) by integer square
-//   root. subject < other alphabetically. Window end = last full month.
+//   root. subject < other alphabetically. A standing pattern: its id has no window month (a dismissal holds for good).
 // - slowCreep: confirmed bills (not incomes) with a payee; their rows = live bank outflows in the home currency whose
 //   `merchantKey` is the payee (no transfers, no IOU-linked rows; never by amount), summed per calendar month
-//   (absolute cents). Fires when the latest full month with a payment is ≥ 125 % of the earliest month with a payment,
-//   that one at least 12 months before it (4·latest ≥ 5·earliest). subject = bill id. Window end = the latest month.
+//   (absolute cents, so parts add up). latest3 = the last 3 full months with a payment; earliest3 = the first 3 months
+//   with a payment at least 12 months before latest3's last month; both need 3 months. Fires when 4·median(latest3) ≥
+//   5·median(earliest3) (`medianCents`), so one cycle that slips into the next month never fires alone (lead
+//   2026-11-02). subject = bill id. Window end = latest3's last month.
 // - seasonality: full calendar years fully tracked and ended before this month; per main tag per year the max month
 //   (> 0, earliest on a tie); a calendar month that is the max in ≥ 3 years fires (otherKey = `MM`, n = years).
 //   Window end = December of the last such year.
@@ -25,13 +27,14 @@
 //   payments; 100, 500, 1000, then every 1000), `streak` (best `reviewStreak` over time; 4, 12, 26, 52, then every 52).
 //   The highest level reached fires; n = that level; window end = the month it was reached (a dismissal holds until
 //   the next level).
-// - id = `<kind>:<subjectKey>[:<otherKey>]:<window end YYYY-MM>`; dismissed ids are left out. Order: kind, then
-//   |strength| ?? ratio ?? n descending, then id.
+// - id = `<kind>:<subjectKey>[:<otherKey>]:<window end YYYY-MM>` (weeklyRhythm and movesTogether without the month);
+//   dismissed ids are left out. Order: kind, then |strength| ?? ratio ?? n descending, then id.
 import 'package:wallet_importer/wallet_importer.dart' show TxKind;
 
 import 'budget.dart' show countsAsSpending, reviewStreak;
 import 'categories.dart' show BudgetKind, CategoryTable, merchantKey;
 import 'dates.dart';
+import 'hours.dart' show roundDiv;
 import 'logs.dart';
 import 'models.dart';
 import 'recurring.dart' show medianCents;
@@ -98,6 +101,7 @@ List<Finding> findings(List<CategorizedTx> expanded, WalletSettings st, Category
   };
   final billRows = <String, Map<int, int>>{}; // payee -> month -> cents out
   final billSeen = <String>{};
+  final keyOf = <String, String>{}; // description -> merchantKey (a bank row's key depends on its description only)
   for (final t in expanded) {
     final tx = t.tx;
     if (!tx.live) continue;
@@ -122,7 +126,7 @@ List<Finding> findings(List<CategorizedTx> expanded, WalletSettings st, Category
         tx.kindHint != TxKind.ownTransfer &&
         tx.kindHint != TxKind.exchange &&
         billSeen.add(tx.id)) {
-      final key = merchantKey(tx);
+      final key = keyOf[tx.description] ??= merchantKey(tx);
       if (billKeys.contains(key)) {
         final mm = billRows[key] ??= {};
         final m = _mi(monthOf(tx.date));
@@ -132,10 +136,10 @@ List<Finding> findings(List<CategorizedTx> expanded, WalletSettings st, Category
   }
   final tags = byTag.keys.toList()..sort();
   final out = <Finding>[];
-  void add(FindingKind kind, String subject, String? other, int end, String from, String to, int n,
+  void add(FindingKind kind, String subject, String? other, int? end, String from, String to, int n,
       {int? strength, int? ratio, List<(String, int)> series = const [], List<(String, int)> otherSeries = const []}) {
     out.add(Finding(
-        id: '${kind.name}:$subject${other == null ? '' : ':$other'}:${_ym(end)}',
+        id: '${kind.name}:$subject${other == null ? '' : ':$other'}${end == null ? '' : ':${_ym(end)}'}',
         kind: kind,
         subjectKey: subject,
         otherKey: other,
@@ -173,10 +177,12 @@ List<Finding> findings(List<CategorizedTx> expanded, WalletSettings st, Category
     final mm = billRows[b.payee];
     if (b.status != 'confirmed' || b.isIncome || b.payee.isEmpty || mm == null) continue;
     final ms = mm.keys.where((m) => m < now).toList()..sort();
-    if (ms.isEmpty || ms.last - ms.first < 12) continue;
-    final a = mm[ms.first]!, z = mm[ms.last]!;
+    if (ms.length < 3) continue;
+    final late = ms.sublist(ms.length - 3), early = ms.where((m) => m <= late.last - 12).take(3).toList();
+    if (early.length < 3) continue;
+    final a = medianCents([for (final m in early) mm[m]!]), z = medianCents([for (final m in late) mm[m]!]);
     if (4 * z >= 5 * a) {
-      add(FindingKind.slowCreep, b.id, null, ms.last, _firstDay(ms.first), _lastDay(ms.last), ms.length,
+      add(FindingKind.slowCreep, b.id, null, late.last, _firstDay(early.first), _lastDay(late.last), ms.length,
           ratio: _div(BigInt.from(z) * _k, BigInt.from(a)), series: [for (final m in ms) (_ym(m), mm[m]!)]);
     }
   }
@@ -193,7 +199,7 @@ List<Finding> findings(List<CategorizedTx> expanded, WalletSettings st, Category
   return out;
 }
 
-typedef _Add = void Function(FindingKind kind, String subject, String? other, int end, String from, String to, int n,
+typedef _Add = void Function(FindingKind kind, String subject, String? other, int? end, String from, String to, int n,
     {int? strength, int? ratio, List<(String, int)> series, List<(String, int)> otherSeries});
 
 final _k = BigInt.from(1000);
@@ -215,7 +221,7 @@ void _weekly(List<int> hist, Map<String, int> byDay, _Add add) {
   if (sum[lo] <= 0) return;
   final top = BigInt.from(sum[hi]) * BigInt.from(cnt[lo]), bottom = BigInt.from(sum[lo]) * BigInt.from(cnt[hi]);
   if (BigInt.from(5) * top < BigInt.from(8) * bottom) return;
-  add(FindingKind.weeklyRhythm, 'all', null, hist.last, _firstDay(hist.first), _lastDay(hist.last), hist.length,
+  add(FindingKind.weeklyRhythm, 'all', null, null, _firstDay(hist.first), _lastDay(hist.last), hist.length,
       ratio: _div(top * _k, bottom), series: [for (var w = 1; w <= 7; w++) ('$w', _div(BigInt.from(sum[w]), BigInt.from(cnt[w])))]);
 }
 
@@ -251,7 +257,7 @@ void _moves(int now, int first, List<String> tags, int Function(String, int) v, 
       final cxx = bn * sxx - sx * sx, cyy = bn * syy - sy * sy, cxy = bn * sxy - sx * sy;
       if (cxx <= BigInt.zero || cyy <= BigInt.zero || BigInt.from(4) * cxy * cxy < cxx * cyy) continue;
       final r = _sqrtRound(BigInt.from(1000000) * cxy * cxy, cxx * cyy);
-      add(FindingKind.movesTogether, a, b, now - 1, _firstDay(shared.first), _lastDay(shared.last), n,
+      add(FindingKind.movesTogether, a, b, null, _firstDay(shared.first), _lastDay(shared.last), n,
           strength: cxy.isNegative ? -r : r,
           series: [for (final m in shared) (_ym(m), v(a, m))],
           otherSeries: [for (final m in shared) (_ym(m), v(b, m))]);
@@ -325,12 +331,7 @@ int? _level(int v, List<int> base, int step) {
   return base.lastWhere((b) => v >= b);
 }
 
-/// n ÷ d rounded once, half away from zero (d > 0).
-int _div(BigInt n, BigInt d) {
-  var q = n.abs() ~/ d;
-  if ((n.abs() % d) * BigInt.two >= d) q += BigInt.one;
-  return (n.isNegative ? -q : q).toInt();
-}
+int _div(BigInt n, BigInt d) => roundDiv(n, d).toInt();
 
 /// √(n ÷ d) rounded to the nearest integer (n ≥ 0, d > 0).
 int _sqrtRound(BigInt n, BigInt d) {

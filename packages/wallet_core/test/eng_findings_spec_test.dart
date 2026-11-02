@@ -72,9 +72,9 @@ void main() {
     final fs = fin(usualThen(10000, 12500));
     expect(fs, isNotEmpty);
     for (final f in fs) {
-      // weeklyRhythm and movesTogether end in the last full month (pinned rule); the others here in this month.
-      final end = f.kind == FindingKind.weeklyRhythm || f.kind == FindingKind.movesTogether ? '2026-09' : '2026-10';
-      final parts = [f.kind.name, f.subjectKey, if (f.otherKey != null) f.otherKey, end];
+      // weeklyRhythm and movesTogether are standing patterns: no window month (lead 2026-11-02).
+      final standing = f.kind == FindingKind.weeklyRhythm || f.kind == FindingKind.movesTogether;
+      final parts = [f.kind.name, f.subjectKey, if (f.otherKey != null) f.otherKey, if (!standing) '2026-10'];
       expect(f.id, parts.join(':'));
     }
   });
@@ -134,7 +134,7 @@ void main() {
       final fs = rhythm(daily(1000, 1600));
       expect(fs, hasLength(1));
       expect(fs.single.subjectKey, 'all');
-      expect(fs.single.id, 'weeklyRhythm:all:2026-09'); // ends in the last full month
+      expect(fs.single.id, 'weeklyRhythm:all'); // a standing pattern: no window month
       expect(fs.single.ratioPermille, 1600);
       expect(fs.single.series.map((e) => e.$1).toList(), ['1', '2', '3', '4', '5', '6', '7']);
     });
@@ -259,8 +259,13 @@ void main() {
           direction: direction,
         );
     CategorizedTx sub(String month, int cents) => pay(month, cents, 'Bills & subscriptions', desc: 'POS NETFLIX.COM');
-    // Earliest month 2025-09 at 1000; the latest full month with a payment is 2026-09 (12 months later); this month is quiet.
-    List<CategorizedTx> rows(int latest, {String first = '2025-09'}) => [sub(first, 1000), sub('2026-09', latest), sub('2026-10', 1000)];
+    // Lead 2026-11-02: medians of 3 months. The first 3 months at 1000 end in [first] (2025-09 = 12 months before the
+    // latest full month 2026-09); the last 3 full months 2026-07..09 at [latest]; this month is quiet.
+    List<CategorizedTx> rows(int latest, {String first = '2025-09'}) => [
+          for (final m in months(first == '2025-09' ? '2025-07' : '2025-08', 3)) sub(m, 1000),
+          for (final m in months('2026-07', 3)) sub(m, latest),
+          sub('2026-10', 1000),
+        ];
     List<Finding> creep(List<CategorizedTx> r, {RecurringBill? b}) => kindOf_(fin(r, bills: [b ?? bill(r.first)]), FindingKind.slowCreep);
 
     test('exactly +25 % fires; subjectKey is the bill id', () {
@@ -274,11 +279,15 @@ void main() {
       expect(creep(rows(1251)), hasLength(1));
       expect(creep(rows(2000)), hasLength(1));
     });
-    test('11 months apart is not enough (needs >= 12)', () {
+    test('11 months apart is not enough (needs 3 months >= 12 before)', () {
       expect(creep(rows(2000, first: '2025-10')), isEmpty);
     });
     test('this month (partial) is not the latest figure', () {
-      final r = [sub('2025-09', 1000), sub('2026-09', 1249), sub('2026-10', 5000)];
+      final r = [
+        for (final m in months('2025-07', 3)) sub(m, 1000),
+        for (final m in months('2026-07', 3)) sub(m, 1249),
+        sub('2026-10', 5000)
+      ];
       expect(creep(r), isEmpty);
     });
     test('a candidate or dismissed bill, an income and a bill with no payee never fire', () {
@@ -289,22 +298,31 @@ void main() {
       expect(creep(r, b: bill(r.first, payee: '')), isEmpty);
     });
     test('rows of another payee do not feed the bill', () {
-      final r = rows(1249)..add(pay('2026-09', 9000, 'Bills & subscriptions', desc: 'POS SPOTIFY'));
+      final r = rows(1249)..addAll([for (final m in months('2026-07', 3)) pay(m, 9000, 'Bills & subscriptions', desc: 'POS SPOTIFY')]);
       expect(creep(r, b: bill(r.first)), isEmpty);
     });
     test('IOU-linked rows, transfers, deleted rows and other currencies of the payee are not counted', () {
-      final iou = sub('2026-09', 5000);
-      final r = rows(1249)
-        ..add(CategorizedTx(iou.tx, 'Bills & subscriptions', BudgetKind.transfer, iou: true))
-        ..add(row('2026-09-07', -5000, 'Internal transfer', desc: 'POS NETFLIX.COM'))
-        ..add(pay('2026-09', 5000, 'Bills & subscriptions', desc: 'POS NETFLIX.COM', deleted: true))
-        ..add(pay('2026-09', 5000, 'Bills & subscriptions', desc: 'POS NETFLIX.COM', currency: 'USD'));
+      // In each of the last 3 full months, so a counted row would move the median.
+      final r = rows(1249);
+      for (final m in months('2026-07', 3)) {
+        final iou = sub(m, 5000);
+        r
+          ..add(CategorizedTx(iou.tx, 'Bills & subscriptions', BudgetKind.transfer, iou: true))
+          ..add(row('$m-07', -5000, 'Internal transfer', desc: 'POS NETFLIX.COM'))
+          ..add(pay(m, 5000, 'Bills & subscriptions', desc: 'POS NETFLIX.COM', deleted: true))
+          ..add(pay(m, 5000, 'Bills & subscriptions', desc: 'POS NETFLIX.COM', currency: 'USD'));
+      }
       expect(creep(r, b: bill(r.first)), isEmpty);
     });
     test('a month is the sum of its rows (700 + 550 = 1250 fires, 700 + 549 does not)', () {
-      final r = [sub('2025-09', 1000), sub('2026-09', 700), sub('2026-09', 550), sub('2026-10', 1000)];
+      List<CategorizedTx> parts(int b) => [
+            for (final m in months('2025-07', 3)) sub(m, 1000),
+            for (final m in months('2026-07', 3)) ...[sub(m, 700), sub(m, b)],
+            sub('2026-10', 1000)
+          ];
+      final r = parts(550);
       expect(creep(r, b: bill(r.first)), hasLength(1));
-      final q = [sub('2025-09', 1000), sub('2026-09', 700), sub('2026-09', 549), sub('2026-10', 1000)];
+      final q = parts(549);
       expect(creep(q, b: bill(q.first)), isEmpty);
     });
     test('no bills given: no slowCreep', () => expect(kindOf_(fin(rows(2000)), FindingKind.slowCreep), isEmpty));

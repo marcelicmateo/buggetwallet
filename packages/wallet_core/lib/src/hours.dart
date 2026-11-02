@@ -7,9 +7,15 @@ import 'models.dart' show WalletSettings;
 /// Capped at 2^53 − 1 (exact on the web too).
 int? hoursTenths(int cents, WalletSettings st) {
   if (st.salary <= 0 || st.workHoursPerWeek <= 0) return null;
-  final n = BigInt.from(cents).abs() * BigInt.from(st.workHoursPerWeek) * BigInt.from(130), d = BigInt.from(st.salary) * BigInt.from(3);
-  var q = n ~/ d;
-  if ((n % d) * BigInt.two >= d) q += BigInt.one;
+  final q =
+      roundDiv(BigInt.from(cents).abs() * BigInt.from(st.workHoursPerWeek) * BigInt.from(130), BigInt.from(st.salary) * BigInt.from(3));
   const maxExact = 9007199254740991;
   return q > BigInt.from(maxExact) ? maxExact : q.toInt();
+}
+
+/// [n] ÷ [d] rounded once, half away from zero ([d] > 0). Shared by the ENG display maths (hours, findings).
+BigInt roundDiv(BigInt n, BigInt d) {
+  var q = n.abs() ~/ d;
+  if ((n.abs() % d) * BigInt.two >= d) q += BigInt.one;
+  return n.isNegative ? -q : q;
 }
