@@ -132,7 +132,6 @@ class TodayScreen extends StatelessWidget {
       eyebrow: overviewEyebrow(today, p),
       needsYou: needs,
       onPeriod: () => view.showPeriodReport(context),
-      onSearch: openSearch ?? explore,
       onNeedsYou: () {
         if (toReview > 0) {
           (openBillsReview ?? toPlan)();
@@ -315,11 +314,12 @@ class _Hero extends StatelessWidget {
             // Over the whole plan there is nothing to promise for tomorrow.
             ? (f.overPeriod ? null : (tomorrow != null ? 'Tomorrow ${f.view.amount(tomorrow, cur)}' : 'New period tomorrow'))
             : pace
-                // Spent of the flexible budget, then "Tomorrow X · pace ▲ N ahead" (spec §5.1).
-                ? '${f.view.amount(p.spent, cur)} of ${f.view.amount(p.flexBudget > 0 ? p.flexBudget : 0, cur)}\n${[
+                // Spent of the flexible budget, then "Tomorrow X · pace ▲ N ahead" (spec §5.1) while on plan; over plan the chip's
+                // "X over plan" is the only word (never both).
+                ? '${f.view.amount(p.spent, cur)} of ${f.view.amount(p.flexBudget > 0 ? p.flexBudget : 0, cur)}${f.overPeriod || p.overBudget ? '' : '\n${[
                     if (tomorrow != null) 'Tomorrow ${f.view.amount(tomorrow, cur)}',
                     'pace ${f.ahead >= 0 ? '▲ ${f.view.amount(f.ahead, cur)} ahead' : '▼ ${f.view.amount(-f.ahead, cur)} behind'}',
-                  ].join(' · ')}'
+                  ].join(' · ')}'}'
                 : null;
     final ahead = f.ahead;
     return HeroTile(

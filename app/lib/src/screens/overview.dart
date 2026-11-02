@@ -13,14 +13,13 @@ import '../widgets/common.dart';
 import '../widgets/dash.dart';
 import 'today_view.dart';
 
-/// Eyebrow ("Mon 2 Nov · period day 18/31", opens the period report), the title, and the two icon buttons: ask a question (Explore with
-/// search) and Needs you with its count.
+/// Eyebrow ("Mon 2 Nov · period day 18/31", opens the period report), the title and the Needs-you button with its count. No search
+/// button here: the phone app bar and the rail already have the one.
 class OverviewHeader extends StatelessWidget {
   final String eyebrow;
   final int needsYou;
-  final VoidCallback onPeriod, onSearch, onNeedsYou;
-  const OverviewHeader(
-      {super.key, required this.eyebrow, required this.needsYou, required this.onPeriod, required this.onSearch, required this.onNeedsYou});
+  final VoidCallback onPeriod, onNeedsYou;
+  const OverviewHeader({super.key, required this.eyebrow, required this.needsYou, required this.onPeriod, required this.onNeedsYou});
 
   @override
   Widget build(BuildContext context) {
@@ -47,8 +46,6 @@ class OverviewHeader extends StatelessWidget {
           ),
         ]),
       ),
-      const SizedBox(width: 8),
-      _IconBox(key: const ValueKey('overviewSearch'), icon: Icons.search, tooltip: 'Ask a question about your money', onTap: onSearch),
       const SizedBox(width: 8),
       _IconBox(
           key: const ValueKey('overviewNeedsYou'),

@@ -57,6 +57,7 @@ extension OverviewData on WalletController {
   // ---------- findings ----------
 
   /// The findings, newest rules first, without the dismissed ones, at most [maxFindingsShown] (core's order).
+  // shortcut: one warm-up task for the whole findings run (23 ms on the desktop test wallet, over the 16 ms budget); split core's run when a real wallet shows it.
   List<Finding> foundList() => _cached(
         const MemoKey('findings'),
         () => timed('findings', () {
