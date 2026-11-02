@@ -459,7 +459,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   never revives or undoes a per-key change; new patterns get orders after the largest live one; a clock-less legacy row
   goes through `_write`; the map rows are left in place for older builds; `repo.migrate` logs `perKeySettings` (count);
   9 = the `account` entity, no data migration; 10 = the `category` entity (P1), no data migration; 11 = tags (T1); 12 = P4
-  recurring columns, no data migration; 13 = splits; 14 = recurring income; 15 = P14 local blob tables, no synced change; 16 = `bills.attached_tx` (P16b), no data migration; 17 = the `iou` and `iou_part` entities (Q8), no data migration; 18 = the `review` entity (V3), no data migration; 19 = `tx.match_off` (D2 Unlink), `planned.auto_off` (KL-A auto-Paid Undo) and the `payee_alias` entity (KL-A slip payee aliases), no data migration; 20 = UX-A/UX-ACC/UX-FX (see the doc comment); 21 = `goals` home planner fields (ENG E6: `kind`, `home_price`, `deposit_permille`, `buy_cost_permille` read default 60, `loan_rate_bp`, `loan_months` read default 360), no data migration). Opening an existing database with an older version
+  recurring columns, no data migration; 13 = splits; 14 = recurring income; 15 = P14 local blob tables, no synced change; 16 = `bills.attached_tx` (P16b), no data migration; 17 = the `iou` and `iou_part` entities (Q8), no data migration; 18 = the `review` entity (V3), no data migration; 19 = `tx.match_off` (D2 Unlink), `planned.auto_off` (KL-A auto-Paid Undo) and the `payee_alias` entity (KL-A slip payee aliases), no data migration; 20 = UX-A/UX-ACC/UX-FX (see the doc comment); 21 = `goals` big-purchase fields (ENG E6: `price`, `deposit_permille`, `costs_permille`, `loan_rate_bp`, `loan_months`, `compare_line_id`, `bought_at`, `loan_id`), no data migration). Opening an existing database with an older version
   clears the sync cursors (`sync_cursor`) once, so the next sync starts over like a new device (the latest snapshot if
   written by this schema or newer, else every file still on the relay) and applies ops (or fields) the older build skipped.
 - `local_db.dart` — encrypted local database (§4.9, SQLite3MultipleCiphers, web-safe): `localDbKey(VaultKey)` = HKDF
@@ -488,13 +488,16 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   linked hand-added entry to the bank row that replaced it (`matched_to`). Unlinked IOUs change no number. Older builds
   skip both entities (replayed on upgrade). Logs `iou.*` with direction/linked/count only. Tests: `test/q8_iou_test.dart`,
   schema-16 ↔ 17 old-build replay `test/q8_iou_old_build_test.dart`.
-- `home.dart` — ENG E6 House planner (pure, exact): `homePlan(goal, savedCents:, monthlyCents:, rentCents:,
-  toSpendPerPeriodCents:, today:)` → `HomePlan` (deposit/costs = price × permille half away from zero; left ≥ 0; months
-  ceil, null at monthly ≤ 0; `annuityPayment` = BigInt rational L·r/(1−(1+r)^−n), r = bp/120000, rounded once; 0 % =
-  ceil(L/n); `afterPerPeriod` or `shortBy`). `homeLevers(expanded, st, table, today, plan:, incomes:)` → `HomeLever`s
-  (main tags whose mean of the last 3 of the 12 completed months beats their 12-month median, cut floored to euros;
-  confirmed incomes at `recurringCycleCost`'s monthly). Goal fields via `patch(GoalCols.entity, …)`. Tests:
-  `test/eng_home_test.dart` (+ two devices, schema-20 replay), spec `eng_home_spec_test.dart`.
+- `goal_plan.dart` — ENG E6 big-purchase planner (any goal: home, car, boat; pure, exact): `goalPlan(goal, savedCents:,
+  monthlyCents:, compareCents:, toSpendPerPeriodCents:, today:)` → `GoalPlan` (deposit/costs = price × permille half away
+  from zero, deposit null = paid in full, costs null = 0; left ≥ 0; months ceil, null at monthly ≤ 0; `annuityPayment` =
+  BigInt rational L·r/(1−(1+r)^−n), r = bp/120000, rounded once; 0 % = ceil(L/n); < 1 month = the loan; payment null
+  while a loan has no length; `afterPerPeriod` or `shortBy`). `goalLevers(expanded, st, table, today, plan:, incomes:)`
+  → `GoalLever`s (main tags whose mean of the last 3 of the 12 completed months beats their 12-month median, cut floored
+  to euros; confirmed side incomes (category kind not income: salary is the plan's) at `recurringCycleCost`'s monthly;
+  a lever saving no month is dropped). No read defaults: the app fills 6 %/360 (property) or 0 %/60 at creation. Goal
+  fields via `patch(GoalCols.entity, …)`. Tests: `test/eng_goal_plan_test.dart` (+ two devices, schema-20 replay),
+  spec `eng_home_spec_test.dart`.
 - `loan.dart` — `loanLeft(settings, today)` → `LoanLeft {payments, cents, endMonth}` or null (no loan, no `loanEnd`, none left): counts the months from today's month to `loanEnd` inclusive whose payday (`paydayDay`, clamped to the month's last day) is today or later; `cents = payments × loan` (no interest data). Tests: `test/loan_left_test.dart`.
 - `dates.dart` — `YYYY-MM-DD` string helpers; payday rule `paydayIn`/`nextPayday`/`previousPayday` (rule C,
   RX7e, see H2). `hlc.dart` (H7 bounded HLC: `maxClockDrift` 1 h; an owner write (the

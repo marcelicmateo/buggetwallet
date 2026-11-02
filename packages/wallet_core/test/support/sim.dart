@@ -46,12 +46,14 @@ const entityTables = {
       'monthly',
       'sort',
       'deleted',
-      'kind',
-      'home_price',
+      'price',
       'deposit_permille',
-      'buy_cost_permille',
+      'costs_permille',
       'loan_rate_bp',
-      'loan_months'
+      'loan_months',
+      'compare_line_id',
+      'bought_at',
+      'loan_id',
     ]
   ),
   'wish': ('wish', ['name', 'price', 'added', 'status', 'decided', 'deleted']),
