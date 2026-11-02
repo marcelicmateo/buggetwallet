@@ -1,18 +1,343 @@
-commit: 680223dadc00915188770868ab0b0641d50d269d  ref: master  run: 39553688137
+commit: 14fa96fe5cdade176c49f73d96ddc8699fcd9b73  ref: go3  run: 41396436910
 
+lint=skipped importer=skipped core=skipped relay=skipped app=skipped desktop=skipped signing=success apk=success(626s) linux=success(89s) smoke=success(18s)
+job:lint=skipped job:importer=skipped job:core=skipped job:relay=skipped job:app=skipped job:desktop=skipped job:apk=success job:linux=success job:publish=skipped 
+
+step seconds exit
+apk 626 0
+linux 89 0
+smoke 18 0
+
+
+
+
+
+
+
+go: downloading golang.org/x/sys v0.49.0
+go: downloading golang.org/x/term v0.47.0
+=== apk ===
+=== pub ===
+--- pub get: packages/wallet_importer
 Resolving dependencies...
 Downloading packages...
-  cross_file 0.3.5+5 (0.4.0 available)
-  equatable 2.1.0 (3.0.0 available)
-  material_color_utilities 0.13.0 (0.13.1 available)
-  qr 3.0.2 (4.0.0 available)
-  sqlite3 2.9.4 (3.7.1 available)
-  sqlite3_flutter_libs 0.5.42 (0.6.0+eol available)
-  test_api 0.7.12 (0.7.15 available)
-  vector_math 2.4.0 (2.4.3 available)
++ _fe_analyzer_shared 111.0.0
++ analyzer 14.7.0
++ archive 4.6.0
++ args 2.7.0
++ async 2.13.1
++ boolean_selector 2.1.2
++ cli_config 0.2.0
++ cli_util 0.6.0
++ collection 1.19.1
++ convert 3.1.2
++ coverage 1.16.0
++ crypto 3.0.8
++ ffi 2.2.0
++ file 7.0.1
++ frontend_server_client 4.2.0
++ glob 2.2.0
++ http_multi_server 3.2.3
++ http_parser 4.1.2
++ io 1.1.0
++ lints 6.1.0
++ logging 1.3.0
++ matcher 0.12.20
++ meta 1.19.0
++ mime 2.1.0
++ node_preamble 2.0.2
++ package_config 3.0.0
++ path 1.9.1
++ petitparser 7.1.0
++ pool 1.5.3
++ posix 6.5.4
++ pub_semver 2.2.1
++ shelf 1.4.3
++ shelf_packages_handler 3.0.2
++ shelf_static 1.2.0
++ shelf_web_socket 3.0.0
++ source_map_stack_trace 2.1.2
++ source_maps 0.10.14
++ source_span 1.10.2
++ stack_trace 1.12.2
++ stream_channel 2.1.4
++ string_scanner 1.4.1
++ term_glyph 1.2.2
++ test 1.33.0
++ test_api 0.7.15
++ test_core 0.6.21
++ typed_data 1.4.0
++ vm_service 15.4.0
++ watcher 1.2.1
++ web 1.1.2
++ web_socket 1.0.1
++ web_socket_channel 3.0.3
++ webkit_inspection_protocol 1.2.1
++ xml 7.1.0
++ yaml 3.1.4
+Changed 54 dependencies!
+--- pub get: packages/wallet_core
+Resolving dependencies...
+Downloading packages...
++ _fe_analyzer_shared 111.0.0
++ analyzer 14.7.0
++ archive 4.6.0
++ args 2.7.0
++ async 2.13.1
++ boolean_selector 2.1.2
++ cli_config 0.2.0
++ cli_util 0.6.0
++ code_assets 2.1.0
++ collection 1.19.1
++ convert 3.1.2
++ coverage 1.16.0
++ crypto 3.0.8
++ cryptography 2.9.0
++ ffi 2.2.0
++ file 7.0.1
++ frontend_server_client 4.2.0
++ glob 2.2.0
++ hooks 2.2.0
++ http 1.6.0
++ http_multi_server 3.2.3
++ http_parser 4.1.2
++ io 1.1.0
++ lints 6.1.0
++ logging 1.3.0
++ matcher 0.12.20
++ meta 1.19.0
++ mime 2.1.0
++ native_toolchain_c 0.19.5
++ node_preamble 2.0.2
++ package_config 3.0.0
++ path 1.9.1
++ petitparser 7.1.0
++ platform 3.2.0
++ pool 1.5.3
++ posix 6.5.4
++ process 5.0.6
++ pub_semver 2.2.1
++ record_use 1.1.1
++ relay 0.1.0 from path ../../relay
++ shelf 1.4.3
++ shelf_packages_handler 3.0.2
++ shelf_static 1.2.0
++ shelf_web_socket 3.0.0
++ source_map_stack_trace 2.1.2
++ source_maps 0.10.14
++ source_span 1.10.2
++ sqlite3 3.8.0
++ stack_trace 1.12.2
++ stream_channel 2.1.4
++ string_scanner 1.4.1
++ term_glyph 1.2.2
++ test 1.33.0
++ test_api 0.7.15
++ test_core 0.6.21
++ typed_data 1.4.0
++ vm_service 15.4.0
++ wallet_importer 0.1.0 from path ../wallet_importer
++ wallet_sync 0.1.0 from path ../sync
++ watcher 1.2.1
++ web 1.1.2
++ web_socket 1.0.1
++ web_socket_channel 3.0.3
++ webkit_inspection_protocol 1.2.1
++ xml 7.1.0
++ yaml 3.1.4
+Changed 66 dependencies!
+--- pub get: packages/sync
+Resolving dependencies...
+Downloading packages...
++ _fe_analyzer_shared 111.0.0
++ analyzer 14.7.0
++ archive 4.6.0
++ args 2.7.0
++ async 2.13.1
++ boolean_selector 2.1.2
++ cli_config 0.2.0
++ cli_util 0.6.0
++ code_assets 2.1.0
++ collection 1.19.1
++ convert 3.1.2
++ coverage 1.16.0
++ crypto 3.0.8
++ cryptography 2.9.0
++ ffi 2.2.0
++ file 7.0.1
++ frontend_server_client 4.2.0
++ glob 2.2.0
++ hooks 2.2.0
++ http 1.6.0
++ http_multi_server 3.2.3
++ http_parser 4.1.2
++ io 1.1.0
++ lints 6.1.0
++ logging 1.3.0
++ matcher 0.12.20
++ meta 1.19.0
++ mime 2.1.0
++ native_toolchain_c 0.19.5
++ node_preamble 2.0.2
++ package_config 3.0.0
++ path 1.9.1
++ petitparser 7.1.0
++ platform 3.2.0
++ pool 1.5.3
++ posix 6.5.4
++ process 5.0.6
++ pub_semver 2.2.1
++ record_use 1.1.1
++ relay 0.1.0 from path ../../relay
++ shelf 1.4.3
++ shelf_packages_handler 3.0.2
++ shelf_static 1.2.0
++ shelf_web_socket 3.0.0
++ source_map_stack_trace 2.1.2
++ source_maps 0.10.14
++ source_span 1.10.2
++ sqlite3 3.8.0
++ stack_trace 1.12.2
++ stream_channel 2.1.4
++ string_scanner 1.4.1
++ term_glyph 1.2.2
++ test 1.33.0
++ test_api 0.7.15
++ test_core 0.6.21
++ typed_data 1.4.0
++ vm_service 15.4.0
++ wallet_core 0.1.0 from path ../wallet_core
++ wallet_importer 0.1.0 from path ../wallet_importer
++ watcher 1.2.1
++ web 1.1.2
++ web_socket 1.0.1
++ web_socket_channel 3.0.3
++ webkit_inspection_protocol 1.2.1
++ xml 7.1.0
++ yaml 3.1.4
+Changed 66 dependencies!
+--- pub get: relay
+Resolving dependencies...
+Downloading packages...
+  _fe_analyzer_shared 110.0.0 (111.0.0 available)
+  analyzer 14.6.0 (14.7.0 available)
+  crypto 3.0.7 (3.0.8 available)
+  web 1.1.1 (1.1.2 available)
 Got dependencies!
-8 packages have newer versions incompatible with dependency constraints.
+4 packages have newer versions incompatible with dependency constraints.
+Try `dart pub outdated` for more information.
+--- pub get: app
+Resolving dependencies...
+Downloading packages...
+  android_file_picker 2.1.1 (2.1.2 available)
+  archive 4.5.2 (4.6.0 available)
+  cross_file 0.3.5+5 (0.4.0 available)
+  crypto 3.0.7 (3.0.8 available)
+  equatable 2.1.0 (3.0.0 available)
+  file_picker 13.1.0 (13.3.1 available)
+  file_picker_darwin 2.3.2 (2.4.1 available)
+  fl_chart 1.2.0 (1.3.0 available)
+  flutter_local_notifications 22.3.2 (22.3.3 available)
+  jni 1.1.0 (1.1.1 available)
+  material_color_utilities 0.13.0 (0.13.1 available)
+  mobile_scanner 7.4.2 (7.5.0 available)
+  posix 6.5.2 (6.5.4 available)
+  qr 3.0.2 (4.0.1 available)
+  sqlite3 3.7.1 (3.8.0 available)
+  test_api 0.7.12 (0.7.15 available)
+  vector_math 2.4.0 (2.4.4 available)
+  web 1.1.1 (1.1.2 available)
+Got dependencies!
+18 packages have newer versions incompatible with dependency constraints.
 Try `flutter pub outdated` for more information.
+=== apk ===
+Resolving dependencies...
+Downloading packages...
+  android_file_picker 2.1.1 (2.1.2 available)
+  archive 4.5.2 (4.6.0 available)
+  cross_file 0.3.5+5 (0.4.0 available)
+  crypto 3.0.7 (3.0.8 available)
+  equatable 2.1.0 (3.0.0 available)
+  file_picker 13.1.0 (13.3.1 available)
+  file_picker_darwin 2.3.2 (2.4.1 available)
+  fl_chart 1.2.0 (1.3.0 available)
+  flutter_local_notifications 22.3.2 (22.3.3 available)
+  jni 1.1.0 (1.1.1 available)
+  material_color_utilities 0.13.0 (0.13.1 available)
+  mobile_scanner 7.4.2 (7.5.0 available)
+  posix 6.5.2 (6.5.4 available)
+  qr 3.0.2 (4.0.1 available)
+  sqlite3 3.7.1 (3.8.0 available)
+  test_api 0.7.12 (0.7.15 available)
+  vector_math 2.4.0 (2.4.4 available)
+  web 1.1.1 (1.1.2 available)
+Got dependencies!
+18 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+Running Gradle task 'assembleRelease'...                        
+Loading package information...                                                  
+Loading local repository...                                                     
+[                                       ] 3% Loading local repository...        
+[                                       ] 3% Fetch remote repository...         
+[=                                      ] 3% Fetch remote repository...         
+[=                                      ] 4% Fetch remote repository...         
+[=                                      ] 5% Fetch remote repository...         
+[==                                     ] 5% Fetch remote repository...         
+[==                                     ] 6% Fetch remote repository...         
+[==                                     ] 7% Fetch remote repository...         
+[==                                     ] 7% Computing updates...               
+[===                                    ] 8% Computing updates...               
+[===                                    ] 10% Computing updates...              
+[===                                    ] 10% Installing NDK (Side by side) 28.2
+[===                                    ] 10% Downloading android-ndk-r28c-linux
+[====                                   ] 10% Downloading android-ndk-r28c-linux
+[====                                   ] 11% Downloading android-ndk-r28c-linux
+[====                                   ] 12% Downloading android-ndk-r28c-linux
+[=====                                  ] 13% Downloading android-ndk-r28c-linux
+[=====                                  ] 14% Downloading android-ndk-r28c-linux
+[=====                                  ] 15% Downloading android-ndk-r28c-linux
+[======                                 ] 15% Downloading android-ndk-r28c-linux
+[======                                 ] 16% Downloading android-ndk-r28c-linux
+[======                                 ] 17% Downloading android-ndk-r28c-linux
+[=======                                ] 18% Downloading android-ndk-r28c-linux
+[=======                                ] 19% Downloading android-ndk-r28c-linux
+[=======                                ] 20% Downloading android-ndk-r28c-linux
+[========                               ] 20% Downloading android-ndk-r28c-linux
+[========                               ] 21% Downloading android-ndk-r28c-linux
+[========                               ] 22% Downloading android-ndk-r28c-linux
+[=========                              ] 23% Downloading android-ndk-r28c-linux
+[=========                              ] 24% Downloading android-ndk-r28c-linux
+[=========                              ] 25% Downloading android-ndk-r28c-linux
+[==========                             ] 25% Downloading android-ndk-r28c-linux
+[==========                             ] 26% Downloading android-ndk-r28c-linux
+[==========                             ] 27% Downloading android-ndk-r28c-linux
+[===========                            ] 28% Downloading android-ndk-r28c-linux
+[===========                            ] 29% Downloading android-ndk-r28c-linux
+[===========                            ] 30% Downloading android-ndk-r28c-linux
+[============                           ] 30% Downloading android-ndk-r28c-linux
+[============                           ] 31% Downloading android-ndk-r28c-linux
+[============                           ] 32% Downloading android-ndk-r28c-linux
+[============                           ] 33% Downloading android-ndk-r28c-linux
+[============                           ] 33% Unzipping...                      
+[============                           ] 33% Unzipping... android-ndk-r28c/    
+[============                           ] 33% Unzipping... android-ndk-r28c/READ
+[=============                          ] 33% Unzipping... android-ndk-r28c/READ
+[=============                          ] 33% Unzipping... android-ndk-r28c/meta
+[=============                          ] 33% Unzipping... android-ndk-r28c/shad
+[=============                          ] 33% Unzipping... android-ndk-r28c/ndk-
+[=============                          ] 33% Unzipping... android-ndk-r28c/wrap
+[=============                          ] 33% Unzipping... android-ndk-r28c/ndk-
+[=============                          ] 33% Unzipping... android-ndk-r28c/tool
+[=============                          ] 34% Unzipping... android-ndk-r28c/tool
+[=============                          ] 35% Unzipping... android-ndk-r28c/tool
+[==============                         ] 35% Unzipping... android-ndk-r28c/tool
+[==============                         ] 36% Unzipping... android-ndk-r28c/tool
+[==============                         ] 37% Unzipping... android-ndk-r28c/tool
+[===============                        ] 38% Unzipping... android-ndk-r28c/tool
+[===============                        ] 39% Unzipping... android-ndk-r28c/tool
+[===============                        ] 40% Unzipping... android-ndk-r28c/tool
+[================                       ] 40% Unzipping... android-ndk-r28c/tool
+[================                       ] 41% Unzipping... android-ndk-r28c/tool
 [================                       ] 42% Unzipping... android-ndk-r28c/tool
 [=================                      ] 43% Unzipping... android-ndk-r28c/tool
 [=================                      ] 44% Unzipping... android-ndk-r28c/tool
@@ -49,22 +374,324 @@ Preparing "Install CMake 3.22.1 v.3.22.1".
 Installing CMake 3.22.1 in /usr/local/lib/android/sdk/cmake/3.22.1
 "Install CMake 3.22.1 v.3.22.1" complete.
 "Install CMake 3.22.1 v.3.22.1" finished.
-Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 4812 bytes (99.7% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
+Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 12904 bytes (99.2% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
 Caught exception: Already watching path: /opt/hostedtoolcache/flutter/stable-3.47.7-x64/flutter/packages/flutter_tools/gradle
-Running Gradle task 'assembleRelease'...                          471.1s
-✓ Built build/app/outputs/flutter-apk/app-release.apk (63.8MB)
+Running Gradle task 'assembleRelease'...                          608.1s
+✓ Built build/app/outputs/flutter-apk/app-release.apk (46.7MB)
+=== apk-signature ===
+release key: ab9a0277bfaed386d2dcf9b7a8479b02e327074cc0fcaf20b506006d4b64c3b2
+apk signer:  ab9a0277bfaed386d2dcf9b7a8479b02e327074cc0fcaf20b506006d4b64c3b2
+
+step              seconds  result
+pub                  13.3  ok
+apk                 610.5  ok
+apk-signature         2.2  ok
+total               626.2
+pub=ok apk=ok apk-signature=ok
+
+go: downloading golang.org/x/sys v0.49.0
+go: downloading golang.org/x/term v0.47.0
+=== linux ===
+=== pub ===
+--- pub get: packages/wallet_importer
 Resolving dependencies...
 Downloading packages...
-  cross_file 0.3.5+5 (0.4.0 available)
-  equatable 2.1.0 (3.0.0 available)
-  material_color_utilities 0.13.0 (0.13.1 available)
-  qr 3.0.2 (4.0.0 available)
-  sqlite3 2.9.4 (3.7.1 available)
-  sqlite3_flutter_libs 0.5.42 (0.6.0+eol available)
-  test_api 0.7.12 (0.7.15 available)
-  vector_math 2.4.0 (2.4.3 available)
++ _fe_analyzer_shared 111.0.0
++ analyzer 14.7.0
++ archive 4.6.0
++ args 2.7.0
++ async 2.13.1
++ boolean_selector 2.1.2
++ cli_config 0.2.0
++ cli_util 0.6.0
++ collection 1.19.1
++ convert 3.1.2
++ coverage 1.16.0
++ crypto 3.0.8
++ ffi 2.2.0
++ file 7.0.1
++ frontend_server_client 4.2.0
++ glob 2.2.0
++ http_multi_server 3.2.3
++ http_parser 4.1.2
++ io 1.1.0
++ lints 6.1.0
++ logging 1.3.0
++ matcher 0.12.20
++ meta 1.19.0
++ mime 2.1.0
++ node_preamble 2.0.2
++ package_config 3.0.0
++ path 1.9.1
++ petitparser 7.1.0
++ pool 1.5.3
++ posix 6.5.4
++ pub_semver 2.2.1
++ shelf 1.4.3
++ shelf_packages_handler 3.0.2
++ shelf_static 1.2.0
++ shelf_web_socket 3.0.0
++ source_map_stack_trace 2.1.2
++ source_maps 0.10.14
++ source_span 1.10.2
++ stack_trace 1.12.2
++ stream_channel 2.1.4
++ string_scanner 1.4.1
++ term_glyph 1.2.2
++ test 1.33.0
++ test_api 0.7.15
++ test_core 0.6.21
++ typed_data 1.4.0
++ vm_service 15.4.0
++ watcher 1.2.1
++ web 1.1.2
++ web_socket 1.0.1
++ web_socket_channel 3.0.3
++ webkit_inspection_protocol 1.2.1
++ xml 7.1.0
++ yaml 3.1.4
+Changed 54 dependencies!
+--- pub get: packages/wallet_core
+Resolving dependencies...
+Downloading packages...
++ _fe_analyzer_shared 111.0.0
++ analyzer 14.7.0
++ archive 4.6.0
++ args 2.7.0
++ async 2.13.1
++ boolean_selector 2.1.2
++ cli_config 0.2.0
++ cli_util 0.6.0
++ code_assets 2.1.0
++ collection 1.19.1
++ convert 3.1.2
++ coverage 1.16.0
++ crypto 3.0.8
++ cryptography 2.9.0
++ ffi 2.2.0
++ file 7.0.1
++ frontend_server_client 4.2.0
++ glob 2.2.0
++ hooks 2.2.0
++ http 1.6.0
++ http_multi_server 3.2.3
++ http_parser 4.1.2
++ io 1.1.0
++ lints 6.1.0
++ logging 1.3.0
++ matcher 0.12.20
++ meta 1.19.0
++ mime 2.1.0
++ native_toolchain_c 0.19.5
++ node_preamble 2.0.2
++ package_config 3.0.0
++ path 1.9.1
++ petitparser 7.1.0
++ platform 3.2.0
++ pool 1.5.3
++ posix 6.5.4
++ process 5.0.6
++ pub_semver 2.2.1
++ record_use 1.1.1
++ relay 0.1.0 from path ../../relay
++ shelf 1.4.3
++ shelf_packages_handler 3.0.2
++ shelf_static 1.2.0
++ shelf_web_socket 3.0.0
++ source_map_stack_trace 2.1.2
++ source_maps 0.10.14
++ source_span 1.10.2
++ sqlite3 3.8.0
++ stack_trace 1.12.2
++ stream_channel 2.1.4
++ string_scanner 1.4.1
++ term_glyph 1.2.2
++ test 1.33.0
++ test_api 0.7.15
++ test_core 0.6.21
++ typed_data 1.4.0
++ vm_service 15.4.0
++ wallet_importer 0.1.0 from path ../wallet_importer
++ wallet_sync 0.1.0 from path ../sync
++ watcher 1.2.1
++ web 1.1.2
++ web_socket 1.0.1
++ web_socket_channel 3.0.3
++ webkit_inspection_protocol 1.2.1
++ xml 7.1.0
++ yaml 3.1.4
+Changed 66 dependencies!
+--- pub get: packages/sync
+Resolving dependencies...
+Downloading packages...
++ _fe_analyzer_shared 111.0.0
++ analyzer 14.7.0
++ archive 4.6.0
++ args 2.7.0
++ async 2.13.1
++ boolean_selector 2.1.2
++ cli_config 0.2.0
++ cli_util 0.6.0
++ code_assets 2.1.0
++ collection 1.19.1
++ convert 3.1.2
++ coverage 1.16.0
++ crypto 3.0.8
++ cryptography 2.9.0
++ ffi 2.2.0
++ file 7.0.1
++ frontend_server_client 4.2.0
++ glob 2.2.0
++ hooks 2.2.0
++ http 1.6.0
++ http_multi_server 3.2.3
++ http_parser 4.1.2
++ io 1.1.0
++ lints 6.1.0
++ logging 1.3.0
++ matcher 0.12.20
++ meta 1.19.0
++ mime 2.1.0
++ native_toolchain_c 0.19.5
++ node_preamble 2.0.2
++ package_config 3.0.0
++ path 1.9.1
++ petitparser 7.1.0
++ platform 3.2.0
++ pool 1.5.3
++ posix 6.5.4
++ process 5.0.6
++ pub_semver 2.2.1
++ record_use 1.1.1
++ relay 0.1.0 from path ../../relay
++ shelf 1.4.3
++ shelf_packages_handler 3.0.2
++ shelf_static 1.2.0
++ shelf_web_socket 3.0.0
++ source_map_stack_trace 2.1.2
++ source_maps 0.10.14
++ source_span 1.10.2
++ sqlite3 3.8.0
++ stack_trace 1.12.2
++ stream_channel 2.1.4
++ string_scanner 1.4.1
++ term_glyph 1.2.2
++ test 1.33.0
++ test_api 0.7.15
++ test_core 0.6.21
++ typed_data 1.4.0
++ vm_service 15.4.0
++ wallet_core 0.1.0 from path ../wallet_core
++ wallet_importer 0.1.0 from path ../wallet_importer
++ watcher 1.2.1
++ web 1.1.2
++ web_socket 1.0.1
++ web_socket_channel 3.0.3
++ webkit_inspection_protocol 1.2.1
++ xml 7.1.0
++ yaml 3.1.4
+Changed 66 dependencies!
+--- pub get: relay
+Resolving dependencies...
+Downloading packages...
+  _fe_analyzer_shared 110.0.0 (111.0.0 available)
+  analyzer 14.6.0 (14.7.0 available)
+  crypto 3.0.7 (3.0.8 available)
+  web 1.1.1 (1.1.2 available)
 Got dependencies!
-8 packages have newer versions incompatible with dependency constraints.
+4 packages have newer versions incompatible with dependency constraints.
+Try `dart pub outdated` for more information.
+--- pub get: app
+Resolving dependencies...
+Downloading packages...
+  android_file_picker 2.1.1 (2.1.2 available)
+  archive 4.5.2 (4.6.0 available)
+  cross_file 0.3.5+5 (0.4.0 available)
+  crypto 3.0.7 (3.0.8 available)
+  equatable 2.1.0 (3.0.0 available)
+  file_picker 13.1.0 (13.3.1 available)
+  file_picker_darwin 2.3.2 (2.4.1 available)
+  fl_chart 1.2.0 (1.3.0 available)
+  flutter_local_notifications 22.3.2 (22.3.3 available)
+  jni 1.1.0 (1.1.1 available)
+  material_color_utilities 0.13.0 (0.13.1 available)
+  mobile_scanner 7.4.2 (7.5.0 available)
+  posix 6.5.2 (6.5.4 available)
+  qr 3.0.2 (4.0.1 available)
+  sqlite3 3.7.1 (3.8.0 available)
+  test_api 0.7.12 (0.7.15 available)
+  vector_math 2.4.0 (2.4.4 available)
+  web 1.1.1 (1.1.2 available)
+Got dependencies!
+18 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+=== linux ===
+Resolving dependencies...
+Downloading packages...
+  android_file_picker 2.1.1 (2.1.2 available)
+  archive 4.5.2 (4.6.0 available)
+  cross_file 0.3.5+5 (0.4.0 available)
+  crypto 3.0.7 (3.0.8 available)
+  equatable 2.1.0 (3.0.0 available)
+  file_picker 13.1.0 (13.3.1 available)
+  file_picker_darwin 2.3.2 (2.4.1 available)
+  fl_chart 1.2.0 (1.3.0 available)
+  flutter_local_notifications 22.3.2 (22.3.3 available)
+  jni 1.1.0 (1.1.1 available)
+  material_color_utilities 0.13.0 (0.13.1 available)
+  mobile_scanner 7.4.2 (7.5.0 available)
+  posix 6.5.2 (6.5.4 available)
+  qr 3.0.2 (4.0.1 available)
+  sqlite3 3.7.1 (3.8.0 available)
+  test_api 0.7.12 (0.7.15 available)
+  vector_math 2.4.0 (2.4.4 available)
+  web 1.1.1 (1.1.2 available)
+Got dependencies!
+18 packages have newer versions incompatible with dependency constraints.
 Try `flutter pub outdated` for more information.
 Building Linux application...                                   
 ✓ Built build/linux/x64/release/bundle/budget_wallet
+
+step              seconds  result
+pub                  13.3  ok
+linux                75.5  ok
+total                88.9
+pub=ok linux=ok
+=== smoke ===
+=== linux ===
+Resolving dependencies...
+Downloading packages...
+  android_file_picker 2.1.1 (2.1.2 available)
+  archive 4.5.2 (4.6.0 available)
+  cross_file 0.3.5+5 (0.4.0 available)
+  crypto 3.0.7 (3.0.8 available)
+  equatable 2.1.0 (3.0.0 available)
+  file_picker 13.1.0 (13.3.1 available)
+  file_picker_darwin 2.3.2 (2.4.1 available)
+  fl_chart 1.2.0 (1.3.0 available)
+  flutter_local_notifications 22.3.2 (22.3.3 available)
+  jni 1.1.0 (1.1.1 available)
+  material_color_utilities 0.13.0 (0.13.1 available)
+  mobile_scanner 7.4.2 (7.5.0 available)
+  posix 6.5.2 (6.5.4 available)
+  qr 3.0.2 (4.0.1 available)
+  sqlite3 3.7.1 (3.8.0 available)
+  test_api 0.7.12 (0.7.15 available)
+  vector_math 2.4.0 (2.4.4 available)
+  web 1.1.1 (1.1.2 available)
+Got dependencies!
+18 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+Building Linux application...                                   
+✓ Built build/linux/x64/release/bundle/budget_wallet
+=== desktop-smoke ===
+app still running after 10 s; sending SIGTERM
+app exited with code 143
+app log: 26 lines (dist/logs/app-linux-smoke.log)
+WARNING lines: 1
+
+step              seconds  result
+linux                 5.0  ok
+desktop-smoke        12.8  ok
+total                17.9
+linux=ok desktop-smoke=ok
