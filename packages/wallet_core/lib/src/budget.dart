@@ -91,6 +91,10 @@ class PeriodBudget {
   /// negative ones (a refund of it), floored at 0. A split payment counts its extra parts only. 0 without one.
   final int landedIncome;
 
+  /// PS: money taken out of goals into this period's spending money (`WalletRepo.goalTakenOutBetween`), added to
+  /// [flexBudget]. 0 without one.
+  final int goalTakenOut;
+
   const PeriodBudget({
     required this.start,
     required this.end,
@@ -124,6 +128,7 @@ class PeriodBudget {
     this.reservedPlannedRows = const [],
     this.expectedIncome = const [],
     this.landedIncome = 0,
+    this.goalTakenOut = 0,
   });
 
   /// The extra income the goals flow offers ("put it into a goal"): [extras] without the rows already counted in
@@ -149,10 +154,10 @@ class PeriodBudget {
 
   /// The payday plan as the Plan donut shows it (CX): where this period's money goes. Pure, from the fields above;
   /// `fixed + saved + spending − over == inTotal` always holds (asserted), because [flexBudget] = [income] − [fixedPlan]
-  /// − [goalMonthly] − [reservedBills] − [reservedPlanned] + [landedIncome] in [computePeriod].
+  /// − [goalMonthly] − [reservedBills] − [reservedPlanned] + [landedIncome] + [goalTakenOut] in [computePeriod].
   PlanSplit get planSplit {
     final s = PlanSplit(
-      inTotal: income + landedIncome,
+      inTotal: income + landedIncome + goalTakenOut,
       fixed: fixedPlan + reservedBills + reservedPlanned,
       saved: goalMonthly,
       spending: flexBudget > 0 ? flexBudget : 0,
@@ -174,7 +179,7 @@ class PeriodBudget {
 }
 
 /// The payday plan split into the Plan donut's slices ([PeriodBudget.planSplit]), integer cents:
-/// - [inTotal] = `income + landedIncome`: the plan's money in (the donut's centre);
+/// - [inTotal] = `income + landedIncome + goalTakenOut`: the plan's money in (the donut's centre);
 /// - [fixed] = `fixedPlan + reservedBills + reservedPlanned`: the fixed plan lines plus what is held before payday;
 /// - [saved] = `goalMonthly`;
 /// - [spending] = max(0, `flexBudget`): the flexible money;
@@ -430,7 +435,9 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
     List<PlannedCost> planned = const [],
     required CategoryTable table,
     List<CategorizedTx>? matchRows,
-    Map<String, String> payeeAliases = const {}}) {
+    Map<String, String> payeeAliases = const {},
+    Map<String, int>? goalAmounts,
+    int goalTakenOut = 0}) {
   final raw = matchRows ?? txs;
   final incomes = [
     for (final b in bills)
@@ -466,7 +473,7 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
   final partsArriving = !paydayPassed && age < samePaydayDays;
   final income = st.incomeMode == 'received' && received > 0 ? (partsArriving && st.salary > received ? st.salary : received) : st.salary;
   final lowIncome = received > 0 && received * 10 < st.salary * 9 && age >= 4 && !partsArriving;
-  final goalMonthly = goals.fold<int>(0, (s, g) => _ok(s + g.monthly));
+  final goalMonthly = _goalSum(goals, goalAmounts);
   // Plan lines of custom fixed categories (P1) count with rent, loan and subs; only lines the table still allows.
   final fixedPlan =
       st.rent + st.loan + st.subs + st.planLines.entries.fold<int>(0, (s, e) => table.hasPlanLine(e.key) ? _ok(s + e.value) : s);
@@ -497,7 +504,7 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
     if (landedIncome < 0) landedIncome = 0;
   }
   final expected = expectedIncomeCycles(incomes, raw, start, end, currency: st.currency);
-  final flexBudget = income - fixedPlan - goalMonthly - reservedBills - reservedPlanned + landedIncome;
+  final flexBudget = income - fixedPlan - goalMonthly - reservedBills - reservedPlanned + landedIncome + goalTakenOut;
   final flex = inPeriod.where((t) => t.kind == BudgetKind.flex);
   final spent = -_sum(flex);
   final spentToday = -_sum(flex.where((t) => t.date == today));
@@ -566,8 +573,12 @@ PeriodBudget computePeriod(List<CategorizedTx> txs, WalletSettings st, List<Goal
     reservedPlannedRows: reservedRows,
     expectedIncome: expected,
     landedIncome: landedIncome,
+    goalTakenOut: goalTakenOut,
   );
 }
+
+/// PS: this period's savings: each goal's [amounts] entry (`WalletRepo.goalPeriodAmounts`), else its monthly amount.
+int _goalSum(List<Goal> goals, Map<String, int>? amounts) => goals.fold<int>(0, (s, g) => _ok(s + (amounts?[g.id] ?? g.monthly)));
 
 /// What a pay period [start] .. [end] (exclusive) sets aside, one path for [computePeriod] and [projectedReserves]:
 /// [dueCycles] of [outBills] (no incomes), the cycles that reserve (not [DueCycle.coveredIn] a plan line, reserve > 0),
@@ -1206,7 +1217,9 @@ List<PeriodDay> periodDays(List<CategorizedTx> txs, WalletSettings st, List<Goal
     List<PlannedCost> planned = const [],
     required CategoryTable table,
     List<CategorizedTx>? matchRows,
-    Map<String, String> payeeAliases = const {}}) {
+    Map<String, String> payeeAliases = const {},
+    Map<String, int>? goalAmounts,
+    int goalTakenOut = 0}) {
   final start = st.periodStart ?? today;
   final end = nextPayday(start, st.paydayDay);
   final dates = <String>[];
@@ -1254,7 +1267,7 @@ List<PeriodDay> periodDays(List<CategorizedTx> txs, WalletSettings st, List<Goal
           break;
       }
     }
-    final goalMonthly = goals.fold<int>(0, (s, g) => _ok(s + g.monthly));
+    final goalMonthly = _goalSum(goals, goalAmounts);
     final fixedPlan =
         st.rent + st.loan + st.subs + st.planLines.entries.fold<int>(0, (s, e) => table.hasPlanLine(e.key) ? _ok(s + e.value) : s);
     final cycles = dueCycles(outBills, raw, start, end, currency: st.currency);
@@ -1274,7 +1287,8 @@ List<PeriodDay> periodDays(List<CategorizedTx> txs, WalletSettings st, List<Goal
         for (final p in duePlanned(planned, d, end))
           if (plannedReserves(p, outBills, counted, table: table, payeeAliases: payeeAliases)) p
       ].fold<int>(0, (s, p) => _ok(s + p.amount!));
-      final flexBudget = income - fixedPlan - goalMonthly - reservedBills - reservedPlanned + (landedSoFar < 0 ? 0 : landedSoFar);
+      final flexBudget =
+          income - fixedPlan - goalMonthly - reservedBills - reservedPlanned + (landedSoFar < 0 ? 0 : landedSoFar) + goalTakenOut;
       final spentToday = -flex[i];
       final leftForToday = flexBudget + flexBefore; // flexBudget − (spent − spentToday)
       final allowance = leftForToday <= 0 ? 0 : (leftForToday / daysBetween(d, end)).round();

@@ -81,6 +81,7 @@ void main() {
       expect(p.reservedBills, 0);
       expect(p.paydayPassed, isFalse);
       expect(p.foreignByCurrency, isEmpty);
+      expect(p.goalTakenOut, 0);
     });
 
     test('extrasForGoals = extras - landed, never negative, equal at the boundary', () {

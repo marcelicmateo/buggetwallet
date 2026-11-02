@@ -124,7 +124,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   `max(received, salary)` (salary parts still landing; owner: paid 10th–15th). `periods.dart`'s grouping constant is
   `salaryGroupDays` (20, dates.dart). `WalletSettings.fromMap` reads a stored `paydayDay` 29..31 as 28 (`maxPaydayDay`).
   **Plan split (CX):** `PeriodBudget.planSplit` → `PlanSplit {inTotal, fixed, saved, spending, over}` for the Plan donut
-  (pure getter): `inTotal` = income + landedIncome, `fixed` = fixedPlan + reservedBills + reservedPlanned (= fixedPlan +
+  (pure getter): `inTotal` = income + landedIncome + goalTakenOut, `fixed` = fixedPlan + reservedBills + reservedPlanned (= fixedPlan +
   `beforePayday`), `saved` = goalMonthly, `spending` = max(0, flexBudget), `over` = max(0, −flexBudget); identity
   `fixed + saved + spending − over == inTotal` (asserted; follows from computePeriod's flexBudget formula, so a change
   there must keep it). `goalTotals(goals)` → `GoalTotals {saved, target, count}` = plain sums over `WalletRepo.goals()`
@@ -434,7 +434,11 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   ±`Goal.maxSaved`; each row counts at most `Goal.maxContribution`; negative totals allowed, not clamped to 0). New
   builds write `saved` only when creating a goal; `saveGoal` with a changed total writes ONE contribution of the
   difference (from the unclamped total), `addGoalContribution` adds one, `payGoals(period:)` writes `pay:<goal>:<period>`
-  rows (one per goal and period). Rows of a deleted or missing goal are hidden. Mixed versions: an older build writes
+  rows (one per goal and period, only when missing, `monthly > 0`). **PS auto-save** (`docs/context/PS_SPEC.md`):
+  `setGoalPeriodAmount` (`adj:<goal>:<period>` = amount − pay row, last wins), `goalPeriodAmounts(period)`,
+  `takeOutOfGoal` (`out:…` = spending money of the period holding its date; `mv:…` + `mv:…:in` = move), `goalTakenOutBetween`;
+  `computePeriod`/`periodDays(goalAmounts:, goalTakenOut:)` (`PeriodBudget.goalTakenOut` is added to `flexBudget` and
+  `planSplit.inTotal`). Forecasts, `monthlyFlex`, `monthsToGoal` keep `monthly`. Tests: `test/ps_autosave_core_test.dart`. Rows of a deleted or missing goal are hidden. Mixed versions: an older build writes
   `saved` as a full value of what it sees (the base only), so a later remote `saved` is simply the new base and
   contributions add on top. `addGoalContribution` writes nothing (returns null) for 0 or a goal deleted here (a sync
   may have removed it meanwhile); a goal that never existed here is an `ArgumentError`.

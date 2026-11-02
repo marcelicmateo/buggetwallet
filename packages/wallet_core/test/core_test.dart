@@ -62,7 +62,7 @@ void main() {
       expect(r.settings().salaryConfirmed, isTrue);
       expect(r.settings().merchantPatterns.first, ['Groceries', 'corner']);
       final g = r.saveGoal(name: 'Emergency', target: 300000, saved: 0, monthly: 10000);
-      r.payGoals();
+      r.payGoals(period: '2026-01-15');
       expect(r.goals().single.saved, 10000);
       r.deleteGoal(g);
       expect(r.goals(), isEmpty);
