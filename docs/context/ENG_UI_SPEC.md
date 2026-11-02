@@ -224,21 +224,72 @@ Any extra tag can be a project. Opened from a tag chip, a pin, a saved view, or 
 - Acceptance: total = Σ tagged rows (splits per part) = Σ by main tag = Σ by year; overlap note when another extra tag
   shares rows; candidates never include a row already carrying the tag or a transfer.
 
-### 5.5 House planner (E6) [`screens/E-House*.dc.html`]
-A goal of kind **home** (created from Plan › Saving › "+ Goal" → "A home"). Screen order:
-1. **Ready to buy** `<Mon YYYY>` + "in X y Y m at Z a month", chart: fund line from today's saved total, dashed
-   "Needed" line, a dot where they meet (x axis "now" → end month).
-2. Inputs (sliders + tap-to-type): home price, deposit % (10–40), into the fund each month, loan rate "typed by you"
-   (%, 0.1 steps), loan years (20/25/30 chips).
-3. **The numbers** (ledger, footing): deposit · buying costs (tax, notary, agent; default 6 %, editable) · already
-   in the fund (−) · **still to save** · loan · loan payment / month (estimate) · vs rent today (from the plan's rent
-   line) · "spending money per period after" = today's to-spend − (payment − rent), or "short by X".
-4. **Get there sooner** (from your own data): toggle chips, each with "N mo sooner": e.g. a main tag back to its
-   12-month median ("Eating out back to your usual (−40 € / mo)"), expected side income into the fund. Toggling is
-   a what-if only; a "Use this" button takes the owner to the existing plan-suggestion confirm.
-5. Footer: "Estimate only. The bank's offer gives the exact loan numbers."
-- Acceptance: the numbers foot to the cent; ready month = ceil(still to save ÷ monthly) months from this month;
-  0 left → "Now"; monthly 0 → "set a monthly amount" (no division); rate 0 → payment = loan ÷ months.
+### 5.5 Big purchases: from saving to a loan to paid off (E6) [`screens/E-House*.dc.html` = the saving phase]
+**Owner, 2026-11-02:** the house "was an example of a goal, not a hard limit; the same can be said for a car or a
+boat. It is a suggestion of how to think about goals that have loans, and how to process those loans once they go
+into spending." So this is **one general model for any big purchase**, with the house as the mockup's example.
+Nothing here is house-specific: no "home" kind, no house wording in code. The owner names the goal ("Home", "Car",
+"Boat") and the copy uses that name.
+
+A goal is **paid in full** (save the whole price, as goals work today) or **financed** (save a deposit + one-off
+costs; the rest is a loan). One goal goes through five phases. The screen for the goal shows the phase it is in.
+
+1. **Saving** (the mockup). The planner screen, for any financed goal:
+   - **Ready to buy** `<Mon YYYY>` + "in X y Y m at Z a month". Chart: the fund line from today's saved total, a
+     dashed "Needed" line, a dot where they meet.
+   - Inputs (sliders + tap-to-type): price, deposit % (0–100; 100 = paid in full, so the loan rows hide), costs on
+     top % ("one-off costs the loan doesn't cover: taxes, fees, registration"; default 6 % for a goal the owner marks
+     as property, 0 % otherwise; editable per goal), into the fund each month, loan rate "typed by you" (0.1 steps),
+     loan length (months; chips 5 / 10 / 20 / 30 y and custom; default 30 y for property, 5 y otherwise).
+   - **The numbers** (a ledger that foots): deposit · costs on top · already in the fund (−) · **still to save** ·
+     loan · payment / month (estimate) · "vs <a fixed line the owner picks to compare with, e.g. rent>" (optional) ·
+     "spending money per period after" = today's to-spend − payment (+ the compared line if it ends), or "short by X".
+   - **Get there sooner** (from your own data): toggle chips with "N mo sooner" (a main tag back to its 12-month
+     median, expected side income into the fund). What-if only; "Use this" → the existing plan-suggestion confirm.
+   - Footer: "Estimate only. The lender's offer gives the exact numbers."
+2. **Ready.** When saved ≥ needed (or the goal's month arrives), a Needs-you card: "<Goal> is ready: you have the
+   deposit and costs." Actions: "I bought it", "Not yet".
+3. **Bought** ("I bought it", also on the goal screen at any time). One sheet, prefilled from the plan, each
+   prefilled value marked *Unsure* until the owner changes or confirms it (as the bill sheet does):
+   - What it cost: the purchase payment rows (pick from Money; down payment, costs). Evidence is the owner's pick,
+     never an amount match.
+   - The loan as the lender wrote it: amount borrowed, rate (fixed, or variable: "changes on <date>" can be added
+     later), length, first payment date, monthly payment, the account it is paid from, the lender (payee) and
+     optionally the reference the bank shows on each payment.
+   - On **Confirm** (one write, Undo):
+     - the goal closes as bought. Its saved money counts as spent on the purchase rows, not on the flexible budget
+       (as goal money does today);
+     - a **project tag** with the goal's name is created and put on the purchase rows, so the Project screen (§5.4)
+       tracks everything the thing costs over years (insurance, repairs, registration can be tagged later);
+     - a **Loan** item is created (§6.5) and its payment becomes a **fixed line** in the payday plan (its own line,
+       next to rent; nothing else in the plan changes).
+   A paid-in-full goal does the same without the loan part.
+4. **Paying off.** The Loan screen (open from the plan line, the goal, the project, or Money's row):
+   - Owed now · months left · paid off in `<Mon YYYY>` · interest paid so far · interest still to pay (estimate).
+   - Chart per year: principal vs interest (stacked, 2 px gap, interest in a series slot, never `bad`), and the
+     balance line going down.
+   - **Payments**: each month the lender's bank row is matched to the loan the way confirmed recurring bills are
+     (payee/reference evidence; the first match asks "Loan payment?", after that it matches silently with an Unlink).
+     A month without a matched payment shows "Not seen yet" after its due date + 3 days (Needs-you card, no alarm).
+   - **"What did the lender show?"**: type the balance from the lender's statement; the app shows "matches" or
+     "off by X" and, on confirm, continues the schedule from that balance (never corrected on its own; same pattern
+     as the account balance check).
+   - What-if (not saved until "Use this"): an extra one-off or monthly payment → months and interest saved; a new
+     rate from a date (variable loans) → new payment.
+5. **Paid off.** When the last payment is matched (or the owner confirms the balance is 0): the loan closes, its
+   plan line ends, and a plan suggestion offers the freed money: "Your <name> loan of X a month has ended. Move X to
+   savings or a goal?" (suggest, confirm). A finding 6 months before the end: "<name> loan ends in 6 months: X a month
+   frees up".
+
+- The existing single loan in the plan (`WalletSettings.loan` + `loanEnd`, `loan.dart` `LoanLeft`) becomes the
+  first Loan item on migration (payment = `loan`, end = `loanEnd`, rate/balance unknown → the screen asks for them
+  once; until then it shows only months left and payments left, as today).
+- A loan taken without a goal (car bought before using the app) is added from Plan › Payday plan › "+ Loan" with the
+  same sheet as step 3.
+- Acceptance: every ledger foots to the cent; ready month = ceil(still to save ÷ monthly); 0 left → "Now";
+  monthly 0 → "set a monthly amount" (no division); rate 0 → payment = loan ÷ months; the schedule's last payment
+  absorbs the rounding so the balance ends at exactly 0; Undo of "I bought it" restores the goal, removes the loan,
+  its plan line and the tag rows it added; a paid-off loan no longer changes safe-to-spend.
 
 ### 5.6 Everything else (E7)
 Restyle with the tokens. Layout and copy from `docs/design/engineer/structure/`: Money timeline (accounts strip,
@@ -295,17 +346,42 @@ spending in the span (permille), by main tag, by year, running total per month, 
 `candidates`: untagged rows whose `merchantKey` is among the tag's payees within the span (+ 30 days), never transfers,
 never already tagged. Sums must foot (tests).
 
-### 6.5 Home goal
-- `Goal` gains (synced, nullable; "model the real property": per-goal values on the goal): `kind` ('plain' | 'home'),
-  `homePrice`, `depositPermille`, `buyCostPermille` (default 60), `loanRateBp` (hand-typed, basis points),
-  `loanMonths` (default 300). Schema change → §2.9.
-- `HomePlan homePlan(Goal g, int savedCents, int monthlyCents, int rentCents, int toSpendPerPeriodCents)` →
-  deposit, costs, need, left, months (ceil), readyMonth, loan, payment (annuity; rate 0 = straight), vsRent,
-  afterPerPeriod or shortBy. Annuity in exact rationals: `payment = L·r / (1 − (1+r)^−n)` with r = bp / 120 000 as a
-  `BigInt` fraction, rounded once. Tests: known annuity values (pick 3 published examples, values as literals), 0 %,
-  0 left, monthly 0, huge price.
-- `homeLevers(...)`: main tags whose last 3-month mean exceeds their 12-month median (cut = difference, rounded
-  down to whole euros) and confirmed expected income not yet assigned; each with months saved. Read-only.
+### 6.5 Big-purchase goals and loans
+**Goal fields** (synced, nullable; "model the real property": per-goal values on the goal; no kind enum, no house
+names): `price`, `depositPermille` (null = paid in full = today's goals), `costsPermille`, `loanRateBp`
+(hand-typed, basis points), `loanMonths`, `compareLineId` (optional plan line to compare with), `boughtAt`
+(date, set by "I bought it"), `loanId` (the loan it became).
+
+**Loan entity** `loan` (synced, declared with `Col`s; one row per loan; schema change → §2.9): `id`, `name`,
+`principal` (cents borrowed), `rateBp`, `months`, `firstDue` (date), `payment` (cents, as the lender wrote it),
+`accountId`, `payeeKey` (`merchantKey` of the lender's rows), `reference` (optional, text the bank shows),
+`goalId` (optional), `tagId` (optional project tag), `closedAt` (date or null). Rate changes: a child entity
+`loanrate` (`loanId`, `from` date, `rateBp`, `payment`). Balance checks: `loancheck` (`loanId`, `date`, `balance`
+as the lender showed it, confirmed by the owner). Matched payments use the existing recurring/match machinery
+(the loan is a confirmed recurring group whose amount is `payment`; match by payee key or reference, never by
+amount alone; a matched row's main tag is the fixed "Loan" tag).
+
+**Pure functions** (exact integer/BigInt, rounded once, half away from zero):
+- `GoalPlan goalPlan(Goal g, int savedCents, int monthlyCents, {int? compareCents, required int toSpendPerPeriod})`
+  → deposit, costs, need, left, months (ceil), readyMonth, loan, payment estimate (annuity
+  `L·r / (1 − (1+r)^−n)`, r = bp / 120 000 as a `BigInt` fraction; rate 0 = L ÷ n), vsCompare, afterPerPeriod or
+  shortBy.
+- `List<LoanMonth> loanSchedule(Loan l, List<LoanRate> rates, List<LoanCheck> checks)`: per month interest =
+  round(balance × r), principal = payment − interest, the last month pays the exact rest; a confirmed check resets
+  the balance from its date; a rate row changes r (and payment) from its date. Gives balance, interest paid / still
+  to pay, months left, payoff month.
+- `LoanState loanState(schedule, matchedPayments, today)`: paid months, "not seen yet" months (due + 3 days, no
+  match), owed now (schedule balance after the last matched month).
+- `loanWhatIf(loan, extraOnce, extraMonthly, newRateFrom)` → months saved, interest saved. Read-only.
+- `goalLevers(...)`: main tags whose last 3-month mean exceeds their 12-month median (cut = the difference,
+  rounded down to whole euros) and confirmed expected income not yet assigned; each with months saved. Read-only.
+- Plan: the fixed-costs total = rent + subscriptions + own fixed lines + Σ open loans' current payment (each loan
+  its own line). Migration: `WalletSettings.loan`/`loanEnd` → one `loan` row (principal/rate unknown = null;
+  `loanLeft` keeps working from `payment` + end month until they are filled in).
+- Tests: three published annuity examples (values as literals); 0 %; schedule ends at exactly 0; a balance check
+  mid-way; a rate change mid-way; extra payment; Undo of "bought" restores everything; migration of the old single
+  loan; a paid-off loan leaves the plan; a payment matched by reference with an amount that differs (the lender
+  changed it) is still matched and flagged "amount changed".
 
 ---
 
