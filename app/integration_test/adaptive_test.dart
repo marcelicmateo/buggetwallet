@@ -108,7 +108,7 @@ void main() {
     });
   }
 
-  itest('adaptive: Ctrl+1..5, Ctrl+N and resizing across the boundaries on the real app', (t) async {
+  itest('adaptive: Ctrl+1..4, Ctrl+, Ctrl+N and resizing across the boundaries on the real app', (t) async {
     final wc = await Harness.start(t);
     wc.repo.importBatch(demoBatch(wc.today()));
     await _resize(t, const Size(1280, 800));
@@ -127,9 +127,9 @@ void main() {
       await t.pumpAndSettle();
     }
 
-    await ctrl(LogicalKeyboardKey.digit5);
+    await ctrl(LogicalKeyboardKey.comma);
     expect(find.byType(SettingsScreen), findsOneWidget);
-    await ctrl(LogicalKeyboardKey.digit2);
+    await ctrl(LogicalKeyboardKey.digit3);
     expect(find.byType(SpendingScreen), findsOneWidget);
     await ctrl(LogicalKeyboardKey.keyN);
     expect(find.byType(AddExpenseSheet), findsOneWidget);

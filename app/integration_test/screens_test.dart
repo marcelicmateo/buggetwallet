@@ -30,7 +30,7 @@ import 'package:wallet_sync/wallet_sync.dart';
 
 import '../test/support/seams.dart';
 import 'demo_data.dart';
-import 'support/harness.dart' show Harness, navTab, pageList, settingsSection;
+import 'support/harness.dart' show Harness, goTab, navTab, pageList, settingsSection;
 
 /// Distinctive texts of the synthetic data: none of them may reach the log.
 const _private = [
