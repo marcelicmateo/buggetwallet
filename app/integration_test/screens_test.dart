@@ -215,6 +215,9 @@ void main() {
     await tester.scrollUntilVisible(find.text('Suggest from the last 6 months'), 300, scrollable: pageList(BudgetScreen));
     await tester.pumpAndSettle();
     await binding.takeScreenshot('5-plan-budgets');
+    // The Plan page keeps its scroll, and its lazy list builds nothing far from the window: back to the top for the forecast below.
+    tester.state<ScrollableState>(pageList(BudgetScreen)).position.jumpTo(0);
+    await tester.pumpAndSettle();
     wc.setBudgetView('spending');
     await tester.tap(navTab('Settings'));
     await tester.pumpAndSettle();
