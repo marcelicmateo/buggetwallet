@@ -102,6 +102,17 @@ entry points). Agents: scout → devops (sonnet/high for the rewrite) + test-wri
 | PF | Perf (owner 2026-10-30): budgets for 60 Hz (build p90 ≤ 16.7 ms, ≤ 10 % frames over 16.7 ms, worst build ≤ 50 ms, raster only gated at ≤ 250 ms: software GL); Android asks 60 Hz (MainActivity preferred refresh rate); tab cross-fade ~180 ms (off with reduce motion); idle warm-up of every tab's derived data after the first frame and after each reload (Priority.idle, cancelled by a new data version, logs counts/ms only); hidden tabs built one per idle frame; perf action "first switch after new data" | ui-builder (sonnet/high) | worktree | perf A/B | done, merged 6244ce6 + PF2 bfebdf0 → 868e6c7 (A/B: pre-DD tab_switch 21.4 ms FAIL, DD 15.2 ms ok = host noise, not DD) |
 | ZC | Zoomable, scrollable graphs (spec `ZC_SPEC.md`, owner answers in §6) | scout → core + test-writer + ui | worktrees | DD, RX2 (chart look follows the picked direction) | on hold |
 
+## Stage ENG: "the curious engineer" UI (owner pick 2026-11-02; spec `ENG_UI_SPEC.md`, answers + lead decisions at the end of §8)
+| # | Item | Agent | Worktree | Depends on | Status |
+|---|---|---|---|---|---|
+| E1 | theme (dark + light), Manrope + JetBrains Mono, shell Overview · Money · [+] · Explore · Plan (existing screens moved in) | ui-builder | eng-e1 | – | running |
+| EC1 | core: hours of work + findings engine (§6.1-6.2) | core-builder ∥ test-writer | eng-core-1 | – | running |
+| E2-3 | Overview + Findings UI | ui-builder | eng-ui-2 | E1, EC1 | queued |
+| EC2/E4 | Explore: query, year buckets, `view` entity, heatmap; Explore UI | core ∥ test-writer, then ui | eng-core-2 / eng-ui-3 | EC1 / E1 | queued |
+| E5 | project stats + Project screen | core then ui | eng-5 | E4 | queued |
+| E6 | home goal (6 %, 30 years) + House planner | core ∥ test-writer, then ui | eng-6 | E1 | queued |
+| E7 | restyle the rest + moves (Money timeline, Needs you, Plan/Saving, Settings) | ui-builder | eng-7 | E1–E6 | queued |
+
 ## Resume here (end of 2026-11-02 evening) — v2 pushed
 Done: F2, UX-C2, CI speed + GO-M6 (d985731 + 13d42c4, merged dcf7804), stage green. Next: owner runs ci with tests (combined desktop job + lint unverified on a runner; lead reads ci-logs with `make ci-log`); APK on the phone when plugged in (`make apk`, then adb install); M6 live test. Unused update* wrappers in core (updateIou, updatePlanned, updateCategory, updateTag) have no app callers: drop in a later core pass.
 
