@@ -55,18 +55,23 @@ extension WalletRepoPlanned on WalletRepo {
 
   /// Changes the given fields only (null = unchanged); [clearAmount] / [clearCategory] set those to none. Unknown id,
   /// bad date or amount ≤ 0: [ArgumentError].
+  /// A thin wrapper over [patch] (F2).
   void updatePlanned(String id,
-      {String? title, String? date, int? amount, String? category, bool clearAmount = false, bool clearCategory = false}) {
-    _checkPlanned(date: date, amount: amount);
-    _setPlanned(
-        id,
-        {
-          if (title != null) 'title': title,
-          if (date != null) 'date': date,
-          if (clearAmount) 'amount': null else if (amount != null) 'amount': amount,
-          if (clearCategory) 'category': null else if (category != null) 'category': category,
-        },
-        'planned.update');
+          {String? title, String? date, int? amount, String? category, bool clearAmount = false, bool clearCategory = false}) =>
+      patch(PlannedCols.entity, id, {
+        if (title != null) PlannedCols.title: title,
+        if (date != null) PlannedCols.date: date,
+        if (clearAmount) PlannedCols.amount: clearValue else if (amount != null) PlannedCols.amount: amount,
+        if (clearCategory) PlannedCols.category: clearValue else if (category != null) PlannedCols.category: category,
+      });
+
+  /// [patch] of a planned cost: [updatePlanned]'s rules; every given field is written.
+  int _patchPlanned(String id, Map<Col, Object?> v) {
+    WalletRepoPatch._needValues(v);
+    _checkPlanned(date: v[PlannedCols.date] as String?, amount: v[PlannedCols.amount] as int?);
+    final fields = _patchFields(v);
+    _setPlanned(id, fields, 'planned.update');
+    return fields.length;
   }
 
   /// The owner picked [txId] as the transaction that paid it ([paidCandidates]): no longer listed or reserved.

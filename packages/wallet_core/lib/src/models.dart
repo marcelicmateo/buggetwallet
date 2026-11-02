@@ -9,6 +9,7 @@ import 'currencies.dart' show currencyInfo;
 import 'dates.dart';
 import 'ecb.dart' show EcbRates;
 import 'logs.dart';
+import 'planned.dart' show legacyRowCapCents;
 import 'rules.dart' show MerchantPattern, merchantPatternId;
 
 final _log = Logger('bw.settings');
@@ -29,22 +30,41 @@ void resetInvalidSettingLog() {
   _invalidRangeLogged = false;
 }
 
-/// A stored column read as text or a whole number; any other type (a damaged value) reads as null.
+/// A stored column read as text; any other type (a damaged value) reads as null.
 String? _str(Object? v) => v is String ? v : null;
-int? _int(Object? v) => v is int ? v : null;
 
-/// A stored `kind_hint` as a [TxKind]; a name this build does not know (a newer importer) reads as null.
-TxKind? _kind(Object? v) => v is String ? TxKind.values.asNameMap()[v] : null;
-
-/// The typed columns of the synced entity `tx` added since F1 ([Col]; the older columns stay `ColumnDef`s in
-/// `entitySchema` until F2).
+/// The columns of the synced entity `tx` (table `tx`), in table order ([Col]; see [BillCols]). A row amount keeps the
+/// synced cap of rows imported before Stage Q ([legacyRowCapCents]); new local writes are checked lower (`isSafeCents`).
 abstract final class TxCols {
   static const entity = 'tx';
+  static const source = TextCol(entity, 'source', label: 'Source'); // pbz | revolut | csv:<shape> | manual
+  static const date = DateCol(entity, 'date', label: 'Date', rawRead: true);
+  static const amount = MoneyCol(entity, 'amount', label: 'Amount', searchable: true, cap: legacyRowCapCents);
+  static const currency = TextCol(entity, 'currency', label: 'Currency', defaultValue: 'EUR');
+  static const bankType = TextCol(entity, 'bank_type', label: 'Bank type');
+  static const description = TextCol(entity, 'description', label: 'Description', searchable: true);
+  static const category = TextCol(entity, 'category', label: 'Category', nullable: true, searchable: true); // the owner's
+  static const note = TextCol(entity, 'note', label: 'Note', nullable: true, searchable: true);
+  static const manual = FlagCol(entity, 'manual', label: 'Added by hand');
+  static const matchedTo = RefCol(entity, 'matched_to', label: 'Matched to', target: entity, nullable: true);
+  static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
+  static const seenBank = TextCol(entity, 'seen_bank', label: 'Bank rows seen', nullable: true); // `SeenBank`
+  // v3: the importer's TxKind name, written once by importBatch (a name this build does not know reads as none); the
+  // other side of an own transfer.
+  static const kindHint = EnumCol(entity, 'kind_hint', label: 'Bank kind', values: TxKind.values, nullable: true);
+  static const transferTo = RefCol(entity, 'transfer_to', label: 'Transfer partner', target: entity, nullable: true);
+  // v19 (D2 Unlink): a hand-added entry's bank rows the owner unlinked it from, a JSON list (`matchOffIds`).
+  static const matchOff = JsonCol(entity, 'match_off', label: 'Unlinked rows', nullable: true);
 
   /// v20 (UX-ACC): the app account (`accounts.id`) this bank row belongs to, written by `importBatch` (the row's
   /// `accountKey` matched an account's [AccountCols.matchKey]) or by the owner (`setTxAccount`); null = the main account
   /// of its (source, currency) (`RowAccounts`). Never set on hand-added rows.
   static const account = RefCol(entity, 'account', label: 'Account', target: 'account', nullable: true);
+
+  static const all = <Col>[
+    source, date, amount, currency, bankType, description, category, note, manual, matchedTo, deleted, seenBank, //
+    kindHint, transferTo, matchOff, account,
+  ];
 }
 
 /// A transaction as stored in the wallet database. Amounts are in minor units (cents).
@@ -128,19 +148,19 @@ class Tx {
   /// reads as its default, so one damaged row never breaks a whole list.
   static Tx fromRow(Map<String, Object?> r) => Tx(
         id: r['id'] as String,
-        source: _str(r['source']) ?? '',
-        date: _str(r['date']) ?? '',
-        amount: _int(r['amount']) ?? 0,
-        currency: _str(r['currency']) ?? 'EUR',
-        bankType: _str(r['bank_type']) ?? '',
-        description: _str(r['description']) ?? '',
-        category: _str(r['category']),
-        note: _str(r['note']),
-        manual: r['manual'] == 1,
-        matchedTo: _str(r['matched_to']),
-        deleted: r['deleted'] == 1,
-        kindHint: _kind(r['kind_hint']),
-        transferTo: _str(r['transfer_to']),
+        source: TxCols.source.read(r) ?? '',
+        date: TxCols.date.read(r) ?? '',
+        amount: TxCols.amount.read(r) ?? 0,
+        currency: TxCols.currency.read(r)!,
+        bankType: TxCols.bankType.read(r) ?? '',
+        description: TxCols.description.read(r) ?? '',
+        category: TxCols.category.read(r),
+        note: TxCols.note.read(r),
+        manual: TxCols.manual.read(r)!,
+        matchedTo: TxCols.matchedTo.read(r),
+        deleted: TxCols.deleted.read(r)!,
+        kindHint: TxCols.kindHint.read(r),
+        transferTo: TxCols.transferTo.read(r),
         matchPending: r['match_pending'] == 1,
         account: TxCols.account.read(r),
       );
@@ -246,6 +266,20 @@ List<Tx> wholePayments(Iterable<CategorizedTx> rows) {
 /// parts of one payment keep their stored order (List.sort is not stable).
 int comparePart(CategorizedTx a, CategorizedTx b) => (a.part ?? -1).compareTo(b.part ?? -1);
 
+/// The columns of the synced entity `goal` (table `goals`), in table order ([Col]; see [BillCols]). `target` and
+/// `saved` take any synced whole number (no amount cap: `goalTotal` clamps when read).
+abstract final class GoalCols {
+  static const entity = 'goal';
+  static const name = TextCol(entity, 'name', label: 'Name', nullable: true, searchable: true);
+  static const target = IntCol(entity, 'target', label: 'Target', searchable: true);
+  static const saved = IntCol(entity, 'saved', label: 'Saved', searchable: true); // the base; adds are `goal_contrib` rows
+  static const monthly = MoneyCol(entity, 'monthly', label: 'Monthly');
+  static const sort = IntCol(entity, 'sort', label: 'Order');
+  static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
+
+  static const all = <Col>[name, target, saved, monthly, sort, deleted];
+}
+
 class Goal {
   final String id;
   final String name;
@@ -266,11 +300,11 @@ class Goal {
 
   static Goal fromRow(Map<String, Object?> r) => Goal(
         id: r['id'] as String,
-        name: _str(r['name']) ?? 'Goal',
-        target: _int(r['target']) ?? 0,
-        saved: _int(r['saved']) ?? 0,
-        monthly: _int(r['monthly']) ?? 0,
-        sort: _int(r['sort']) ?? 0,
+        name: GoalCols.name.read(r) ?? 'Goal',
+        target: GoalCols.target.read(r) ?? 0,
+        saved: GoalCols.saved.read(r) ?? 0,
+        monthly: GoalCols.monthly.read(r) ?? 0,
+        sort: GoalCols.sort.read(r) ?? 0,
       );
 
   Goal withSaved(int saved) => Goal(id: id, name: name, target: target, saved: saved, monthly: monthly, sort: sort);
@@ -289,6 +323,18 @@ int goalTotal(int base, Iterable<int> contributions, {bool clamped = true}) {
   return clamped ? sum.clamp(-Goal.maxSaved, Goal.maxSaved) : sum;
 }
 
+/// The columns of the synced entity `goal_contrib` (table `goal_contrib`), in table order ([Col]; see [BillCols]).
+/// `amount` takes any synced whole number (no amount cap: each row counts at most [Goal.maxContribution]).
+abstract final class GoalContribCols {
+  static const entity = 'goal_contrib';
+  static const goalId = RefCol(entity, 'goal_id', label: 'Goal', target: GoalCols.entity);
+  static const amount = IntCol(entity, 'amount', label: 'Amount');
+  static const date = DateCol(entity, 'date', label: 'Date', rawRead: true);
+  static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
+
+  static const all = <Col>[goalId, amount, date, deleted];
+}
+
 /// An amount added to a goal's saved total (negative for a correction), synced as its own row (`goal_contrib`), so
 /// adds made on two offline devices both count. Hidden while its goal is deleted or missing.
 class GoalContribution {
@@ -303,11 +349,42 @@ class GoalContribution {
 
   static GoalContribution fromRow(Map<String, Object?> r) => GoalContribution(
         id: r['id'] as String,
-        goalId: _str(r['goal_id']) ?? '',
-        amount: _int(r['amount']) ?? 0,
-        date: _str(r['date']) ?? '',
+        goalId: GoalContribCols.goalId.read(r) ?? '',
+        amount: GoalContribCols.amount.read(r) ?? 0,
+        date: GoalContribCols.date.read(r) ?? '',
         created: _str(r['created']),
       );
+}
+
+/// The columns of the synced entity `wish` (table `wish`), in table order ([Col]; see [BillCols]).
+abstract final class WishCols {
+  static const entity = 'wish';
+  static const name = TextCol(entity, 'name', label: 'Name', nullable: true, searchable: true);
+  static const price = MoneyCol(entity, 'price', label: 'Price', searchable: true);
+  static const added = IntCol(entity, 'added', label: 'Added'); // epoch millis
+  static const status = TextCol(entity, 'status', label: 'Status', defaultValue: 'waiting'); // waiting | bought | skipped
+  static const decided = IntCol(entity, 'decided', label: 'Decided', nullable: true); // epoch millis
+  static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
+
+  static const all = <Col>[name, price, added, status, decided, deleted];
+}
+
+/// The columns of the synced entity `review` (table `reviews`, id = the review date): a weekly review done.
+abstract final class ReviewCols {
+  static const entity = 'review';
+  static const done = DateCol(entity, 'done', label: 'Done', rawRead: true);
+  static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
+
+  static const all = <Col>[done, deleted];
+}
+
+/// The columns of the synced entity `rule` (table `merchant_rules`): a payee key's category (id = the payee key).
+abstract final class RuleCols {
+  static const entity = 'rule';
+  static const category = TextCol(entity, 'category', label: 'Category', nullable: true);
+  static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
+
+  static const all = <Col>[category, deleted];
 }
 
 class WishItem {
@@ -321,11 +398,11 @@ class WishItem {
 
   static WishItem fromRow(Map<String, Object?> r) => WishItem(
         id: r['id'] as String,
-        name: _str(r['name']) ?? '',
-        price: _int(r['price']) ?? 0,
-        added: _int(r['added']) ?? 0,
-        status: _str(r['status']) ?? 'waiting',
-        decided: _int(r['decided']),
+        name: WishCols.name.read(r) ?? '',
+        price: WishCols.price.read(r) ?? 0,
+        added: WishCols.added.read(r) ?? 0,
+        status: WishCols.status.read(r)!,
+        decided: WishCols.decided.read(r),
       );
 
   double hoursLeft(int coolHours, int nowMillis) => (added + coolHours * 3600000 - nowMillis) / 3600000;
@@ -356,6 +433,42 @@ enum RecurringPeriod {
 
 /// Whether `recurring.invalid` was logged in this process (once, field name only; see [RecurringBill.fromRow]).
 var _invalidRangeLogged = false;
+
+/// The columns of the synced entity `recurring` (table `recurring`), in table order ([Col]; see [BillCols]). Row
+/// amounts keep the synced cap of rows imported before Stage Q ([legacyRowCapCents]); typed ones are checked lower.
+abstract final class RecurringCols {
+  static const entity = 'recurring';
+  static const payee = TextCol(entity, 'payee', label: 'Payee');
+  static const label = TextCol(entity, 'label', label: 'Name', searchable: true);
+  static const category = TextCol(entity, 'category', label: 'Category', searchable: true);
+  static const expectedAmount =
+      MoneyCol(entity, 'expected_amount', label: 'Amount', searchable: true, positive: true, cap: legacyRowCapCents);
+  // Out of range reads as the monthly interval.
+  static const intervalDays = IntCol(entity, 'interval_days',
+      label: 'Repeats every',
+      defaultValue: RecurringBill.defaultIntervalDays,
+      min: RecurringBill.minIntervalDays,
+      max: RecurringBill.maxIntervalDays,
+      unit: 'days');
+  static const nextDue = DateCol(entity, 'next_due', label: 'Next due', rawRead: true);
+  // candidate | confirmed | dismissed, with the `in:` prefix for an income (`RecurringBill.storedStatus`).
+  static const status = TextCol(entity, 'status', label: 'Status', defaultValue: 'candidate');
+  static const lastPaidTx = RefCol(entity, 'last_paid_tx', label: 'Last paid by', target: 'tx', nullable: true);
+  static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
+  // P4 (v12): amount range (cents), last due date of an instalment plan, added by hand.
+  static const minAmount = MoneyCol(entity, 'min_amount', label: 'Lowest amount', nullable: true, cap: legacyRowCapCents);
+  static const maxAmount = MoneyCol(entity, 'max_amount', label: 'Highest amount', nullable: true, cap: legacyRowCapCents);
+  static const endsOn = DateCol(entity, 'ends_on', label: 'Last due date', nullable: true);
+  static const manual = FlagCol(entity, 'manual', label: 'Added by hand');
+  static const ownCategory = FlagCol(entity, 'own_category', label: 'Own category'); // the owner chose the category
+  // P9 (v14): null/'out' = a bill, 'in' = a recurring income.
+  static const direction = TextCol(entity, 'direction', label: 'Direction', nullable: true);
+
+  static const all = <Col>[
+    payee, label, category, expectedAmount, intervalDays, nextDue, status, lastPaidTx, deleted, //
+    minAmount, maxAmount, endsOn, manual, ownCategory, direction,
+  ];
+}
 
 /// A bill that comes back on a fixed interval ([intervalDays]: weekly … yearly, P4): detected from bank rows
 /// (`detectRecurring`, status `candidate`), then confirmed or dismissed by the owner, or added by hand ([manual],
@@ -541,33 +654,29 @@ class RecurringBill {
   /// invalid stored range is kept as stored but reads as no range ([hasRange] false; logged once per process as
   /// `recurring.invalid`, field name only).
   static RecurringBill fromRow(Map<String, Object?> r) {
-    final interval = _int(r['interval_days']);
-    final lo = _int(r['min_amount']), hi = _int(r['max_amount']);
+    final lo = RecurringCols.minAmount.read(r), hi = RecurringCols.maxAmount.read(r);
+    final status = RecurringCols.status.read(r)!;
     if ((lo != null || hi != null) && !validRange(lo, hi) && !_invalidRangeLogged) {
       _invalidRangeLogged = true;
       logEvent(_recurringLog, Level.WARNING, 'recurring.invalid', {'field': 'amount_range'});
     }
     return RecurringBill(
       id: r['id'] as String,
-      payee: _str(r['payee']) ?? '',
-      label: _str(r['label']) ?? '',
-      category: _str(r['category']) ?? '',
-      expectedAmount: _int(r['expected_amount']) ?? 0,
-      intervalDays: interval == null || interval < minIntervalDays || interval > maxIntervalDays ? defaultIntervalDays : interval,
-      nextDue: _str(r['next_due']) ?? '',
-      status: switch (_str(r['status'])) {
-        null => 'candidate',
-        final s when s.startsWith(incomeStatusPrefix) => s.substring(incomeStatusPrefix.length),
-        final s => s,
-      },
-      lastPaidTx: _str(r['last_paid_tx']),
+      payee: RecurringCols.payee.read(r) ?? '',
+      label: RecurringCols.label.read(r) ?? '',
+      category: RecurringCols.category.read(r) ?? '',
+      expectedAmount: RecurringCols.expectedAmount.read(r) ?? 0,
+      intervalDays: RecurringCols.intervalDays.read(r)!,
+      nextDue: RecurringCols.nextDue.read(r) ?? '',
+      status: status.startsWith(incomeStatusPrefix) ? status.substring(incomeStatusPrefix.length) : status,
+      lastPaidTx: RecurringCols.lastPaidTx.read(r),
       minAmount: lo,
       maxAmount: hi,
-      endsOn: switch (_str(r['ends_on'])) { final e? when isIsoDate(e) => e, _ => null }, // a bad stored date = no end
-      manual: _int(r['manual']) == 1,
-      ownCategory: _int(r['own_category']) == 1,
+      endsOn: RecurringCols.endsOn.read(r), // a bad stored date = no end
+      manual: RecurringCols.manual.read(r)!,
+      ownCategory: RecurringCols.ownCategory.read(r)!,
       // An `in:` status marks an income even where `direction` was lost (a snapshot written by an older build).
-      direction: _str(r['direction']) ?? ((_str(r['status']) ?? '').startsWith(incomeStatusPrefix) ? directionIn : null),
+      direction: RecurringCols.direction.read(r) ?? (status.startsWith(incomeStatusPrefix) ? directionIn : null),
     );
   }
 
@@ -707,6 +816,22 @@ class Account extends RowModel {
 /// Which way an [Iou]'s money went: the owner lent it to the person (they owe the owner) or borrowed it from them.
 enum IouDirection { lent, borrowed }
 
+/// The columns of the synced entity `iou` (table `ious`), in table order ([Col]; see [BillCols]).
+abstract final class IouCols {
+  static const entity = 'iou';
+  static const person = TextCol(entity, 'person', label: 'Person', searchable: true, maxLength: Iou.maxPerson);
+  static const direction = EnumCol(entity, 'direction', label: 'Direction', values: IouDirection.values, defaultValue: IouDirection.lent);
+  static const amount = MoneyCol(entity, 'amount', label: 'Amount', positive: true);
+  static const currency = TextCol(entity, 'currency', label: 'Currency', defaultValue: 'EUR');
+  static const date = DateCol(entity, 'date', label: 'Date', rawRead: true);
+  static const note = TextCol(entity, 'note', label: 'Note', nullable: true, searchable: true, maxLength: Iou.maxNote);
+  static const tx = RefCol(entity, 'tx', label: 'Payment', target: 'tx', nullable: true);
+  static const closed = FlagCol(entity, 'closed', label: 'Closed');
+  static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
+
+  static const all = <Col>[person, direction, amount, currency, date, note, tx, closed, deleted];
+}
+
 /// Money lent to or borrowed from a person (Q8), synced entity `iou` (schema 17). [amount] is positive cents in
 /// [currency]; [tx] is the payment the owner linked as the loan itself (lent: an outflow, borrowed: an inflow), which
 /// then counts as neither spending nor income (`Categorizer.iouTx`). An IOU without a link changes no number.
@@ -742,16 +867,28 @@ class Iou {
   /// An unknown stored direction (a newer build's word) reads as lent.
   static Iou fromRow(Map<String, Object?> r) => Iou(
         id: r['id'] as String,
-        person: _str(r['person']) ?? '',
-        direction: _str(r['direction']) == IouDirection.borrowed.name ? IouDirection.borrowed : IouDirection.lent,
-        amount: _int(r['amount']) ?? 0,
-        currency: _str(r['currency']) ?? 'EUR',
-        date: _str(r['date']) ?? '',
-        note: _str(r['note']),
-        tx: _str(r['tx']),
-        closed: r['closed'] == 1,
-        deleted: r['deleted'] == 1,
+        person: IouCols.person.read(r) ?? '',
+        direction: IouCols.direction.read(r)!,
+        amount: IouCols.amount.read(r) ?? 0,
+        currency: IouCols.currency.read(r)!,
+        date: IouCols.date.read(r) ?? '',
+        note: IouCols.note.read(r),
+        tx: IouCols.tx.read(r),
+        closed: IouCols.closed.read(r)!,
+        deleted: IouCols.deleted.read(r)!,
       );
+}
+
+/// The columns of the synced entity `iou_part` (table `iou_parts`), in table order ([Col]; see [BillCols]).
+abstract final class IouPartCols {
+  static const entity = 'iou_part';
+  static const iouId = RefCol(entity, 'iou_id', label: 'IOU', target: IouCols.entity);
+  static const amount = MoneyCol(entity, 'amount', label: 'Amount', positive: true);
+  static const date = DateCol(entity, 'date', label: 'Date', rawRead: true);
+  static const tx = RefCol(entity, 'tx', label: 'Payment', target: 'tx', nullable: true);
+  static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
+
+  static const all = <Col>[iouId, amount, date, tx, deleted];
 }
 
 /// One repayment of an [Iou] (Q8), synced entity `iou_part`: positive cents in the IOU's currency, on [date]; [tx] is
@@ -768,11 +905,11 @@ class IouPart {
 
   static IouPart fromRow(Map<String, Object?> r) => IouPart(
         id: r['id'] as String,
-        iouId: _str(r['iou_id']) ?? '',
-        amount: _int(r['amount']) ?? 0,
-        date: _str(r['date']) ?? '',
-        tx: _str(r['tx']),
-        deleted: r['deleted'] == 1,
+        iouId: IouPartCols.iouId.read(r) ?? '',
+        amount: IouPartCols.amount.read(r) ?? 0,
+        date: IouPartCols.date.read(r) ?? '',
+        tx: IouPartCols.tx.read(r),
+        deleted: IouPartCols.deleted.read(r)!,
       );
 }
 
@@ -795,6 +932,25 @@ enum PlannedSource { manual, calendar, bill }
 /// open: reserves money until its date has passed; paid: the owner picked the transaction that paid it ([PlannedCost.paidTx]);
 /// skipped: not coming (also a dismissed calendar event).
 enum PlannedStatus { open, paid, skipped }
+
+/// The columns of the synced entity `planned` (table `planned`), in table order ([Col]; see [BillCols]).
+abstract final class PlannedCols {
+  static const entity = 'planned';
+  static const title = TextCol(entity, 'title', label: 'Title', searchable: true);
+  static const date = DateCol(entity, 'date', label: 'Date', rawRead: true);
+  static const amount = MoneyCol(entity, 'amount', label: 'Amount', nullable: true, searchable: true, positive: true);
+  static const category = TextCol(entity, 'category', label: 'Category', nullable: true, searchable: true);
+  static const source = EnumCol(entity, 'source', label: 'Source', values: PlannedSource.values, defaultValue: PlannedSource.manual);
+  static const sourceRef = TextCol(entity, 'source_ref', label: 'Source ref', nullable: true);
+  static const status = EnumCol(entity, 'status', label: 'Status', values: PlannedStatus.values, defaultValue: PlannedStatus.open);
+  static const paidTx = RefCol(entity, 'paid_tx', label: 'Paid by', target: 'tx', nullable: true);
+  static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
+  // v19 (KL-A): the bank rows the owner reopened this cost from after it was paid by them, a JSON list
+  // (`PlannedCost.autoOff`): auto-Paid (`planAutoPaid`) never picks one of them again.
+  static const autoOff = JsonCol(entity, 'auto_off', label: 'Not paid by', nullable: true);
+
+  static const all = <Col>[title, date, amount, category, source, sourceRef, status, paidTx, deleted, autoOff];
+}
 
 /// A planned future cost (§4.3), synced entity `planned` (schema 6). Amounts are positive cents (a cost).
 class PlannedCost {
@@ -863,16 +1019,16 @@ class PlannedCost {
   /// Unknown `source`/`status` words (a newer build) read as manual/open; a damaged amount reads as null.
   static PlannedCost fromRow(Map<String, Object?> r) => PlannedCost(
         id: r['id'] as String,
-        title: _str(r['title']) ?? '',
-        date: _str(r['date']) ?? '',
-        amount: _int(r['amount']),
-        category: _str(r['category']),
-        sourceRef: _str(r['source_ref']),
-        paidTx: _str(r['paid_tx']),
-        source: PlannedSource.values.asNameMap()[r['source']] ?? PlannedSource.manual,
-        status: PlannedStatus.values.asNameMap()[r['status']] ?? PlannedStatus.open,
-        deleted: r['deleted'] == 1,
-        autoOff: _idList(r['auto_off']),
+        title: PlannedCols.title.read(r) ?? '',
+        date: PlannedCols.date.read(r) ?? '',
+        amount: PlannedCols.amount.read(r),
+        category: PlannedCols.category.read(r),
+        sourceRef: PlannedCols.sourceRef.read(r),
+        paidTx: PlannedCols.paidTx.read(r),
+        source: PlannedCols.source.read(r)!,
+        status: PlannedCols.status.read(r)!,
+        deleted: PlannedCols.deleted.read(r)!,
+        autoOff: _idList(PlannedCols.autoOff.read(r)),
       );
 }
 

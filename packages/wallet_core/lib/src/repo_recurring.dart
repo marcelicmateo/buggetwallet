@@ -94,7 +94,7 @@ extension WalletRepoRecurring on WalletRepo {
   /// [minAmount]/[maxAmount] and [endsOn]). The range after the edit must hold the amount after the edit. Editing a
   /// candidate does not confirm it (detection keeps a candidate's label, amount, interval and due date at its latest
   /// result). Unknown id: [ArgumentError]. The direction (bill or income, P9) is never changed; an income's category
-  /// must stay of kind extra and it takes no last due date ([endsOn]).
+  /// must stay of kind extra and it takes no last due date ([endsOn]). A thin wrapper over [patch] (F2).
   void updateRecurring(
     String id, {
     String? label,
@@ -107,11 +107,39 @@ extension WalletRepoRecurring on WalletRepo {
     String? nextDue,
     String? endsOn,
     bool clearEnd = false,
-  }) {
+  }) =>
+      patch(RecurringCols.entity, id, {
+        if (label != null) RecurringCols.label: label,
+        if (category != null) RecurringCols.category: category,
+        if (amount != null) RecurringCols.expectedAmount: amount,
+        if (clearRange) ...{
+          RecurringCols.minAmount: clearValue,
+          RecurringCols.maxAmount: clearValue
+        } else ...{
+          if (minAmount != null) RecurringCols.minAmount: minAmount,
+          if (maxAmount != null) RecurringCols.maxAmount: maxAmount,
+        },
+        if (intervalDays != null) RecurringCols.intervalDays: intervalDays,
+        if (nextDue != null) RecurringCols.nextDue: nextDue,
+        if (clearEnd) RecurringCols.endsOn: clearValue else if (endsOn != null) RecurringCols.endsOn: endsOn,
+      });
+
+  static const _recurringEdited = <Col>{
+    RecurringCols.label, RecurringCols.category, RecurringCols.expectedAmount, RecurringCols.minAmount, //
+    RecurringCols.maxAmount, RecurringCols.intervalDays, RecurringCols.nextDue, RecurringCols.endsOn,
+  };
+
+  /// [patch] of a recurring bill or income: [updateRecurring]'s rules (an amount range is written as one pair).
+  int _patchRecurring(String id, Map<Col, Object?> v) {
+    WalletRepoPatch._needValues(v);
     final rows = db.select('SELECT * FROM recurring WHERE id = ?', [id]);
     if (rows.isEmpty) throw ArgumentError('No such bill.');
     final r = rows.first;
     final b = RecurringBill.fromRow(r);
+    final has = v.containsKey;
+    final label = v[RecurringCols.label] as String?, category = v[RecurringCols.category] as String?;
+    final intervalDays = v[RecurringCols.intervalDays] as int?, nextDue = v[RecurringCols.nextDue] as String?;
+    final endsOn = v[RecurringCols.endsOn] as String?;
     final fields = <String, Object?>{};
     if (label != null) {
       final name = _checkBillLabel(label);
@@ -131,17 +159,17 @@ extension WalletRepoRecurring on WalletRepo {
       if (!isIsoDate(nextDue)) throw ArgumentError('Give the next due date.');
       if (nextDue != b.nextDue) fields['next_due'] = nextDue;
     }
-    if (clearEnd) {
+    if (has(RecurringCols.endsOn) && endsOn == null) {
       if (b.endsOn != null) fields['ends_on'] = null;
     } else if (endsOn != null) {
       if (b.isIncome) throw ArgumentError('An income has no instalments.');
       if (!isIsoDate(endsOn)) throw ArgumentError('Give the last due date.');
       if (endsOn != b.endsOn) fields['ends_on'] = endsOn;
     }
-    if (amount != null || minAmount != null || maxAmount != null || clearRange) {
-      final a = amount ?? b.expectedAmount;
-      final lo = clearRange ? null : minAmount ?? b.minAmount;
-      final hi = clearRange ? null : maxAmount ?? b.maxAmount;
+    if (has(RecurringCols.expectedAmount) || has(RecurringCols.minAmount) || has(RecurringCols.maxAmount)) {
+      final a = v[RecurringCols.expectedAmount] as int? ?? b.expectedAmount;
+      final lo = has(RecurringCols.minAmount) ? v[RecurringCols.minAmount] as int? : b.minAmount;
+      final hi = has(RecurringCols.maxAmount) ? v[RecurringCols.maxAmount] as int? : b.maxAmount;
       _checkBillAmounts(a, lo, hi);
       if (a != b.expectedAmount) fields['expected_amount'] = a;
       // Both ends together, so two devices editing the range never merge into a pair neither made.
@@ -150,9 +178,11 @@ extension WalletRepoRecurring on WalletRepo {
         fields['max_amount'] = hi;
       }
     }
-    if (fields.isEmpty) return;
+    fields.addAll(_patchRest(v, _recurringEdited));
+    if (fields.isEmpty) return 0;
     _write([('recurring', id, fields)]);
     logEvent(_log, Level.INFO, 'recurring.update', {'fields': fields.length, 'manual': b.manual});
+    return fields.length;
   }
 
   /// Cycles left of [b]'s instalment plan, from `nextDue` to `endsOn` inclusive ([RecurringBill.instalmentsLeft]); null

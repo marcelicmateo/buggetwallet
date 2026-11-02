@@ -37,17 +37,24 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
 - `cols.dart` — typed columns (F1, `docs/context/FIELDS_PLAN.md`): `sealed class Col<T>` extends `ColumnDef` (`entity`,
   `column`, `label`, `defaultValue`, `read` lenient = bad/missing → default, `encode`, `problem(v, today:)` = reason
   without the label, `accepts` = Dart type); kinds `TextCol(maxLength)`, `DateCol(notAfterToday)`, `IntCol(min, max,
-  unit)`, `MoneyCol(cap = maxAmount, positive, currencyCol)` (its cap is the sync cap, not `_amountCaps`), `FlagCol`,
+  unit)`, `MoneyCol(cap = maxAmount, positive, currencyCol)` (its cap is the sync cap), `FlagCol`,
   `EnumCol(values, wire)`, `RefCol(target)`, `JsonCol(check)`; `clearValue`; `RowModel` (`row`, `model[col]`).
-  Holders `BillCols` (bills.dart) and `AccountCols` (models.dart) are `entitySchema['bill'/'account']`; `Bill`/`Account`
-  are `RowModel`s whose getters read through them. `repo_patch.dart` (`WalletRepoPatch.patch(entity, id, {col: v})`):
+  F2: every synced entity but `setting` is a holder's `.all` (`BillCols`, `PayeeAliasCols` in bills.dart; `CategoryCols`
+  categories.dart; `TagCols`, `TxTagCols`, `RuleTagCols` tags.dart; `SplitCols` splits.dart; `FxDayCols` ecb.dart; the
+  rest in models.dart: `TxCols`, `GoalCols`, `GoalContribCols`, `WishCols`, `RuleCols`, `RecurringCols`, `PlannedCols`,
+  `AccountCols`, `IouCols`, `IouPartCols`, `ReviewCols`); `Bill`/`Account` are `RowModel`s, the other models keep their
+  classes and `fromRow` reads through the holder. `repo_patch.dart` (`WalletRepoPatch.patch(entity, id, {col: v})`):
   type + `problem` for every value first (`ArgumentError('<label>: <reason>')`, nothing written), null/`clearValue` =
   none, one op in the map's order; bill hook = `_liveBill` + `_billWrites` (status, links, file, source, currency,
   unsure, deleted refused: their own actions), account hook = `updateAccount`'s rules and texts (trim, "Give the account
-  a name.", shape, unique, opening pair, diff; currency/deleted refused); other entities: the row must exist.
-  `updateBill`/`updateAccount` are wrappers over it. Incoming ops keep the old check (type, nullability, cap only).
+  a name.", shape, unique, opening pair, diff; currency/deleted refused); F2 hooks for iou, planned, recurring, category,
+  tag (each the old update method's rules and messages; a column the hook does not know is written as given,
+  `_patchRest`); `_actionFields` per entity and `_actionEntities` (tx, iou_part, goal_contrib, rule, txtag, ruletag,
+  split, review, payee_alias: own actions only) are refused; other entities: the row must exist. `updateBill`/
+  `updateAccount`/`updateIou`/`updatePlanned`/`updateRecurring`/`updateCategory`/`updateTag` are wrappers over it;
+  creates and actions (`saveGoal`, `addWish`, `decideWish`, tx writes, …) keep their own write maps. Incoming ops keep the old check (type, nullability, cap only).
   Tests: `test/f1_cols_test.dart` (kinds, patch, done check with a test-only entity), spec tests `f1_wire_test.dart`,
-  `f1_mixed_test.dart`, `f1_refusals_test.dart`.
+  `f1_mixed_test.dart`, `f1_refusals_test.dart`, `f2_wire_test.dart`.
 - `repo.dart` — `WalletRepo`: open/migrate, change log, reads, and every write. Writes go through `_write(...)` so each one
   becomes a sync op; never `db.execute` an INSERT/UPDATE on a data table directly. `_apply` reads the row's clocks once
   and checks each field's type (`_fieldValue` by its `ColumnDef`): a wrong-typed one is ignored (`repo.badField`, entity +
@@ -366,7 +373,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
 - **Stage Q core A.** Q3 one amount cap: `isSafeCents` (±`maxAmountCents` = `WalletSettings.maxAmount`, `planned.dart`);
   `addTransaction` refuses beyond it (`ArgumentError`), `importBatch` skips and counts (`ImportSummary.tooLarge`,
   `repo.tooLarge {source, count}`), `_fieldValue` quarantines a synced amount column beyond its cap like a wrong type
-  (`_amountCaps`: tx and recurring amounts at `legacyRowCapCents` 10^12, the pre-Q importer cap, so an old import is
+  (`MoneyCol.cap`: tx and recurring amounts at `legacyRowCapCents` 10^12, the pre-Q importer cap, so an old import is
   never dropped; planned, bills, wish price, account opening, goal `monthly` and IOU/repayment amounts at the cap; goal target/saved keep
   `goalTotal`'s clamping); budget sums assert < 2^53 (`_ok`; 90,000 rows at 10^11 fit, 9,000 at 10^12).
   Q4 `previewImport(batch, {revive})` (`repo_import.dart`, types in `import_preview.dart`): read-only (no row, clock,
@@ -724,8 +731,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
 
 ## Rules
 - Amounts are `int` cents; expenses negative. Dates are `YYYY-MM-DD` strings.
-- New table or field: add it to `entitySchema` in `schema.dart` (for bill/account: one `Col` line in `BillCols` /
-  `AccountCols`; DDL, sync, type check, migration, search and `patch` follow), bump `schemaVersion` with a new
+- New table or field: one `Col` line in the entity's holder (`XCols`, whose `.all` is its `entitySchema` entry; DDL,
+  sync, type check, migration, search and `patch` follow; a new entity gets a holder), bump `schemaVersion` with a new
   `test/fixtures/schema/vNN.sql` (the guard test asks), and add it to `entityTables` in `test/support/sim.dart`;
   existing devices must still open old databases (add columns, never rename).
 - Pure functions for new calculations (inputs → result object), so tests need no database.

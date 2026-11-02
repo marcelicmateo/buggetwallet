@@ -434,6 +434,17 @@ String? billPayeeKey(Bill b, {Map<String, String> payeeAliases = const {}}) => r
 /// another alias is never followed further (no chains). null stays null.
 String? resolvePayeeAlias(String? key, Map<String, String> payeeAliases) => key == null ? null : payeeAliases[key] ?? key;
 
+/// The columns of the synced entity `payee_alias` (table `payee_aliases`, id [payeeAliasId]): a slip's payee key
+/// ([alias]) read as the recurring bill payee key [payee].
+abstract final class PayeeAliasCols {
+  static const entity = 'payee_alias';
+  static const alias = TextCol(entity, 'alias', label: 'Slip payee');
+  static const payee = TextCol(entity, 'payee', label: 'Bill payee');
+  static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
+
+  static const all = <Col>[alias, payee, deleted];
+}
+
 /// KL-A: the synced row id of payee alias [aliasKey]: `pa:` + the first 16 hex characters of the SHA-256 of its UTF-8
 /// bytes (the same alias set on two devices is one row; the id does not show the payee). Not safe in a log.
 String payeeAliasId(String aliasKey) => 'pa:${sha256Hex(utf8.encode(aliasKey)).substring(0, 16)}';

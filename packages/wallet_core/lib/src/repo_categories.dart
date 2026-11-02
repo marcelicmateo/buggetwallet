@@ -67,23 +67,40 @@ extension WalletRepoCategories on WalletRepo {
   /// [position] and [hidden] only. The change goes to [id]'s whole sync duplicate group, so the category the owner
   /// sees changes as one. A [parent] is refused (T1: use a tag); [clearParent] is accepted and does nothing (every
   /// category is top-level). A label already used, a negative position, or an unknown or deleted id: [ArgumentError].
-  Future<void> updateCategory(String id, {String? name, int? position, bool? hidden, String? parent, bool clearParent = false}) async {
-    if (parent != null) throw ArgumentError('Use a tag for this.');
+  /// A thin wrapper over [patch] (F2).
+  Future<void> updateCategory(String id, {String? name, int? position, bool? hidden, String? parent, bool clearParent = false}) async =>
+      patch(CategoryCols.entity, id, {
+        if (parent != null) CategoryCols.parent: parent else if (clearParent) CategoryCols.parent: clearValue,
+        if (name != null) CategoryCols.name: name,
+        if (position != null) CategoryCols.position: position,
+        if (hidden != null) CategoryCols.hidden: hidden,
+      });
+
+  static const _categoryEdited = <Col>{CategoryCols.parent, CategoryCols.name, CategoryCols.position, CategoryCols.hidden};
+
+  /// [patch] of a category: [updateCategory]'s rules, written to [id]'s whole sync duplicate group (a parent is refused,
+  /// clearing it does nothing; position none = the default order).
+  int _patchCategory(String id, Map<Col, Object?> v) {
+    WalletRepoPatch._needValues(v);
+    if (v[CategoryCols.parent] != null) throw ArgumentError('Use a tag for this.');
     final t = categoryTable();
     final builtIn = categories.containsKey(id);
     if (!builtIn && !t.isLive(id)) throw ArgumentError('No such category.');
+    final name = v[CategoryCols.name] as String?, position = v[CategoryCols.position] as int?, hidden = v[CategoryCols.hidden] as bool?;
     if (position != null && position < 0) throw ArgumentError('Bad position.');
     final n = name == null ? null : _checkName(name);
     final group = _group(t, id);
     if (n != null) _checkUniqueLabel(t, n, except: group.toSet());
     final fields = <String, Object?>{
       if (n != null) 'name': n,
-      if (position != null) 'position': position,
+      if (v.containsKey(CategoryCols.position)) 'position': position,
       if (hidden != null) 'hidden': hidden ? 1 : 0,
+      ..._patchRest(v, _categoryEdited),
     };
-    if (fields.isEmpty) return;
+    if (fields.isEmpty) return 0;
     _write([for (final g in group) ('category', g, fields)]);
     logEvent(_log, Level.INFO, 'category.update', {'fields': fields.length, 'builtIn': builtIn, 'group': group.length});
+    return fields.length;
   }
 
   /// Removes a custom category (`deleted: 1`; the row stays for [undeleteCategory], and rows pointing at it fall back

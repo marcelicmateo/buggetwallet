@@ -2,8 +2,41 @@
 // owner's own labels (entity `tag`), given to rows by per-payee rule tags (`ruletag`) and per-row links (`txtag`).
 // Everything here is pure and read time: nothing is written on import.
 import 'categories.dart' show BudgetKind, Categorizer, CategoryTable, merchantKey, merchantName;
+import 'cols.dart';
 import 'models.dart';
 import 'search.dart' show foldText;
+
+/// The columns of the synced entity `tag` (table `tags`), in table order ([Col]; see `BillCols`).
+abstract final class TagCols {
+  static const entity = 'tag';
+  static const name = TextCol(entity, 'name', label: 'Name', searchable: true, maxLength: TagRow.maxName);
+  static const position = IntCol(entity, 'position', label: 'Position', nullable: true);
+  static const hidden = FlagCol(entity, 'hidden', label: 'Hidden');
+  static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
+
+  static const all = <Col>[name, position, hidden, deleted];
+}
+
+/// The columns of the synced entity `txtag` (table `tx_tags`, id `<txId>|<tagId>`): a tag set on (`on`) or off (`off`)
+/// one row; never deleted ('' = no say).
+abstract final class TxTagCols {
+  static const entity = 'txtag';
+  static const tx = RefCol(entity, 'tx', label: 'Payment', target: 'tx');
+  static const tag = RefCol(entity, 'tag', label: 'Tag', target: TagCols.entity);
+  static const state = TextCol(entity, 'state', label: 'State');
+
+  static const all = <Col>[tx, tag, state];
+}
+
+/// The columns of the synced entity `ruletag` (table `rule_tags`, id `<payee>|<tagId>`): a tag every row of a payee gets.
+abstract final class RuleTagCols {
+  static const entity = 'ruletag';
+  static const payee = TextCol(entity, 'payee', label: 'Payee');
+  static const tag = RefCol(entity, 'tag', label: 'Tag', target: TagCols.entity);
+  static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
+
+  static const all = <Col>[payee, tag, deleted];
+}
 
 /// One row of the synced `tag` entity (T1, schema 11; table `tags`). The id is `t` + 12 random hex characters.
 class TagRow {
@@ -28,10 +61,10 @@ class TagRow {
 
   static TagRow fromRow(Map<String, Object?> r) => TagRow(
         id: r['id'] as String,
-        name: r['name'] is String ? r['name'] as String : '',
-        position: r['position'] is int ? r['position'] as int : null,
-        hidden: r['hidden'] == 1,
-        deleted: r['deleted'] == 1,
+        name: TagCols.name.read(r) ?? '',
+        position: TagCols.position.read(r),
+        hidden: TagCols.hidden.read(r)!,
+        deleted: TagCols.deleted.read(r)!,
       );
 }
 
