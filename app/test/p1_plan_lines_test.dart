@@ -250,7 +250,7 @@ void main() {
       final r = wc.search('pet insur');
       expect(r.txs.map((x) => x.category), [id]);
       expect(wc.search('Pet insurance').txs, hasLength(1));
-      await wc.renameCategory(id, 'Animal cover');
+      wc.renameCategory(id, 'Animal cover');
       expect(wc.search('pet insur').txs, isEmpty);
       expect(wc.search('animal').txs, hasLength(1));
       wc.dispose();
@@ -283,7 +283,7 @@ void main() {
   group('fields cover every plan line', () {
     testWidgets('a hidden category and a sync duplicate still get a field (core subtracts their lines)', (t) async {
       final (:wc, :id) = await withFixed();
-      await wc.setCategoryHidden(id, true);
+      wc.setCategoryHidden(id, true);
       final now = DateTime.now().millisecondsSinceEpoch;
       const dup = 'kffffffffffff'; // the same label as `id`; the smaller id is the original
       wc.repo.applyRemote([
@@ -491,7 +491,7 @@ void main() {
 
     testWidgets('Paid in cash starts on the first offered flex category when Groceries is hidden', (t) async {
       final wc = billsWallet();
-      await wc.setCategoryHidden('Groceries', true);
+      wc.setCategoryHidden('Groceries', true);
       final first = wc.categoryTable.pickable(kinds: const {BudgetKind.flex}).firstWhere((c) => c != 'Bank fees');
       expect(first, isNot('Groceries'));
       final (id, _) = wc.repo.importBill(syntheticBill('cash-hidden', total: 2000));

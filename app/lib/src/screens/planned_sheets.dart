@@ -64,12 +64,16 @@ class _PlannedFormSheetState extends State<PlannedFormSheet> {
       // The category is sent only when the owner changed it: the one shown is the resolved one, so a cost whose stored category was
       // deleted must not get the fallback written back by an edit of something else.
       final old = widget.edit!.category;
-      final refusal = wc.patchFields(PlannedCols.entity, widget.edit!.id, {
-        PlannedCols.title: title,
-        PlannedCols.date: date,
-        PlannedCols.amount: amount,
-        if (_category != old) PlannedCols.category: _category,
-      });
+      final refusal = wc.patchFields(
+          PlannedCols.entity,
+          widget.edit!.id,
+          {
+            PlannedCols.title: title,
+            PlannedCols.date: date,
+            PlannedCols.amount: amount,
+            if (_category != old) PlannedCols.category: _category,
+          },
+          prefixed: false);
       if (refusal != null) return setState(() => _error = refusal);
     } else if (widget.suggestion != null) {
       wc.confirmSuggestion(widget.suggestion!, amount: amount, title: title, date: date, category: _category);

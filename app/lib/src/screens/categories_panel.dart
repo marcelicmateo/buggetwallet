@@ -133,21 +133,21 @@ class _CategoryRow extends StatelessWidget {
       case _Act.rename:
         await showSheet<bool>(context, CategoryFormSheet(wc: wc, rename: id));
       case _Act.hide:
-        await _run(context, () => wc.setCategoryHidden(id, !wc.categoryTable.isHidden(id)));
+        _run(context, () => wc.setCategoryHidden(id, !wc.categoryTable.isHidden(id)));
       case _Act.up:
-        await _run(context, () => wc.moveCategory(id, -1));
+        _run(context, () => wc.moveCategory(id, -1));
       case _Act.down:
-        await _run(context, () => wc.moveCategory(id, 1));
+        _run(context, () => wc.moveCategory(id, 1));
       case _Act.delete:
         await deleteCategoryWithUndo(context, wc, id);
     }
   }
 
-  Future<void> _run(BuildContext context, Future<void> Function() body) async {
+  void _run(BuildContext context, void Function() body) {
     final messenger = ScaffoldMessenger.of(context);
     final wide = layoutOf(context) != LayoutSize.compact, accessible = MediaQuery.accessibleNavigationOf(context);
     try {
-      await body();
+      body();
     } catch (e, st) {
       logError(Logger('bw.categories.ui'), 'categories.action.failed', e, st);
       toastOn(messenger, _problem(e), wide: wide, accessible: accessible);
@@ -229,7 +229,7 @@ class _CategoryFormSheetState extends State<CategoryFormSheet> {
   Future<void> _save() async {
     try {
       if (widget.rename != null) {
-        await widget.wc.renameCategory(widget.rename!, _name.text);
+        widget.wc.renameCategory(widget.rename!, _name.text);
       } else {
         await widget.wc.addOwnCategory(name: _name.text, kind: _kind);
       }

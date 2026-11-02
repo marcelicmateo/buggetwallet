@@ -216,7 +216,8 @@ class _IouSheetState extends State<IouSheet> {
     }
     final wc = widget.wc;
     if (widget.iouId != null) {
-      final refusal = wc.patchFields(IouCols.entity, widget.iouId!, {...d, IouCols.note: note == null || note.isEmpty ? null : note});
+      final refusal =
+          wc.patchFields(IouCols.entity, widget.iouId!, {...d, IouCols.note: note == null || note.isEmpty ? null : note}, prefixed: false);
       if (refusal != null) return setState(() => _error = refusal);
       return Navigator.pop(context, 'saved');
     }

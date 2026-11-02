@@ -11,15 +11,24 @@ extension FieldEdits on WalletController {
   /// core's refusal text (`<label>: <reason>`), and nothing was written.
   String? patchField(String entity, String id, Col col, Object? value) => patchFields(entity, id, {col: value});
 
-  /// Sets several columns of one row in one write (all or none). Same result as [patchField].
-  String? patchFields(String entity, String id, Map<Col, Object?> values) {
+  /// Sets several columns of one row in one write (all or none). Same result as [patchField]. With [prefixed] false the refusal comes
+  /// without its `<column label>: ` start (a sheet whose labels differ from the columns'). [afterWrite] runs once the row is written,
+  /// before the screens are told.
+  String? patchFields(String entity, String id, Map<Col, Object?> values, {bool prefixed = true, void Function()? afterWrite}) {
     final columns = values.keys.map((c) => c.column).join(',');
     try {
       repo.patch(entity, id, values);
     } on ArgumentError catch (e) {
       logEvent(_fieldLog, Level.INFO, 'field.refused', {'entity': entity, 'columns': columns});
-      return e.message.toString();
+      var m = e.message.toString();
+      if (!prefixed) {
+        for (final c in values.keys) {
+          if (m.startsWith('${c.label}: ')) m = m.substring(c.label.length + 2);
+        }
+      }
+      return m;
     }
+    afterWrite?.call();
     logEvent(_fieldLog, Level.INFO, 'field.patch', {'entity': entity, 'columns': columns});
     _changed();
     return null;

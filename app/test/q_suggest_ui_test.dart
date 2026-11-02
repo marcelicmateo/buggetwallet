@@ -39,7 +39,7 @@ Future<WalletController> typedWallet() async {
   wc.repo.addTransaction(date: '2026-10-05', amount: 300, category: 'Games & apps', note: 'Lunch game');
   wc.repo.addTransaction(date: '2026-10-06', amount: 100, category: 'Bank fees', note: 'Lunch fee');
   wc.reload();
-  await wc.setCategoryHidden('Games & apps', true);
+  wc.setCategoryHidden('Games & apps', true);
   return wc;
 }
 
