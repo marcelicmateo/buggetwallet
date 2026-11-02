@@ -156,6 +156,84 @@ extension WalletRepoLoans on WalletRepo {
     return Loan.legacyId;
   }
 
+  /// Loan id → its candidate rows (`loanPayments`) split by the owner's answers ([loanMatches], `loan_pays`), for each
+  /// live loan with a payee key or reference (closed ones too: their past payments stay matched).
+  Map<String, LoanMatches> _loanMatches() {
+    final ls = [
+      for (final l in loans())
+        if ((l.payeeKey ?? '').isNotEmpty || (l.reference ?? '').trim().isNotEmpty) l
+    ];
+    if (ls.isEmpty) return const {};
+    final answers = <String, Map<String, bool>>{}, onFor = <String, Set<String>>{};
+    for (final r in db.select("SELECT loan_id, tx, state FROM loan_pays WHERE state IN ('on', 'off')")) {
+      final (loan, tx, on) = (r['loan_id'] as String, r['tx'] as String, r['state'] == 'on');
+      (answers[loan] ??= {})[tx] = on;
+      if (on) (onFor[tx] ??= {}).add(loan);
+    }
+    final currency = _readSettings(db).currency;
+    // shortcut: reads every row and its payee key on each call (categorizer builds too); keep the result per dataVersion
+    // if a wallet with loans gets slow.
+    final rows = transactions();
+    return {
+      for (final l in ls)
+        l.id: loanMatches(loanPayments(l, loanRates(l.id), loanChecks(l.id), rows, currency: currency), answers[l.id] ?? const {}, taken: {
+          for (final MapEntry(key: tx, value: on) in onFor.entries)
+            if (on.any((id) => id != l.id)) tx
+        }),
+    };
+  }
+
+  /// The bank rows matched to a loan (`Categorizer.loanTx`: main tag "Loan", fixed).
+  Set<String> loanLinkedTx() => {
+        for (final m in _loanMatches().values)
+          for (final p in m.matched) p.txId
+      };
+
+  /// The "Loan payment?" asks (§5.5 step 4): rows found by a loan's payee key or reference that the owner has not
+  /// answered and no confirmed row of the same evidence covers, oldest first. Yes: [confirmLoanPayment]; no:
+  /// [unlinkLoanPayment].
+  List<({Loan loan, LoanPaymentMatch payment})> pendingLoanPayments() {
+    final byId = {for (final l in loans()) l.id: l};
+    return [
+      for (final MapEntry(key: id, value: m) in _loanMatches().entries)
+        for (final p in m.pending) (loan: byId[id]!, payment: p)
+    ]..sort(
+        (a, b) => a.payment.date != b.payment.date ? a.payment.date.compareTo(b.payment.date) : a.payment.txId.compareTo(b.payment.txId));
+  }
+
+  /// The rows matched to loan [loanId], oldest first ([LoanPaymentMatch.amountChanged] flags a payment that differs
+  /// from the schedule). Unknown or deleted loan: empty.
+  List<LoanPaymentMatch> loanMatchedPayments(String loanId) => _loanMatches()[loanId]?.matched ?? const [];
+
+  /// The dates of [loanMatchedPayments], for `loanState`.
+  List<String> loanMatchedDates(String loanId) => [for (final p in loanMatchedPayments(loanId)) p.date];
+
+  /// "Loan payment?" yes, or Undo of [unlinkLoanPayment]: row [txId] pays loan [loanId], and later rows found by the same
+  /// evidence match silently. The row must be one the loan's payee key or reference finds (never by amount): else, or
+  /// for an unknown or deleted loan, [ArgumentError].
+  void confirmLoanPayment(String loanId, String txId) {
+    final l = loans().where((l) => l.id == loanId).firstOrNull;
+    if (l == null) throw ArgumentError('No such loan.');
+    final found = loanPayments(l, loanRates(loanId), loanChecks(loanId), [if (transaction(txId) case final t?) t],
+        currency: _readSettings(db).currency);
+    if (found.isEmpty) throw ArgumentError('This payment is not from the loan\'s lender or reference.');
+    _setLoanPay(loanId, txId, true);
+  }
+
+  /// Unlink (or "Loan payment?" no): row [txId] is not a payment of loan [loanId] and is never matched to it again; its
+  /// main tag goes back to what the rules say. Undo: [confirmLoanPayment]. Unknown or deleted loan: [ArgumentError].
+  void unlinkLoanPayment(String loanId, String txId) {
+    _liveLoan(loanId);
+    _setLoanPay(loanId, txId, false);
+  }
+
+  void _setLoanPay(String loanId, String txId, bool on) {
+    _write([
+      (LoanPayCols.entity, '$loanId|$txId', {'loan_id': loanId, 'tx': txId, 'state': on ? 'on' : 'off'})
+    ]);
+    logEvent(_log, Level.INFO, 'loan.payment', {'on': on});
+  }
+
   /// The loan a bought goal becomes: one id per goal, so buying on two devices offline makes one loan.
   static String goalLoanId(String goalId) => 'l:goal:$goalId';
 

@@ -69,6 +69,18 @@ abstract final class LoanCheckCols {
   static const all = <Col>[loanId, date, balance, deleted];
 }
 
+/// The owner's answer about one bank row of a loan (`loanpay`, table `loan_pays`, id `<loanId>|<txId>`, like `txtag`):
+/// `state` `on` = a loan payment ("Loan payment?" yes, or Undo of an Unlink), `off` = unlinked, never matched again.
+/// One row per pair, so two devices answering about different rows never overwrite each other.
+abstract final class LoanPayCols {
+  static const entity = 'loanpay';
+  static const loanId = RefCol(entity, 'loan_id', label: 'Loan', target: 'loan');
+  static const tx = RefCol(entity, 'tx', label: 'Payment', target: 'tx');
+  static const state = TextCol(entity, 'state', label: 'State');
+
+  static const all = <Col>[loanId, tx, state];
+}
+
 class Loan {
   final String id, name;
   final int? principal, rateBp, months, payment;
@@ -322,11 +334,39 @@ int? loanPaymentOn(Loan l, List<LoanRate> rates, List<LoanCheck> checks, String 
 
 /// A bank row that pays [Loan] (`loanPayments`); [amountChanged]: its amount is not the scheduled payment in force on
 /// its date ([loanPaymentOn]; the exact-rest last payment is never flagged): still matched, flagged for the owner.
+/// [byKey] / [byRef]: the evidence that found it (its payee key is [Loan.payeeKey] / its text holds [Loan.reference]).
 class LoanPaymentMatch {
   final String txId, date;
   final int amount;
-  final bool amountChanged;
-  const LoanPaymentMatch(this.txId, this.date, this.amount, this.amountChanged);
+  final bool amountChanged, byKey, byRef;
+  const LoanPaymentMatch(this.txId, this.date, this.amount, this.amountChanged, {this.byKey = false, this.byRef = false});
+}
+
+/// One loan's candidate rows split by the owner's answers ([loanMatches]): [matched] pay the loan (main tag "Loan"),
+/// [pending] ask "Loan payment?". Both oldest first.
+class LoanMatches {
+  final List<LoanPaymentMatch> matched, pending;
+  const LoanMatches(this.matched, this.pending);
+}
+
+/// [candidates] of one loan (`loanPayments`) against the owner's [answers] (tx id → true = `on`, false = `off`,
+/// [LoanPayCols]). A row answered on is matched; off is never matched again. An unanswered row is matched silently
+/// when a row answered on was found by the same evidence (payee key or reference, never the amount), else it is asked.
+/// Unanswered rows in [taken] (answered on for another loan) are left out.
+LoanMatches loanMatches(List<LoanPaymentMatch> candidates, Map<String, bool> answers, {Set<String> taken = const {}}) {
+  var key = false, ref = false;
+  for (final c in candidates) {
+    if (answers[c.txId] != true) continue;
+    key |= c.byKey;
+    ref |= c.byRef;
+  }
+  final matched = <LoanPaymentMatch>[], pending = <LoanPaymentMatch>[];
+  for (final c in candidates) {
+    final a = answers[c.txId];
+    if (a == false || (a == null && taken.contains(c.txId))) continue;
+    (a == true || (key && c.byKey) || (ref && c.byRef) ? matched : pending).add(c);
+  }
+  return LoanMatches(matched, pending);
 }
 
 /// The minimum length of [Loan.reference] (shorter text would match unrelated rows).
@@ -347,9 +387,10 @@ List<LoanPaymentMatch> loanPayments(Loan l, List<LoanRate> rates, List<LoanCheck
   for (final t in rows) {
     if (!t.live || t.manual || t.amount >= 0 || t.currency != currency || t.transferTo != null) continue;
     if ((from != null && t.date.compareTo(from) < 0) || (l.closedAt != null && t.date.compareTo(l.closedAt!) > 0)) continue;
-    if (!((key.isNotEmpty && merchantKey(t) == key) || (ref.isNotEmpty && foldText(t.description).contains(ref)))) continue;
+    final byKey = key.isNotEmpty && merchantKey(t) == key, byRef = ref.isNotEmpty && foldText(t.description).contains(ref);
+    if (!byKey && !byRef) continue;
     final (expected, last) = _paymentOn(l, rates, schedule, t.date);
-    out.add(LoanPaymentMatch(t.id, t.date, -t.amount, !last && expected != null && -t.amount != expected));
+    out.add(LoanPaymentMatch(t.id, t.date, -t.amount, !last && expected != null && -t.amount != expected, byKey: byKey, byRef: byRef));
   }
   return out..sort((a, b) => a.date != b.date ? a.date.compareTo(b.date) : a.txId.compareTo(b.txId));
 }

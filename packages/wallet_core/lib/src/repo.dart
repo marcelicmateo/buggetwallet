@@ -206,7 +206,7 @@ class WalletRepo {
   /// never-synced cache table `ecb_rates`; no data migration. Version 21 (ENG): the synced entity `view` (table `views`,
   /// saved Explore queries); `goals` gains the big-purchase fields `price`, `deposit_permille`, `costs_permille`,
   /// `loan_rate_bp`, `loan_months`, `compare_line_id`, `bought_at`, `loan_id` (`goalPlan`) and the entities `loan`,
-  /// `loanrate`, `loancheck` (ENG E6); no data migration (the old `loan` setting keeps counting until the owner moves
+  /// `loanrate`, `loancheck`, `loanpay` (ENG E6); no data migration (the old `loan` setting keeps counting until the owner moves
   /// it, `convertLegacyLoan`). Older builds ignore all of it.
   static const schemaVersion = 21;
 
@@ -596,6 +596,7 @@ class WalletRepo {
         tagContext: withTags ? tagContext() : null,
         splits: withTags ? splits() : const {},
         iouTx: WalletRepoIou(this).iouLinkedTx(),
+        loanTx: WalletRepoLoans(this).loanLinkedTx(),
         builtInOverrides: st.builtInRuleOverrides);
   }
 
