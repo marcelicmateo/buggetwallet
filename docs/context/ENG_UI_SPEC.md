@@ -11,7 +11,7 @@ https://claude.ai/artifact/HEyzibzxFzy4cnHFQfrCFf (page **Engineer**: dark row p
 the flows these screens sit on). All numbers in the mockups are synthetic.
 
 Design principle in one line: **lazy by default, curious on demand.** The app notices things and shows them as cards
-(findings, project leftovers, ways to reach the house sooner). Every number opens its series. Every series can be
+(findings, project leftovers, ways to reach a goal sooner, a loan that is about to end). Every number opens its series. Every series can be
 compared, zoomed over years and exported. Nothing changes money without a tap.
 
 ---
@@ -25,7 +25,7 @@ compared, zoomed over years and exported. Nothing changes money without a tap.
 | E3 | **Findings**: auto-found patterns with their evidence chart | core (new pure module) + UI | `insights.dart` (core), `series.dart`, `recurring.dart`, review streak rows |
 | E4 | **Explore**: query by chips → long-range chart, table, heatmap, "move together?", saved views | core (query + long windows) + UI | `series.dart` (`bucketFor`, `bucketsOf`, 5-year cap), `insights.dart`, `chart_window.dart`, `widgets/chart_viewport.dart`, `widgets/insight_charts.dart` |
 | E5 | **Project** = a tag over years (upgrade of the tag detail) | core (project stats) + UI | `screens/tag_detail.dart`, `tags.dart` (`TagTable`, txtag, ruletag), `planned.dart` |
-| E6 | **House planner** = a goal of kind "home" | core (goal fields, home math) + UI | `Goal` in `models.dart` (`GoalCols`), `screens/goals.dart`/`save.dart`, `loan.dart` (no interest today) |
+| E6 | **Big purchases and loans**: goal → (optional) loan → paid off, for any goal (house, car, boat…) | core (goal fields, `loan` entity, schedule) + UI | `Goal` in `models.dart` (`GoalCols`), `screens/goals.dart`/`save.dart`, `WalletSettings.loan`/`loanEnd`, `loan.dart` `LoanLeft`, recurring/match code |
 | E7 | Restyle every other screen to the new tokens and move it to its new home (§3 table) | UI | all `screens/*` |
 
 ---
@@ -35,13 +35,13 @@ compared, zoomed over years and exported. Nothing changes money without a tap.
 1. **Exact money.** Integer cents; no `double` in a money path. Where the new math needs powers or ratios (loan
    payment, link strength, hours), compute with exact integers/`BigInt` rationals and round **once**, half away from
    zero, as the FX code already does. Results that are estimates (loan payment) say "estimate" on screen.
-2. **Suggest, the owner confirms.** Findings, project "not tagged yet", house levers and pins are read-only views
+2. **Suggest, the owner confirms.** Findings, project "not tagged yet", goal levers, loan matches and pins are read-only views
    or proposals. Applying one goes through the existing confirm flows (rules, tags, plan suggestions). No auto-tagging,
    no auto plan change.
 3. **Never reclassify on amount alone.** The project candidate list uses payee keys (`merchantKey`) of already-tagged
    rows, never amounts.
-4. **Never a negative figure as a quantity.** Use words: "over by", "short by". Applies to the house planner
-   ("short by X a month").
+4. **Never a negative figure as a quantity.** Use words: "over by", "short by". Applies to the goal planner
+   ("short by X a month") and to loans ("owed", never a negative balance).
 5. **Correlation wording:** always "moves together" plus strength in words; never "causes". Fixed line on Findings:
    "A link is not proof of a cause."
 6. **No amounts or names in logs, notifications or the widget.** New modules log counts and kinds only.
@@ -74,7 +74,7 @@ compared, zoomed over years and exported. Nothing changes money without a tap.
 | Today tab: hero, tiles, payday checklist, below-zero, held money | **Overview** (top panel + tiles; tile choice/order stays: `today_tiles_panel.dart`) |
 | Budget tab: spending, insights, period reports, tag detail, category detail, bucket payments | **Explore** (charts, reports) and **Findings**; tag detail → **Project** screen |
 | Bills tab: bills, upcoming, recurring, scan | **Money** (one timeline: coming up above "Today", past below; bills and planned costs are rows) + Needs you for the review items |
-| Save tab: goals, wishlist, owed | **Plan › Saving** (`structure/Save.dc.html`); a goal of kind home opens the **House planner** |
+| Save tab: goals, wishlist, owed | **Plan › Saving** (`structure/Save.dc.html`); a financed goal opens its planner; a bought one becomes a **Loan** (its line in Plan › Payday plan opens the Loan screen) |
 | Budget › Plan, budgets | **Plan › Payday plan** (`structure/Plan.dc.html`) |
 | Weekly review | **Needs you** in review mode (import → decide → pace → done) |
 | Settings tab | Settings (setup only: accounts & currencies, tags & rules, bank file formats, sync & devices, wallet key, backup & export, nudges, calendars, weekly review day, look, Today tiles, set up again, diagnostics) |
@@ -170,9 +170,10 @@ Each screen: order of content → interactions → data → acceptance. Mockup f
 3. **Found this week**: up to 2 finding cards in compact form (sparkline or mini scatter + sentence + basis);
    "All N ›" → Findings.
 4. **Pinned**: 2-column grid of PinTiles (default pins on a new wallet: Kept per period, the biggest flexible main
-   tag per month, the newest project tag if any, the home goal if any). "+ Pin a series" → Explore; long-press /
-   secondary click on a tile → Unpin. Tap → Explore with that query (projects → Project screen, home goal → House).
-5. Home goal progress (only when a home goal exists): bar, "ready ~ <month year>", "X of Y for deposit and costs".
+   tag per month, the newest project tag if any, the nearest big goal if any). "+ Pin a series" → Explore; long-press /
+   secondary click on a tile → Unpin. Tap → Explore with that query (projects → Project screen, goals → their planner, loans → Loan screen).
+5. Nearest big goal (only when one exists): bar, "ready ~ <month year>", "X of Y for deposit and costs" (or "X of Y"
+   for a paid-in-full goal). Open loans show as one line each under the plan, not here.
 6. Existing attention tiles (below zero, bills to review, finish setup, other currencies) keep their rule: they show
    first, between 2 and 3.
 - Desktop ≥ 1280: three panes: rail · Overview (two columns: safe-to-spend + held money / found + pinned) · Needs you.
@@ -395,7 +396,8 @@ amount alone; a matched row's main tag is the fixed "Loan" tag).
 | E4 core: query, year bucket, views entity, heatmap | core-builder ∥ test-writer | `eng-core-2` | schema: `view` entity |
 | E4 UI: Explore (desktop + phone) | ui-builder | `eng-ui-3` | perf: `make perf` budget must hold on Explore "All" |
 | E5 project stats + Project screen | core-builder then ui-builder | `eng-5` | replaces `tag_detail.dart` |
-| E6 home goal + House planner | core-builder ∥ test-writer, then ui-builder | `eng-6` | schema: goal fields |
+| E6a goal planner (saving phase) | core-builder ∥ test-writer, then ui-builder | `eng-6a` | schema: goal fields; §5.5 phases 1–2 |
+| E6b loans (bought → paying off → paid off) + migration of the single plan loan | core-builder ∥ test-writer, then ui-builder | `eng-6b` | schema: `loan`, `loanrate`, `loancheck`; §5.5 phases 3–5, §6.5; needs a Loan screen mockup (not drawn yet) |
 | E7 restyle remaining + moves | ui-builder | `eng-7` | Money timeline, Needs you, Plan/Saving, Settings |
 | Each stage end | reviewer; haiku test-watcher for full `make test`, `make desktop-test`, emulator screens | — | owner tests at the end (checklist in STATUS) |
 
@@ -406,7 +408,7 @@ Bump nothing on CI; the owner starts `ci` by hand.
 ## 8. Owner questions (ask once, before the step that needs them; defaults in brackets)
 
 1. Hours you work a week for the hours view [40].
-2. Buying costs default for the house [6 %]; loan years default [25].
+2. One-off costs default for a property goal [6 %]; loan length default [30 y property, 5 y otherwise].
 3. Default theme for this persona: follow the system, or dark always [follow system].
 4. "All" in Explore: the whole history as quarters/years beyond 5 years [yes].
 5. Keep the Candy Pop / Coin Jar "fun" bits (sticker badges, swipe cards) out [out; only §4.4 fun].

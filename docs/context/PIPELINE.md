@@ -110,7 +110,7 @@ entry points). Agents: scout → devops (sonnet/high for the rewrite) + test-wri
 | E2-3 | Overview + Findings UI | ui-builder | eng-ui-2 | E1, EC1 | queued |
 | EC2/E4 | Explore: query, year buckets, `view` entity, heatmap; Explore UI | core ∥ test-writer, then ui | eng-core-2 / eng-ui-3 | EC1 / E1 | queued |
 | E5 | project stats + Project screen | core then ui | eng-5 | E4 | queued |
-| E6 | home goal (6 %, 30 years) + House planner | core ∥ test-writer, then ui | eng-6 | E1 | queued |
+| E6 | home goal (6 %, 30 years) + House planner | core ∥ test-writer, then ui | eng-6 | E1 (ui only) | core + spec tests running (schema 21) |
 | E7 | restyle the rest + moves (Money timeline, Needs you, Plan/Saving, Settings) | ui-builder | eng-7 | E1–E6 | queued |
 
 ## Resume here (end of 2026-11-02 evening) — v2 pushed
