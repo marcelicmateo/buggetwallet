@@ -189,10 +189,12 @@ export 'src/export.dart'
         transactionsCsv,
         transactionsCsvHeader,
         transactionsCsvTagsHeader;
+export 'src/findings.dart' show Finding, FindingKind, findings;
 export 'src/forecast.dart'
     show BalanceWarning, BalanceWarningKind, balanceWarnings, ForecastPoint, forecastAfterAllowance, forecastToPayday;
 export 'src/fx.dart' show convertMinor, FxUsed, fxUsed, homeAmount, inHomeCurrency;
 export 'src/hlc.dart' show ClockBehindException, Hlc, HlcClock, maxClockDrift;
+export 'src/hours.dart' show hoursTenths;
 export 'src/ics.dart' show CalendarEvent, calendarEventRef, calendarRef, IcsParseResult, legacyCalendarEventRef, parseIcs, plannedIcs;
 export 'src/import_preview.dart' show ImportPreview, PreviewRow, PreviewStatus;
 export 'src/insights.dart'

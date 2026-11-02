@@ -696,6 +696,23 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   by cents from Σ of the rounded per-category values); `changePermille(now, before)` = (now − before)·1000/|before| half away
   from zero, null when before is 0; `reviewsIn(reviewDates, start, end)` (reports.dart) = valid dates in [start, end),
   ascending, once each. Tests: `test/rxc_dashboard_numbers_test.dart`.
+- `findings.dart` + `hours.dart` — ENG §6.1–6.2 (`docs/context/ENG_UI_SPEC.md`), pure and web-safe, ints/BigInt only.
+  `hoursTenths(cents, st)` = |cents| × `workHoursPerWeek` × 520 ÷ (12 × `salary`) in tenths of an hour, rounded once
+  half away from zero, capped at 2^53 − 1; null when salary ≤ 0 (display only). Settings `workHoursPerWeek` (default 40,
+  1..100; `updateSettings` refuses others) and `dismissedFindings` (one row, JSON list of ids, newest 500 kept; repo
+  `dismissFinding`/`undismissFinding`, async, no write when unchanged; two devices dismissing offline at once: the later
+  list wins, see Known limits). `findings(expanded, st, table, today, {reviewDates, bills})` → `Finding {id, kind,
+  subjectKey, otherKey?, from, to, n, strengthPermille?, ratioPermille?, series, otherSeries}`, `FindingKind`
+  aboveUsual | weeklyRhythm | movesTogether | slowCreep | seasonality | milestone. Every threshold and window is in the
+  file comment (lead-approved 2026-11-02): spending by `countsAsSpending` per main tag; W12 = 12 months before this one,
+  tracked from the first counted row; aboveUsual 4·now ≥ 5·median and +2000 (≥ 6 months, median > 0); weeklyRhythm
+  5·max ≥ 8·min weekday means, min > 0; movesTogether top 8 tags, last 24 months, ≥ 12 shared nonzero months, 4·Sxy² ≥ Sxx·Syy;
+  slowCreep confirmed bills' payee rows per month, 4·median(last 3 full months) ≥ 5·median(first 3 months
+  ≥ 12 months before); seasonality ≥ 3 full years;
+  milestone levels (days 100/365/+365, payments 100/500/1000/+1000, streak 4/12/26/52/+52) with the month reached as
+  window end. id `<kind>:<subject>[:<other>]:<window end YYYY-MM>` (weeklyRhythm and movesTogether: no month, so a
+  dismissal holds for good); merchant keys cached per description; logs counts per kind. Tests `test/eng_findings_test.dart`,
+  `test/eng_hours_test.dart` (+ `eng_*_spec_test.dart`).
 - `search.dart` — `searchAll(query, txs:, goals:, wishlist:, bills:, planned:)` → `SearchResult` (`txs` newest first capped at
   `searchTxLimit` 200, `goals`, `wishlist`, `bills`, `planned`, `billsDb` (stored bills: payee, description, item
   names, exact total), `isEmpty`; blank query → `SearchResult.empty`). Text: `foldText`
@@ -749,6 +766,8 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   paths or file names. Noisy per-render logs at FINER. `test/logs_impl_test.dart` checks core logs stay clean.
 
 ## Known limits (for the sync redesign)
+- Dismissed findings (ENG, one `dismissedFindings` row, lead 2026-11-02): two devices dismissing different findings
+  while offline keep only the later list, so the other finding comes back and the owner dismisses it again.
 - Schema 20 (UX-A) amounts: every fiat currency is stored in hundredths as before; a currency with 3 ISO decimals (KWD,
   BHD, JOD, OMR, TND, LYD, IQD) has no third decimal: typed input allows 2. Every importer (PBZ, Revolut, mapped CSV,
   e-invoice) refuses an amount, fee or balance with non-zero digits past the storage scale, per row with a reason
