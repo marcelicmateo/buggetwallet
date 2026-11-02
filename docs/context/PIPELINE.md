@@ -105,11 +105,11 @@ entry points). Agents: scout → devops (sonnet/high for the rewrite) + test-wri
 ## Stage ENG: "the curious engineer" UI (owner pick 2026-11-02; spec `ENG_UI_SPEC.md`, answers + lead decisions at the end of §8)
 | # | Item | Agent | Worktree | Depends on | Status |
 |---|---|---|---|---|---|
-| E1 | theme (dark + light), Manrope + JetBrains Mono, shell Overview · Money · [+] · Explore · Plan (existing screens moved in) | ui-builder | eng-e1 | – | running |
+| E1 | theme (dark + light), Manrope + JetBrains Mono, shell Overview · Money · [+] · Explore · Plan (existing screens moved in) | ui-builder | eng-e1 | – | done ab2c609..3dbacad (contrast: lineStrong/s2 raised to 3:1), in review |
 | EC1 | core: hours of work + findings engine (§6.1-6.2) | core-builder ∥ test-writer | eng-core-1 | – | done 600a0bc..3fbdb3b (review: 1 medium slowCreep slip + 5 low fixed), merged e0d2cb3 |
 | E2-3 | Overview + Findings UI | ui-builder | eng-ui-2 | E1, EC1 | queued |
-| EC2/E4 | Explore: query, year buckets, `view` entity, heatmap; Explore UI | core ∥ test-writer, then ui | eng-core-2 / eng-ui-3 | EC1 / E1 | EC2 core running (schema 21 shared with E6) |
-| E5 | project stats + Project screen | core then ui | eng-5 | E4 | queued |
+| EC2/E4 | Explore: query, year buckets, `view` entity, heatmap; Explore UI | core ∥ test-writer, then ui | eng-core-2 / eng-ui-3 | EC1 / E1 | EC2 core done 49bfe15..fbe8554 (review 2 medium + 4 low fixed), merged f30d355; E4 UI queued (API notes: runQuery/heatmap/moveTogether/views, DayIndex accounts: needed) |
+| E5 | project stats + Project screen | core then ui | eng-5 | E4 (ui) | core running (no schema; "still coming" planned costs deferred: planned has no tag) |
 | E6 | home goal (6 %, 30 years) + House planner | core ∥ test-writer, then ui | eng-6 | E1 (ui only) | redo running to the widened §6.5 (any big purchase + loans: loan/loanrate/loancheck entities; spec edits by the design session were swept into fd821fd/96dc998, first build followed the old house-only text) |
 | E7 | restyle the rest + moves (Money timeline, Needs you, Plan/Saving, Settings) | ui-builder | eng-7 | E1–E6 | queued |
 
