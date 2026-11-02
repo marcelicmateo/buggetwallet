@@ -90,7 +90,7 @@ class Harness {
     }
   }
 
-  /// End of a test file in the combined entry: its app log is kept as $BW_APP_LOG_COPY/app-linux-combined-<name>.log.
+  /// End of a test file in the combined entry: its app log is kept as `$BW_APP_LOG_COPY/app-linux-combined-<name>.log`.
   static Future<void> endFile(String name) async {
     final dir = Platform.environment['BW_APP_LOG_COPY'];
     if (dir == null || dir.isEmpty) return;

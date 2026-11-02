@@ -52,9 +52,9 @@ Theme waits for the owner's mockup pick; crypto rate by hand. Merge order A-core
 | UX-ACC | payments know their account (`SCHEMA21_SPEC.md`, folded into schema 20, ask once) | core (Cols), then ui | F1-core merged | core running (with UX-FX); **v2 not pushed until schema 20 is final** |
 | UX-FX | ECB daily rates per payment date (`UX_SPEC.md` UX-FX), in schema 20 | scout → core (Cols) + ui | F1-core merged, UX-A-ui2 merged | queued (owner yes 2026-11-01) |
 | UX-B | Plan window, Tags window, Settings = setup, Today tiles | ui-builder (+ core if needed) | UX-A | done 2026-11-02 (v2 1c68080: A b24357f, B 760416e, C df9734b, review fixes 0a35b91; stage run green) |
-| UX-C2 | tightening pass over every screen (forms/sheets excluded: F2 owns them) | ui-builder | UX-B | scout running 2026-11-02; worktree ux-c2 |
+| UX-C2 | tightening pass over every screen (forms/sheets excluded: F2 owns them) | ui-builder | UX-B | done 0331892 + review fixes 02c2915, merged 0e67de6 |
 | F1 | field refactor pilot (Bill + Account), plan `FIELDS_PLAN.md` | scout → core + test-writer + ui | owner OK | F1-core 0416494 + review 56b7909 merged 06f728d; F1-ui running |
-| F2 | field refactor roll-out to the other entities | core + ui | F1, UX-B | scout running 2026-11-02; worktree f2-core |
+| F2 | field refactor roll-out to the other entities | core + ui | F1, UX-B | done: core 1414c4c..1518374 + review fixes d51e02f (merged 45065b6); ui 2d55d08 + 0e1bf28 (merged ed54f07) |
 
 ## Stage GO: build tools in Go (owner 2026-11-01, queued after Stage UX; design + owner answers `STAGE_GO_DESIGN.md`)
 Replace the bash/Python build tooling (~4,400 lines: `build.sh` 751, `emulator.sh`, `live.sh`, `relay-deploy.sh`,
@@ -102,8 +102,8 @@ entry points). Agents: scout → devops (sonnet/high for the rewrite) + test-wri
 | PF | Perf (owner 2026-10-30): budgets for 60 Hz (build p90 ≤ 16.7 ms, ≤ 10 % frames over 16.7 ms, worst build ≤ 50 ms, raster only gated at ≤ 250 ms: software GL); Android asks 60 Hz (MainActivity preferred refresh rate); tab cross-fade ~180 ms (off with reduce motion); idle warm-up of every tab's derived data after the first frame and after each reload (Priority.idle, cancelled by a new data version, logs counts/ms only); hidden tabs built one per idle frame; perf action "first switch after new data" | ui-builder (sonnet/high) | worktree | perf A/B | done, merged 6244ce6 + PF2 bfebdf0 → 868e6c7 (A/B: pre-DD tab_switch 21.4 ms FAIL, DD 15.2 ms ok = host noise, not DD) |
 | ZC | Zoomable, scrollable graphs (spec `ZC_SPEC.md`, owner answers in §6) | scout → core + test-writer + ui | worktrees | DD, RX2 (chart look follows the picked direction) | on hold |
 
-## Running (2026-11-02 evening)
-Scouts F2 + UX-C2; devops on worktree ci-m6: CI speed (one desktop entry on CI, lint 73 s) then GO-M6 cleanup (Makefile entry, old scripts deleted). Next: core-builder F2, ui-builder UX-C2, then F2-ui, review, stage run, push.
+## Resume here (end of 2026-11-02 evening) — v2 pushed
+Done: F2, UX-C2, CI speed + GO-M6 (d985731 + 13d42c4, merged dcf7804), stage green. Next: owner runs ci with tests (combined desktop job + lint unverified on a runner; lead reads ci-logs with `make ci-log`); APK on the phone when plugged in (`make apk`, then adb install); M6 live test. Unused update* wrappers in core (updateIou, updatePlanned, updateCategory, updateTag) have no app callers: drop in a later core pass.
 
 ## Resume here (end of session 2026-11-02 afternoon) — v2 pushed at d9ad6de
 Done: UX-B (Plan in place, Budget › Tags, Settings = setup, Today tiles) and PS payday auto-save (`PS_SPEC.md`), both reviewed and pushed; phone pages SafeArea fix; reviewer now also runs ponytail-review. Watcher briefs: a step failed when `dist/logs/last-failed.txt` is non-empty (`cmd || cat …` always exits 0).
