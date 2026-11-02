@@ -47,7 +47,7 @@ void main() {
     final wc = await Harness.start(t, settings: plan(todayIso()));
     await goTab(t, 'Save');
     expect(find.text('Over 50\u00A0€ waits 72 h'), findsOneWidget);
-    expect(find.byKey(const ValueKey('emptySection:Cooling off')), findsOneWidget);
+    expect(find.byKey(const ValueKey('emptySection:Wishlist')), findsOneWidget);
 
     await check(t, 'Robot vacuum synthetic', '30');
     expect(status('Fits this month'), findsOneWidget);

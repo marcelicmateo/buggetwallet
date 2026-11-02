@@ -22,8 +22,6 @@ class ReviewDayRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final day = wc.reviewDay;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      const Heading('Review day', size: BwType.headingSize),
-      const SizedBox(height: 4),
       Muted('Today shows the review from ${_dayNames[day - 1]} until you finish it.'),
       const SizedBox(height: 8),
       Wrap(spacing: 6, runSpacing: 6, children: [
@@ -438,7 +436,7 @@ class NudgesPanel extends StatelessWidget {
         title: const Text('Warn me before big planned costs', style: TextStyle(fontSize: BwType.bodySize)),
       ),
       const Muted(
-          'At 09:00, a few days ahead (set in Calendars). Also tells you when a return window or a warranty from your bills is about to end. The text has no amounts or names. This device only.'),
+          'At 09:00, a few days ahead (set in Calendars). Also tells you when a return window or a warranty from your bills is about to end.'),
       if (!supported) const Muted('Reminders work in the phone app.'),
       if (wc.nudgesDenied)
         const StatusLabel(

@@ -142,18 +142,11 @@ void main() {
     expect(find.text('Nothing to save'), findsOneWidget, reason: 'the field is back to the saved number');
     expect(inPlan(find.text("Can't be negative")), findsNothing);
 
-    // Currency.
-    // The wallet currency is chosen in the one currency picker; the switch sheet that follows writes it at once (not Save).
-    await scrollTo(t, inPlan(find.byKey(const ValueKey('planCurrency'))), BudgetScreen);
-    await tapVisible(t, inPlan(find.byKey(const ValueKey('planCurrency'))));
-    await t.enterText(find.byKey(const ValueKey('currencySearch')), 'usd');
+    // Currency: no control in Plan (Settings > Accounts has the one picker).
+    expect(find.byKey(const ValueKey('planCurrency')), findsNothing);
+    wc.repo.setWalletCurrency('USD');
+    wc.reload();
     await t.pumpAndSettle();
-    await tapVisible(t, find.byKey(const ValueKey('currency:USD')));
-    expect(find.byKey(const ValueKey('currencySwitchNote')), findsOneWidget);
-    expect(wc.settings.currency, 'EUR', reason: 'nothing is written before the switch is confirmed');
-    await tapVisible(t, find.byKey(const ValueKey('currencyOfferYes')));
-    await t.pumpAndSettle();
-    expect(wc.settings.currency, 'USD');
     await goTab(t, 'Today');
     expect(find.textContaining(r'$'), findsWidgets);
     expect(find.textContaining('€'), findsNothing);

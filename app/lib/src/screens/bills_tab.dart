@@ -15,7 +15,6 @@ import '../widgets/sheets.dart';
 import 'bills_panel.dart';
 import 'habits_panels.dart';
 import 'recurring_sheet.dart';
-import 'scan_bill.dart';
 import 'upcoming.dart';
 import 'upcoming_view.dart';
 
@@ -119,7 +118,7 @@ class _BillsScreenState extends State<BillsScreen> {
                       key: const ValueKey('billsReviewPanel'),
                       attention: true,
                       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-                        HeadingRow(const TileLabel('To review'), TileNote('${review.length} to check')),
+                        HeadingRow(const TileLabel('To review'), TileNote('${review.length}')),
                         Rows(children: [for (final b in review) BillRow(wc: wc, chooser: widget.chooser, bill: b)]),
                       ]),
                     ),
@@ -129,7 +128,7 @@ class _BillsScreenState extends State<BillsScreen> {
                 span: 4, // the whole row, on a wide window too (the grid clamps it to the columns it has)
                 child: KeyedSubtree(
                   key: _keys[BillsAnchor.expected],
-                  child: ExpectedBillsPanel(wc: wc, trailing: _Actions(wc: wc, chooser: widget.chooser)),
+                  child: ExpectedBillsPanel(wc: wc, trailing: _Actions(wc: wc)),
                 ),
               ),
             ]),
@@ -141,31 +140,19 @@ class _BillsScreenState extends State<BillsScreen> {
   }
 }
 
-/// Scan bill (only where there is a camera) and Add bill (a repeating bill), in the label row of the Expected bills tile.
+/// Add bill (a repeating bill), in the label row of the Expected bills tile. Scan bill lives in the Bills panel below.
 class _Actions extends StatelessWidget {
   final WalletController wc;
-  final FileChooser chooser;
-  const _Actions({required this.wc, required this.chooser});
+  const _Actions({required this.wc});
   @override
-  Widget build(BuildContext context) => Wrap(alignment: WrapAlignment.end, children: [
-        if (wc.billInputs.camera.supported)
-          TileAction(
-            key: const ValueKey('billsScan'),
-            label: 'Scan bill',
-            onTap: () {
-              logNav('bills.scanTab');
-              scanBillFlow(context, wc, chooser: chooser);
-            },
-          ),
-        TileAction(
-          key: const ValueKey('billsAdd'),
-          label: 'Add bill',
-          onTap: () {
-            logNav('bills.addTab');
-            openRecurringForm(context, wc);
-          },
-        ),
-      ]);
+  Widget build(BuildContext context) => TileAction(
+        key: const ValueKey('billsAdd'),
+        label: 'Add bill',
+        onTap: () {
+          logNav('bills.addTab');
+          openRecurringForm(context, wc);
+        },
+      );
 }
 
 /// "Before payday": the money held for the bills and planned costs due before payday (core's `PeriodBudget.beforePayday`, the same
@@ -255,7 +242,7 @@ class UntilPaydayTile extends StatelessWidget {
       },
       semanticLabel: 'Until payday. ${calendar.spoken}',
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-        HeadingRow(const TileLabel('Until payday'), TileNote('payday ${shortDateOrRaw(wc.period().end)}')),
+        HeadingRow(const TileLabel('Until payday'), TileNote(shortDateOrRaw(wc.period().end))),
         const SizedBox(height: 8),
         IgnorePointer(child: CalendarStrip(days: calendar.days, startWeekday: calendar.startWeekday)),
       ]),

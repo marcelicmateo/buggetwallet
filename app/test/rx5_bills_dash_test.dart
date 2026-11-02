@@ -160,7 +160,7 @@ void main() {
       expect(_key('billsReviewPanel'), findsOneWidget);
       expect(t.widget<Tile>(_key('billsReviewPanel')).attention, isTrue);
       expect(_in('billsReviewPanel', find.text('TO REVIEW')), findsOneWidget);
-      expect(_in('billsReviewPanel', find.text('1 to check')), findsOneWidget);
+      expect(_in('billsReviewPanel', find.text('1')), findsOneWidget);
       expect(_in('billsReviewPanel', find.text('Synthetic Slip Shop')), findsOneWidget);
       expect(find.text('Synthetic Slip Shop'), findsOneWidget, reason: 'listed once');
     });

@@ -103,104 +103,103 @@ class _WishlistScreenState extends State<WishlistScreen> {
           ]),
         ),
       ),
-      if (ready.isEmpty)
-        // Two cells wide, like the tiles around it: beside the check form it fills the row on a wide window.
-        const DashItem(
-            span: 2, child: StatTile(key: ValueKey('emptySection:Ready to decide'), label: 'Ready', value: '0', sub: 'Nothing yet'))
-      else
-        DashItem(
-          span: 2,
-          child: Tile(
-            key: const ValueKey('readyToDecide'),
-            attention: true,
-            exposeChildren: true, // Buy it / Skip stay reachable for a screen reader
-            semanticLabel: 'Ready to decide, ${ready.length} ${ready.length == 1 ? 'wish' : 'wishes'}',
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-              SplitRow(start: const TileLabel('Ready to decide'), end: TileNote('${ready.length}')),
-              Rows(children: [
-                for (final w in ready)
-                  WishRow(key: _rowKey(w), highlight: w.id == _highlight, w: w, currency: cur, sub: 'Waited ${s.coolHours}h', actions: [
-                    OutlinedButton(style: accentOutlined(context), onPressed: () => _buy(w), child: const Text('Buy it')),
-                    TextButton(onPressed: () => _skip(w), child: const Text('Skip')),
-                  ]),
-              ]),
-            ]),
-          ),
-        ),
-      if (waiting.isEmpty)
-        // "Wishlist is empty" only when nothing is ready either; a wish ready to decide sits in the tile beside this one.
-        DashItem(
-            span: 2,
-            child: StatTile(
-                key: const ValueKey('emptySection:Cooling off'),
-                label: 'Waiting',
-                value: '0',
-                sub: ready.isEmpty ? 'Wishlist is empty' : 'Nothing cooling off'))
-      else
-        DashItem(
-          span: 2,
-          child: Tile(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-              head('Cooling off'),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(moneyExact(wc.waitingTotal, cur), maxLines: 1, style: dashNumStyle(color: context.c.ink)),
-              ),
-              Text('${waiting.length} ${waiting.length == 1 ? 'wish' : 'wishes'}',
-                  style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
-              const SizedBox(height: 4),
-              Rows(children: [
-                for (final w in waiting)
-                  WishRow(
-                      key: _rowKey(w),
-                      highlight: w.id == _highlight,
-                      w: w,
-                      currency: cur,
-                      sub: timeLeft(w.hoursLeft(s.coolHours, now)),
-                      actions: [
-                        TextButton(onPressed: () => _skip(w), child: const Text("Don't need it")),
-                      ]),
-              ]),
-            ]),
-          ),
-        ),
-      if (done.isEmpty)
-        DashItem(
-            span: 2,
-            child: StatTile(
-                key: const ValueKey('emptySection:Decided'),
-                label: 'Saved by waiting',
-                value: moneyExact(0, cur),
-                sub: 'Nothing decided yet'))
+      // Three zero tiles say nothing: with no wish in any part, one tile does.
+      if (ready.isEmpty && waiting.isEmpty && done.isEmpty)
+        const DashItem(span: 2, child: StatTile(key: ValueKey('emptySection:Wishlist'), label: 'Wishes', value: 'None yet'))
       else ...[
-        DashItem(
-          span: 2,
-          child: StatTile(
-            key: const ValueKey('savedByWaiting'),
-            label: 'Saved by waiting',
-            value: moneyExact(saved.cents, cur),
-            sub: '${saved.count} skipped',
-          ),
-        ),
-        DashItem(
-          span: 2,
-          child: Tile(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-              head('Decided'),
-              Rows(children: [
-                for (final w in done.take(20))
-                  WishRow(
-                      key: _rowKey(w),
-                      highlight: w.id == _highlight,
-                      w: w,
-                      currency: cur,
-                      sub: w.status == 'bought' ? 'Bought' : 'Skipped',
-                      actions: const [])
+        if (ready.isEmpty)
+          // Two cells wide, like the tiles around it: beside the check form it fills the row on a wide window.
+          const DashItem(
+              span: 2, child: StatTile(key: ValueKey('emptySection:Ready to decide'), label: 'Ready', value: '0', sub: 'Nothing yet'))
+        else
+          DashItem(
+            span: 2,
+            child: Tile(
+              key: const ValueKey('readyToDecide'),
+              attention: true,
+              exposeChildren: true, // Buy it / Skip stay reachable for a screen reader
+              semanticLabel: 'Ready to decide, ${ready.length} ${ready.length == 1 ? 'wish' : 'wishes'}',
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+                SplitRow(start: const TileLabel('Ready to decide'), end: TileNote('${ready.length}')),
+                Rows(children: [
+                  for (final w in ready)
+                    WishRow(key: _rowKey(w), highlight: w.id == _highlight, w: w, currency: cur, sub: 'Waited ${s.coolHours}h', actions: [
+                      OutlinedButton(style: accentOutlined(context), onPressed: () => _buy(w), child: const Text('Buy it')),
+                      TextButton(onPressed: () => _skip(w), child: const Text('Skip')),
+                    ]),
+                ]),
               ]),
-            ]),
+            ),
           ),
-        ),
+        if (waiting.isEmpty)
+          const DashItem(
+              span: 2, child: StatTile(key: ValueKey('emptySection:Cooling off'), label: 'Waiting', value: '0', sub: 'Nothing cooling off'))
+        else
+          DashItem(
+            span: 2,
+            child: Tile(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+                head('Cooling off'),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(moneyExact(wc.waitingTotal, cur), maxLines: 1, style: dashNumStyle(color: context.c.ink)),
+                ),
+                Text('${waiting.length} ${waiting.length == 1 ? 'wish' : 'wishes'}',
+                    style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
+                const SizedBox(height: 4),
+                Rows(children: [
+                  for (final w in waiting)
+                    WishRow(
+                        key: _rowKey(w),
+                        highlight: w.id == _highlight,
+                        w: w,
+                        currency: cur,
+                        sub: timeLeft(w.hoursLeft(s.coolHours, now)),
+                        actions: [
+                          TextButton(onPressed: () => _skip(w), child: const Text("Don't need it")),
+                        ]),
+                ]),
+              ]),
+            ),
+          ),
+        if (done.isEmpty)
+          DashItem(
+              span: 2,
+              child: StatTile(
+                  key: const ValueKey('emptySection:Decided'),
+                  label: 'Saved by waiting',
+                  value: moneyExact(0, cur),
+                  sub: 'Nothing decided yet'))
+        else ...[
+          DashItem(
+            span: 2,
+            child: StatTile(
+              key: const ValueKey('savedByWaiting'),
+              label: 'Saved by waiting',
+              value: moneyExact(saved.cents, cur),
+              sub: '${saved.count} skipped',
+            ),
+          ),
+          DashItem(
+            span: 2,
+            child: Tile(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+                head('Decided'),
+                Rows(children: [
+                  for (final w in done.take(20))
+                    WishRow(
+                        key: _rowKey(w),
+                        highlight: w.id == _highlight,
+                        w: w,
+                        currency: cur,
+                        sub: w.status == 'bought' ? 'Bought' : 'Skipped',
+                        actions: const [])
+                ]),
+              ]),
+            ),
+          ),
+        ],
       ],
     ]);
     final panel = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [const SaveSectionHead('Wishlist'), grid]);

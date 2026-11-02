@@ -1108,7 +1108,10 @@ void main() {
       tw('$name: the planned cost sheet and the entry sheet', (tester) async {
         final wc = fw();
         await pumpApp(tester, UpcomingScreen(view: UpcomingView(wc)), size: size, textScale: scale);
-        await tester.tap(key('addPlannedTop'));
+        await tester.dragUntilVisible(key('addPlanned'), find.byType(ListView), const Offset(0, -200));
+        await tester.ensureVisible(key('addPlanned'));
+        await tester.pump();
+        await tester.tap(key('addPlanned'));
         await tester.pumpAndSettle();
         expect(key('plannedSave'), findsOneWidget);
         expect(tester.takeException(), isNull, reason: 'the planned cost sheet');

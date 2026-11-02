@@ -44,7 +44,7 @@ class CategoriesPanel extends StatelessWidget {
     return Panel(children: [
       const SectionHead('Main tags'),
       Explainer(wc, 'categories',
-          'A payment has one main tag. It decides what the payment counts for: budgets, your plan and what is safe to spend. Add your own next to the built-in ones. Hide one to stop it showing in pickers. For more detail, give a payment extra tags.'),
+          'A payment has one main tag. It decides what the payment counts for: budgets, your plan and what is safe to spend. Hide one to stop it showing in pickers.'),
       for (final (id, title, kinds) in _groups) ...[
         Padding(
           padding: const EdgeInsets.only(top: 6),

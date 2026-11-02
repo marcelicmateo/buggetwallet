@@ -112,8 +112,9 @@ void main() {
       expect(_in('goalsTotal', moneyExact(0, 'EUR')), findsOneWidget);
       expect(_in('goalsTotal', 'No goals yet'), findsOneWidget);
       expect(_k('addGoal'), findsOneWidget);
+      expect(_in('emptySection:Wishlist', 'None yet'), findsOneWidget);
       for (final k in ['emptySection:Ready to decide', 'emptySection:Cooling off', 'emptySection:Decided']) {
-        expect(_k(k), findsOneWidget, reason: k);
+        expect(_k(k), findsNothing, reason: '$k: one tile says it once');
       }
       expect(_k('owedAdd'), findsOneWidget);
       expect(find.text('Nothing owed'), findsOneWidget);
@@ -243,12 +244,12 @@ void main() {
       expect(find.text('Wishlist is empty'), findsNothing);
     });
 
-    testWidgets('an empty wishlist says so once; nothing decided shows an exact zero', (tester) async {
+    testWidgets('an empty wishlist says so once, in one tile', (tester) async {
       final wc = _wallet();
       await _pump(tester, wc);
-      expect(_in('emptySection:Cooling off', 'Wishlist is empty'), findsOneWidget);
-      expect(_in('emptySection:Decided', moneyExact(0, 'EUR')), findsOneWidget);
-      expect(_in('emptySection:Decided', '0'), findsNothing, reason: 'a bare 0 has no unit');
+      expect(_in('emptySection:Wishlist', 'None yet'), findsOneWidget);
+      expect(find.text('Wishlist is empty'), findsNothing);
+      expect(_k('savedByWaiting'), findsNothing);
     });
 
     testWidgets('the ready tile is spoken as needing action and keeps Buy it / Skip reachable', (tester) async {
