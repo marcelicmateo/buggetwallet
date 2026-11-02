@@ -199,10 +199,11 @@ class TodayScreen extends StatelessWidget {
         Expanded(child: stack(right)),
       ]);
     } else {
-      // One grid for the attention tiles and the number tiles (an odd attention tile pairs with the first number tile).
+      // Spec §5.1 order: hero and attention tiles, found, pinned, goal, then the number tiles (two grids: an odd attention tile leaves a gap).
       body = stack([
-        DashGrid(fillRows: wide, children: [...heroItems, ...numbers]),
+        DashGrid(fillRows: wide && right.isEmpty, children: heroItems),
         ...right,
+        if (numbers.isNotEmpty) DashGrid(fillRows: wide, children: numbers),
       ]);
     }
 
