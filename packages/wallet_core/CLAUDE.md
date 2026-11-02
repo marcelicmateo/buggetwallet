@@ -735,9 +735,10 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   byMainTag, byYear, running, overlaps, candidates}`. Rows = `CategorizedTx.tags` (tagsOf) carrying the resolved tag and
   `countsAsSpending` (a part by its own tags), so total = Σ byMainTag = Σ byYear = last running = `tagShare` slice.
   `ended` = last > `projectEndedDays` (90) before today; span = [first, last if ended else today], every month.
-  Candidates: live home-currency outflows of a tagged row's payee (`tagPayee`, cached per description) in
+  `isEmpty` (no counted row) is checked first by the UI. Future-dated rows count (span to max(last, today)); share and
+  hours are 0 when total ≤ 0. Candidates: live home-currency fixed/flex outflows of a tagged row's payee (`tagPayee`, cached per description) in
   [first, last + 30], never transfers/IOU-linked/carrying the tag/off-linked; never by amount. "Still coming" left out
-  (planned costs have no tags). Tests `test/eng_projects_test.dart` (≈36 ms on 20k rows, warm).
+  (planned costs have no tags). Tests `test/eng_projects_test.dart` (warm, 20k rows: ≈36 ms with repeated descriptions, ≈76 ms with unique ones, bound 250 ms).
 - `search.dart` — `searchAll(query, txs:, goals:, wishlist:, bills:, planned:)` → `SearchResult` (`txs` newest first capped at
   `searchTxLimit` 200, `goals`, `wishlist`, `bills`, `planned`, `billsDb` (stored bills: payee, description, item
   names, exact total), `isEmpty`; blank query → `SearchResult.empty`). Text: `foldText`

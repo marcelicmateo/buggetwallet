@@ -37,7 +37,7 @@ void main() {
     expect(sum(s.byMainTag.map((e) => e.$2)), s.total);
     expect(sum(s.byYear.map((e) => e.$2)), s.total);
     expect(s.running.last.$2, s.total);
-    final span = DateRange(start: s.first, end: today);
+    final span = DateRange(start: s.first, end: s.last.compareTo(today) > 0 ? s.last : today);
     final share = tagShare(rows, span, currency: 'EUR');
     expect(share.slices.firstWhere((x) => x.tag == 'tA').spent, s.total);
     expect(share.slices.firstWhere((x) => x.tag == 'tA').count, s.count);
@@ -97,6 +97,7 @@ void main() {
       tagged(plain('gone', '2026-01-26', -700, 'POS DECATHLON ZAGREB', deleted: true), 'Shopping'),
       tagged(plain('other', '2026-01-27', -5000, 'POS ZARA ZAGREB'), 'Shopping'), // same amount, other payee
       tagged(plain('dup', '2026-01-28', -700, 'POS DECATHLON ZAGREB'), 'Shopping', ['tA', 'tB']), // already tagged
+      tagged(plain('xin', '2026-01-29', -700, 'POS DECATHLON ZAGREB'), 'Extra income'), // not fixed or flex
     ];
     final tags = TagContext(tags: tagTable, links: const {
       'off': {'tA': false},
@@ -140,7 +141,92 @@ void main() {
 
   test('no tagged rows: empty stats dated today', () {
     final s = stats([tagged(plain('a', '2026-01-15', -1000, 'POS LIDL'), 'Groceries')]);
+    expect(s.isEmpty, isTrue);
     expect((s.first, s.last, s.count, s.total, s.ended), (today, today, 0, 0, false));
     expect(s.candidates, isEmpty);
+  });
+
+  test('perf: 20k rows with unique descriptions (merchantKey per row)', () {
+    var i = 0;
+    final rows = [
+      for (final t in bigWalletRows(today, days: 2000))
+        CategorizedTx(plain(t.tx.id, t.date, t.tx.amount, '${t.tx.description} ${i++}'), t.category, t.kind,
+            tags: t.tx.description.contains('LIDL') ? const ['tA'] : const [])
+    ];
+    stats(rows); // warm up (JIT)
+    final sw = Stopwatch()..start();
+    final s = stats(rows);
+    sw.stop();
+    expect(s.count, greaterThan(0));
+    expect(sw.elapsedMilliseconds, lessThan(250), reason: '${rows.length} rows: ${sw.elapsedMilliseconds} ms');
+  });
+
+  test('refunds above spending: negative total, share and hours clamped to 0, two refunds foot', () {
+    final rows = [
+      tagged(plain('a', '2026-05-01', -1000, 'POS DECATHLON'), 'Shopping', ['tA']),
+      tagged(plain('r1', '2026-05-10', 800, 'POS DECATHLON'), 'Shopping', ['tA']),
+      tagged(plain('r2', '2026-06-10', 700, 'POS DECATHLON'), 'Shopping', ['tA']),
+      tagged(plain('x', '2026-05-12', -4000, 'POS ZARA'), 'Shopping'),
+    ];
+    const st = WalletSettings(salary: 100000, workHoursPerWeek: 40);
+    final s = stats(rows, st: st);
+    expect(s.total, -500);
+    expect(s.count, 3);
+    expect(s.byMainTag, [('Shopping', -500)]);
+    expect(s.running, [('2026-05', 200), ('2026-06', -500)]);
+    expect(s.sharePermille, 0);
+    expect(s.hoursTenths, 0);
+    expect(s.candidates, isEmpty); // refunds are no outflows, ZARA is another payee
+  });
+
+  test('sharePermille on an ended project counts spending up to the last payment only', () {
+    final rows = [
+      tagged(plain('a', '2025-01-10', -1000, 'POS IKEA'), 'Shopping', ['tA']),
+      tagged(plain('b', '2025-02-10', -3000, 'POS ZARA'), 'Shopping'),
+      tagged(plain('c', '2025-03-10', -1000, 'POS IKEA'), 'Shopping', ['tA']),
+      tagged(plain('d', '2025-03-11', -50000, 'POS ZARA'), 'Shopping'), // after the last payment
+    ];
+    final s = stats(rows);
+    expect(s.ended, isTrue);
+    expect(s.sharePermille, 400); // 2000 of 5000
+    expect(s.running.last, ('2025-03', 2000));
+  });
+
+  test('a manual row with a note is a payee; one without a note never is', () {
+    Tx manual(String id, String date, String? note) =>
+        Tx(id: id, source: 'manual', manual: true, date: date, amount: -900, description: '', note: note);
+    final rows = [
+      tagged(manual('m1', '2026-04-01', 'Corner bakery'), 'Eating out', ['tA']),
+      tagged(manual('m2', '2026-04-05', 'Corner bakery'), 'Eating out'),
+      tagged(manual('m3', '2026-04-06', null), 'Eating out'),
+      tagged(manual('m4', '2026-04-07', null), 'Eating out', ['tA']),
+    ];
+    final s = stats(rows);
+    expect(s.total, 1800);
+    expect(s.candidates.map((t) => t.id), ['m2']);
+  });
+
+  test('a split whose whole payment is a transfer is never a candidate', () {
+    final pay = plain('s1', '2026-04-03', -1000, 'POS IKEA ZAGREB');
+    final whole = CategorizedTx(pay, 'Internal transfer', BudgetKind.transfer);
+    final rows = [
+      tagged(plain('t', '2026-04-01', -500, 'POS IKEA ZAGREB'), 'Shopping', ['tA']),
+      CategorizedTx(pay, 'Shopping', BudgetKind.flex, amount: -600, part: 0, parts: 2, whole: whole),
+      CategorizedTx(pay, 'Groceries', BudgetKind.flex, amount: -400, part: 1, parts: 2, whole: whole),
+    ];
+    expect(stats(rows).candidates, isEmpty);
+  });
+
+  test('rows dated after today count; the span runs to the last one', () {
+    final rows = [
+      tagged(plain('a', '2026-06-01', -1000, 'POS IKEA'), 'Shopping', ['tA']),
+      tagged(plain('b', '2026-08-15', -2000, 'POS IKEA'), 'Shopping', ['tA']),
+    ];
+    final s = stats(rows);
+    expect(s.ended, isFalse);
+    expect(s.total, 3000);
+    expect(s.running, [('2026-06', 1000), ('2026-07', 1000), ('2026-08', 3000)]);
+    final span = DateRange(start: s.first, end: s.last);
+    expect(tagShare(rows, span, currency: 'EUR').slices.single.spent, s.total);
   });
 }
