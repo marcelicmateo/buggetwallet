@@ -708,17 +708,26 @@ class Categorizer {
 String merchantName(Tx t) {
   if (t.source == 'manual') return t.note?.isNotEmpty == true ? t.note! : (t.category ?? 'Expense');
   var s = t.description;
-  s = s.replaceFirst(RegExp(r'^PBZ POS PBZ\w', caseSensitive: false), '').replaceFirst(RegExp(r'^POS ', caseSensitive: false), '');
-  s = s.replaceAll(RegExp(r'\s{2,}'), ' ').trim();
+  s = s.replaceFirst(_pbzPos, '').replaceFirst(_pos, '');
+  s = s.replaceAll(_spaces2, ' ').trim();
   return s.isEmpty ? '(no description)' : s;
 }
+
+// Compiled once: merchantKey runs per row in many passes (findings, projects, recurring).
+final _pbzPos = RegExp(r'^PBZ POS PBZ\w', caseSensitive: false);
+final _pos = RegExp(r'^POS ', caseSensitive: false);
+final _spaces2 = RegExp(r'\s{2,}');
+final _digits = RegExp(r'[0-9*#]+');
+final _nonLetters = RegExp(r'[^a-zÀ-ɏ ]+');
+final _spaces = RegExp(r'\s+');
+final _edgeUnderscore = RegExp(r'^_|_$');
 
 /// Stable key for "always use this category for this merchant". Same as v1.
 String merchantKey(Tx t) {
   var s = merchantName(t).toLowerCase();
-  s = s.replaceAll(RegExp(r'[0-9*#]+'), ' ');
-  s = s.replaceAll(RegExp(r'[^a-zÀ-ɏ ]+'), ' ');
-  s = s.replaceAll(RegExp(r'\s+'), '_').replaceAll(RegExp(r'^_|_$'), '');
+  s = s.replaceAll(_digits, ' ');
+  s = s.replaceAll(_nonLetters, ' ');
+  s = s.replaceAll(_spaces, '_').replaceAll(_edgeUnderscore, '');
   if (s.length > 40) s = s.substring(0, 40);
   return s.isEmpty ? 'x' : s;
 }
