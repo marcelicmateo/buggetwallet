@@ -208,8 +208,16 @@ void main() {
       await binding.takeScreenshot(shot);
     }
 
-    // Settings › Budgets per category (new in E1): the editor with the saved budgets.
-    await settings(SettingsSection.budgets, find.text('Suggest from the last 6 months'), '5-settings-budgets');
+    // Budget › Plan › Budgets per category (E1; UX-B1 moved it here from Settings): the editor with the saved budgets.
+    wc.setBudgetView('plan');
+    await tester.tap(navTab('Budget'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Suggest from the last 6 months'), 300, scrollable: pageList(BudgetScreen));
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('5-plan-budgets');
+    wc.setBudgetView('spending');
+    await tester.tap(navTab('Settings'));
+    await tester.pumpAndSettle();
 
     // Settings › Calendars (F3).
     await settings(SettingsSection.calendars, find.text('Import .ics file'), '5-settings-calendars');
@@ -412,13 +420,7 @@ void main() {
     await wc.getRatesNow();
     await settings(SettingsSection.accounts, find.byKey(const ValueKey('ecbGetNow')), '11-settings-currencies');
     await settings(SettingsSection.accounts, find.byKey(ValueKey('accountHome:${usd.id}')), '11-account-foreign');
-    await settings(SettingsSection.rules, find.byKey(const ValueKey('builtInToggle')), '10-settings-rules');
-    await tester.tap(find.byKey(const ValueKey('builtInToggle')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('ruleMenu:builtIn:wolt')));
-    await tester.pumpAndSettle();
-    await binding.takeScreenshot('10-rules-builtin-menu');
-    await tester.tapAt(const Offset(5, 5));
+    // The Rules shots return with the Tags window (UX-B2).
     await tester.pumpAndSettle();
 
     // After the screenshots: logged actions with private-looking synthetic values, to prove they stay out of the log.

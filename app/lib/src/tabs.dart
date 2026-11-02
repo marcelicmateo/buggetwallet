@@ -10,10 +10,6 @@ abstract final class Tabs {
 /// The sections of the Settings tab, in page order. [currencies] is a place inside Accounts (a link scrolls to it).
 enum SettingsSection {
   accounts('Accounts', 'Cash, banks and currencies'),
-  tags('Main tags and tags', 'How payments are grouped'),
-  rules('Rules', 'Which payee gets which main tag'),
-  budgets('Budgets per category', 'A monthly limit for each'),
-  income('Expected income', 'Regular money coming in'),
   import('Import', 'Bank files and file layouts'),
   sync('Sync', 'Relay, devices and wallet key'),
   backup('Backup and export', 'Files you keep'),

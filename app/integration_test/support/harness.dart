@@ -274,8 +274,8 @@ class Harness {
 }
 
 /// testWidgets with [Harness.guard] (known layout bugs are recorded, not fatal).
-void itest(String description, Future<void> Function(WidgetTester t) body, {Timeout? timeout}) =>
-    testWidgets(description, (t) => Harness.guard(() => body(t)), timeout: timeout);
+void itest(String description, Future<void> Function(WidgetTester t) body, {Timeout? timeout, bool? skip}) =>
+    testWidgets(description, (t) => Harness.guard(() => body(t)), timeout: timeout, skip: skip);
 
 // ---------------------------------------------------------------- finders and actions
 
@@ -290,6 +290,12 @@ Finder navTab(String label) => find.descendant(of: navigation, matching: find.te
 Future<void> goTab(WidgetTester t, String label) async {
   await t.tap(navTab(label));
   await t.pumpAndSettle();
+}
+
+/// Opens Budget › Tags (the Tags window: UX-B2 builds its content; until then the page is empty).
+Future<void> goTags(WidgetTester t) async {
+  Harness.wc.setBudgetView('tags');
+  await goTab(t, 'Budget');
 }
 
 /// Opens the Settings tab on [s]: from two panes wide it taps the section in the list; one page has nothing to tap (the test scrolls).

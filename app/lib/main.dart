@@ -304,6 +304,9 @@ class _HomeShellState extends State<HomeShell> {
 
   /// Today's "Due by payday" and "N bills to review" lines ask the Bills tab for a place on its page.
   final _billsRequest = JumpRequest<BillsAnchor>();
+
+  /// Today's income tile: Budget › Plan scrolls to Expected income.
+  final _incomeRequest = JumpRequest<bool>();
   StreamSubscription<BillImport>? _sharedSub;
   StreamSubscription<void>? _shortcutSub;
 
@@ -425,11 +428,16 @@ class _HomeShellState extends State<HomeShell> {
             },
             openAccounts: () => widget.wc.openSettings(SettingsSection.accounts, via: 'today'),
             openSync: () => widget.wc.openSettings(SettingsSection.sync, via: 'today'),
-            openIncome: () => widget.wc.openSettings(SettingsSection.income, via: 'today')),
+            openIncome: () {
+              widget.wc.setBudgetView('plan');
+              _go(Tabs.budget, 'today');
+              _incomeRequest.request(true);
+            }),
         Tabs.budget => BudgetScreen(
             wc: widget.wc,
             searchRequest: _searchRequest,
             planKey: _paydayKey,
+            incomeRequest: _incomeRequest,
             openTab: (i) => _go(i, 'search'),
             openBills: () {
               _go(Tabs.bills, 'search');
@@ -564,6 +572,7 @@ class _HomeShellState extends State<HomeShell> {
     _life.dispose();
     _focus.dispose();
     _billsRequest.dispose();
+    _incomeRequest.dispose();
     _sharedSub?.cancel();
     _shortcutSub?.cancel();
     _searchRequest.dispose();

@@ -78,7 +78,7 @@ void main() {
       await Harness.shot(t, 'today-recent-search-$name');
 
       // Plan › Rules › Suggested.
-      await goSettings(t, SettingsSection.rules);
+      await goTags(t);
       await scrollTo(t, find.byKey(const ValueKey('ruleSuggest:mcdonalds_zagreb')), SettingsScreen);
       await Harness.shot(t, 'rules-suggested-$name');
 

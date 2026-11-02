@@ -6,7 +6,6 @@ import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/screens/insights.dart';
 import 'package:budget_wallet/src/screens/settings.dart';
 import 'package:budget_wallet/src/screens/tag_detail.dart';
-import 'package:budget_wallet/src/tabs.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -57,7 +56,7 @@ void main() {
         await t.pumpAndSettle();
       }
 
-      await goSettings(t, SettingsSection.tags);
+      await goTags(t);
       await scrollTo(t, find.byKey(ValueKey('tag:$holiday')), SettingsScreen);
       await Harness.shot(t, 'plan-tags-$name');
 

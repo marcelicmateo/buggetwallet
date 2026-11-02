@@ -45,7 +45,7 @@ class TodayScreen extends StatelessWidget {
   /// Opens Settings › Sync (the "waiting for approval / removed" tile); without it the tile opens Settings.
   final VoidCallback? openSync;
 
-  /// Opens Settings › Expected income (the income due tile); without it the tile is not tappable.
+  /// Opens Budget › Plan › Expected income (the income due tile); without it the tile is not tappable.
   final VoidCallback? openIncome;
 
   /// Opens search (the magnifier in Recent); without it the Recent tile has no search button.
@@ -405,7 +405,7 @@ class _HeldTile extends StatelessWidget {
   }
 }
 
-/// Income that is expected before payday; it counts when it lands. A tap opens Settings › Expected income.
+/// Income that is expected before payday; it counts when it lands. A tap opens Budget › Plan › Expected income.
 class _IncomeDueTile extends StatelessWidget {
   const _IncomeDueTile(this.f, this.onTap);
   final _TodayFigures f;

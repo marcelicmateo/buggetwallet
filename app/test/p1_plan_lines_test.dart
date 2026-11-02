@@ -90,11 +90,11 @@ void main() {
   });
 
   group('Payday plan', () {
-    testWidgets('Edit shows a field per line, labelled by the category; Save writes only the edited line', (t) async {
+    testWidgets('A tap on a plan line shows its field, labelled by the category; Save writes only the edited line', (t) async {
       final (:wc, :id) = await withFixed();
       wc.savePlanLines({id: 12000});
       await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 3000));
-      await openPlanEdit(t);
+      await openPlanEdit(t, 'planLine_$id');
       final field = _key('planLine_$id');
       expect(field, findsOneWidget);
       expect(find.widgetWithText(TextField, 'Pet insurance'), findsOneWidget);
@@ -111,20 +111,20 @@ void main() {
       };
       // merchantPatterns is the controller's own follow-up write, as in plan_edit_test.
       expect(changed.difference({'merchantPatterns', 'plan:$id'}), isEmpty, reason: 'the other numbers are untouched');
-      expect(_key('planEdit'), findsOneWidget, reason: 'back to the ledger');
+      expect(_key('planSave'), findsNothing, reason: 'back to the ledger');
       wc.dispose();
     }, timeout: _timeout);
 
     testWidgets('an empty field is shown for a missing line; typing and clearing removes it', (t) async {
       final (:wc, :id) = await withFixed();
       await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 3000));
-      await openPlanEdit(t);
+      await openPlanEdit(t, 'planLine_$id');
       expect(t.widget<TextField>(_key('planLine_$id')).controller!.text, '');
       await t.enterText(_key('planLine_$id'), '80');
       await _tapKey(t, 'planSave');
       await settle(t);
       expect(wc.settings.planLines[id], 8000);
-      await openPlanEdit(t);
+      await openPlanEdit(t, 'planLine_$id');
       await t.enterText(_key('planLine_$id'), '');
       await _tapKey(t, 'planSave');
       await settle(t);
@@ -135,7 +135,7 @@ void main() {
     testWidgets('a bad amount shows the error under the field and writes nothing; 0 on a missing line is no change', (t) async {
       final (:wc, :id) = await withFixed();
       await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 3000));
-      await openPlanEdit(t);
+      await openPlanEdit(t, 'planLine_$id');
       final ops = wc.repo.pendingOps().length;
       await t.enterText(_key('planLine_$id'), 'abc');
       await _tapKey(t, 'planSave');
@@ -184,8 +184,7 @@ void main() {
       final (:wc, :id) = await withFixed();
       await wc.addOwnCategory(name: 'Cat food', kind: BudgetKind.flex);
       await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 3000));
-      await openPlanEdit(t);
-      expect(find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('planLine_')),
+      expect(find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('ledgerPlanLine_')),
           findsOneWidget);
       wc.dispose();
     }, timeout: _timeout);
@@ -294,9 +293,8 @@ void main() {
       wc.reload();
       expect(wc.categoryTable.planLineIds, containsAll([id, dup]));
       await pumpApp(t, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 3000));
-      await openPlanEdit(t);
-      expect(_key('planLine_$id'), findsOneWidget);
-      expect(_key('planLine_$dup'), findsOneWidget);
+      expect(_key('ledgerPlanLine_$id'), findsOneWidget);
+      expect(_key('ledgerPlanLine_$dup'), findsOneWidget);
       wc.dispose();
     }, timeout: _timeout);
   });

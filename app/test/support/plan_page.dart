@@ -2,9 +2,13 @@ import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/file_chooser.dart';
 import 'package:budget_wallet/src/layout.dart';
 import 'package:budget_wallet/src/screens/bills_panel.dart';
+import 'package:budget_wallet/src/screens/budgets.dart';
+import 'package:budget_wallet/src/screens/categories_panel.dart';
 import 'package:budget_wallet/src/screens/habits_panels.dart';
 import 'package:budget_wallet/src/screens/payday_plan.dart';
+import 'package:budget_wallet/src/screens/rules_panel.dart';
 import 'package:budget_wallet/src/screens/settings.dart';
+import 'package:budget_wallet/src/screens/tags_panel.dart';
 import 'package:budget_wallet/src/tabs.dart';
 import 'package:flutter/material.dart';
 
@@ -33,10 +37,14 @@ class PlanPage extends StatelessWidget {
             PaydayPlan(wc: wc),
             ...of(SettingsSection.accounts),
             ExpectedBillsPanel(wc: wc),
-            ...of(SettingsSection.income),
+            ExpectedIncomePanel(wc: wc),
             BillsPanel(wc: wc, chooser: chooser),
+            CategoriesPanel(key: const ValueKey('categoriesPanel'), wc: wc),
+            TagsPanel(key: const ValueKey('tagsPanel'), wc: wc),
+            RulesPanel(key: const ValueKey('rulesPanel'), wc: wc),
+            BudgetsPanel(key: const ValueKey('budgetsPanel'), wc: wc),
             for (final s in SettingsSection.listed)
-              if (s != SettingsSection.accounts && s != SettingsSection.income) ...of(s),
+              if (s != SettingsSection.accounts) ...of(s),
           ])),
     );
   }

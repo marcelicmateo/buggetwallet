@@ -75,7 +75,7 @@ void main() {
       addTearDown(wc.dispose);
       wc.setBudgetView('plan');
       await _show(t, wc);
-      await openPlanEdit(t);
+      await openPlanEdit(t, 'rent');
       await t.enterText(find.widgetWithText(TextField, 'Rent'), '777');
       await t.tap(_key('budgetSpending'));
       await t.pump(const Duration(milliseconds: 300));
@@ -208,7 +208,7 @@ void main() {
   });
 
   group('RX4 Plan tiles', () {
-    tw('the salary split, per day, the lines with a paid tick and Edit', (t) async {
+    tw('the salary split, per day, the lines with a paid tick, each value editable in place', (t) async {
       final wc = demoWallet();
       addTearDown(wc.dispose);
       wc.setBudgetView('plan');
@@ -218,7 +218,8 @@ void main() {
       expect(find.byType(Donut), findsOneWidget);
       expect(find.descendant(of: _key('planPerDay'), matching: find.text(moneyExact(p.planDaily > 0 ? p.planDaily : 0, 'EUR'))),
           findsOneWidget);
-      expect(_key('planEdit'), findsOneWidget);
+      expect(_key('planRow_rent'), findsOneWidget, reason: 'each value is tappable: no Edit button');
+      expect(_key('planEdit'), findsNothing);
       expect(_key('ledgerSpendingMoney'), findsOneWidget);
       expect(find.descendant(of: _key('ledgerSpendingMoney'), matching: find.text(moneyExact(p.flexBudget, 'EUR'))), findsOneWidget);
     });
