@@ -98,6 +98,14 @@ entry points). Agents: scout → devops (sonnet/high for the rewrite) + test-wri
 | PF | Perf (owner 2026-10-30): budgets for 60 Hz (build p90 ≤ 16.7 ms, ≤ 10 % frames over 16.7 ms, worst build ≤ 50 ms, raster only gated at ≤ 250 ms: software GL); Android asks 60 Hz (MainActivity preferred refresh rate); tab cross-fade ~180 ms (off with reduce motion); idle warm-up of every tab's derived data after the first frame and after each reload (Priority.idle, cancelled by a new data version, logs counts/ms only); hidden tabs built one per idle frame; perf action "first switch after new data" | ui-builder (sonnet/high) | worktree | perf A/B | done, merged 6244ce6 + PF2 bfebdf0 → 868e6c7 (A/B: pre-DD tab_switch 21.4 ms FAIL, DD 15.2 ms ok = host noise, not DD) |
 | ZC | Zoomable, scrollable graphs (spec `ZC_SPEC.md`, owner answers in §6) | scout → core + test-writer + ui | worktrees | DD, RX2 (chart look follows the picked direction) | on hold |
 
+## Resume here (end of day 2026-11-02) — v2 pushed at the commit after 8d1793b
+Done today: UX-ACC + UX-FX (core fixes, UI, 3 review rounds, stage run green), schema 20 pushed; CI with tests green on v2 (bash) and go3 (Go tool, numbers in STATUS); go3 merged into v2 (CI now runs through wallet-build). Owner chose **UX-B first**, then CI speed + M6.
+**Next, in order:**
+1. UX-B (UX_SPEC "UX-B"): scout pack first (it was stopped at wrap-up; re-run: B1 Plan window edited in place + income + budgets moved from Settings; B2 Tags window = main tags + tags + rules with recommendations, one add flow; B3 Settings = setup only; B4 Today tile choice/order per device + equal-height rows). Lead's proposal for the plan: the Tags window as a third Budget segment (Spending | Plan | Tags); core-builder for a "frequent words/payees → tag" suggestion if core has none; ui-builders: A = B1 + B3 (owns settings.dart), B = B2 window, C = B4. Show the delegation table before starting.
+2. F2, UX-C2.
+3. CI speed (devops): one combined desktop integration entry on CI (~29 s build + start per file, ~10 of 20 min); lint job 7 s → 73 s on the Go tool: find why. M6: delete the bash bodies and old helper scripts, Makefile entry, update CLAUDE.md, .mcp.json, agent files, hook fallback, fixtures.dart header; timing.sh oracle → goldens.
+Open: owner checks in STATUS ("after UX-ACC + UX-FX", incl. whether the first import from a bank with no account needs "Not now"); release.yml apple job fails (ML Kit needs iOS 15.5; Mac/iPhone parked). Branches kept, content already in v2 by other commits: worktree-agent-a9b798fcc2ffcfe5e, worktree-agent-aa03334ecc88ccf29.
+
 ## Resume here (end of day 2026-11-01, owner stopped for the token limit) — v2 NOT pushed
 Local v2 holds Stage UX work merged and reviewed, **unpushed on purpose until schema 20 is final** (one device update).
 Merged: UX-C1 theme (Clean neutral), UX-A-ui (dates/per-bill reminders/Today hero/Period), UX-A-core (+2 review
