@@ -10,7 +10,7 @@ import 'dart:collection' show UnmodifiableMapView;
 import 'bills.dart' show BillCols, PayeeAliasCols;
 import 'categories.dart' show CategoryCols;
 import 'ecb.dart' show FxDayCols;
-import 'loans.dart' show LoanCheckCols, LoanCols, LoanRateCols;
+import 'loans.dart' show LoanCheckCols, LoanCols, LoanPayCols, LoanRateCols;
 import 'models.dart'
     show AccountCols, GoalCols, GoalContribCols, IouCols, IouPartCols, PlannedCols, RecurringCols, ReviewCols, RuleCols, TxCols, WishCols;
 import 'series.dart' show ViewCols;
@@ -135,6 +135,8 @@ const Map<String, EntityDef> _schema = {
   'loan': EntityDef('loans', LoanCols.all),
   'loanrate': EntityDef('loan_rates', LoanRateCols.all, indexes: {'loan_rates_loan': 'loan_id'}),
   'loancheck': EntityDef('loan_checks', LoanCheckCols.all, indexes: {'loan_checks_loan': 'loan_id'}),
+  // The owner's answer per (loan, bank row): id `<loanId>|<txId>`, state on/off (`loanMatches`, `Categorizer.loanTx`).
+  'loanpay': EntityDef('loan_pays', LoanPayCols.all),
   // Saved Explore views (v21, ENG §6.3): name, query JSON (`SeriesQuery.toJson`), pinned on Overview, order.
   'view': EntityDef('views', ViewCols.all),
 };

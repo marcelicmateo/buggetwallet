@@ -459,7 +459,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   never revives or undoes a per-key change; new patterns get orders after the largest live one; a clock-less legacy row
   goes through `_write`; the map rows are left in place for older builds; `repo.migrate` logs `perKeySettings` (count);
   9 = the `account` entity, no data migration; 10 = the `category` entity (P1), no data migration; 11 = tags (T1); 12 = P4
-  recurring columns, no data migration; 13 = splits; 14 = recurring income; 15 = P14 local blob tables, no synced change; 16 = `bills.attached_tx` (P16b), no data migration; 17 = the `iou` and `iou_part` entities (Q8), no data migration; 18 = the `review` entity (V3), no data migration; 19 = `tx.match_off` (D2 Unlink), `planned.auto_off` (KL-A auto-Paid Undo) and the `payee_alias` entity (KL-A slip payee aliases), no data migration; 20 = UX-A/UX-ACC/UX-FX (see the doc comment); 21 = the `view` entity (ENG Explore) and the `goals` big-purchase fields (ENG E6: `price`, `deposit_permille`, `costs_permille`, `loan_rate_bp`, `loan_months`, `compare_line_id`, `bought_at`, `loan_id`; the `loan`, `loanrate`, `loancheck` entities; no data migration). Opening an existing database with an older version
+  recurring columns, no data migration; 13 = splits; 14 = recurring income; 15 = P14 local blob tables, no synced change; 16 = `bills.attached_tx` (P16b), no data migration; 17 = the `iou` and `iou_part` entities (Q8), no data migration; 18 = the `review` entity (V3), no data migration; 19 = `tx.match_off` (D2 Unlink), `planned.auto_off` (KL-A auto-Paid Undo) and the `payee_alias` entity (KL-A slip payee aliases), no data migration; 20 = UX-A/UX-ACC/UX-FX (see the doc comment); 21 = the `view` entity (ENG Explore) and the `goals` big-purchase fields (ENG E6: `price`, `deposit_permille`, `costs_permille`, `loan_rate_bp`, `loan_months`, `compare_line_id`, `bought_at`, `loan_id`; the `loan`, `loanrate`, `loancheck`, `loanpay` entities; no data migration). Opening an existing database with an older version
   clears the sync cursors (`sync_cursor`) once, so the next sync starts over like a new device (the latest snapshot if
   written by this schema or newer, else every file still on the relay) and applies ops (or fields) the older build skipped.
 - `local_db.dart` — encrypted local database (§4.9, SQLite3MultipleCiphers, web-safe): `localDbKey(VaultKey)` = HKDF
@@ -520,8 +520,22 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   (open live loans' `loanPaymentOn` today); `loanPlan` = the old `loan` setting + Σ lines replaces `loan` in the fixed
   sums. No migration: the old setting keeps counting (and `loanLeft` reads it) until the owner runs
   `convertLegacyLoan(...)` (one write: row `loan:settings` with payment = the setting, setting → 0; an older build
-  setting `loan` again later counts on top). Not yet: matched rows' main tag "Loan" in the categorizer, the
-  recurring-group wiring ("Loan payment?" first match, Unlink). Tests: `test/eng_loans_test.dart`.
+  setting `loan` again later counts on top). Matched payments (E6c): entity `loanpay` (`LoanPayCols`, table
+  `loan_pays`, id `<loanId>|<txId>`, state on/off, like `txtag`; per pair so two devices' answers never clobber).
+  Pure `loanPaymentDecisions(candidatesByLoan, answersByLoan, askOnly:)` → `LoanDecisions {matched, asks}`, per row:
+  on = that loan only (two loans on: smallest id), off = never that loan again; otherwise matched silently only when
+  exactly one loan may take it, it is not in `askOnly` (owner main tag or split) and an on row of that loan shares
+  its evidence (`LoanPaymentMatch.byKey`/`byRef`); else asked once naming every such loan. Repo
+  `pendingLoanPayments()` → `({payment, loans})`, `confirmLoanPayment` (a candidate only; also answers no for a loan
+  it was on for; Undo of an unlink), `unlinkLoanPayment`, `loanMatchedPayments`, `loanMatchedDates` (for
+  `loanState`), `loanLinkedTx()` → `Categorizer(loanTx:)` = matched rows of a loan open on the row's date (closed on or after it)
+  whose `loanPaymentOn` that date is > 0 (else the row keeps its tag and counts as spending, still matched; closing a
+  loan never changes past months; `_loanPlanLines` keeps a loan closed in the running period while a matched
+  payment lies in [periodStart, closed date], so closing never changes safe-to-spend): main tag "Loan"
+  before any rule (fixed, `fixedPaid['Loan']`), counted whole (a split shows `splitBroken`; `setSplit` refuses).
+  Cached per `dataVersion` (never inside a write); bank outflow descriptions → payee keys kept across versions and
+  scanned by rowid (`_loanDescriptions`): ≈5 ms per data change on 20k rows, ≈110 ms the first time. A deleted row
+  or loan simply stops matching. Tests: `test/eng_loans_test.dart`, `test/eng_loan_pay_test.dart`.
 - `loan.dart` — `loanLeft(settings, today)` → `LoanLeft {payments, cents, endMonth}` or null (no loan, no `loanEnd`, none left): counts the months from today's month to `loanEnd` inclusive whose payday (`paydayDay`, clamped to the month's last day) is today or later; `cents = payments × loan` (no interest data). Tests: `test/loan_left_test.dart`.
 - `dates.dart` — `YYYY-MM-DD` string helpers; payday rule `paydayIn`/`nextPayday`/`previousPayday` (rule C,
   RX7e, see H2). `hlc.dart` (H7 bounded HLC: `maxClockDrift` 1 h; an owner write (the

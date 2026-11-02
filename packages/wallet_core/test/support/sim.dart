@@ -107,6 +107,7 @@ const entityTables = {
   ),
   'loanrate': ('loan_rates', ['loan_id', 'from_date', 'rate_bp', 'payment', 'deleted']),
   'loancheck': ('loan_checks', ['loan_id', 'date', 'balance', 'deleted']),
+  'loanpay': ('loan_pays', ['loan_id', 'tx', 'state']),
   'view': ('views', ['name', 'query', 'pinned', 'sort', 'deleted']),
 };
 
@@ -134,6 +135,7 @@ const dataTables = [
   'loans',
   'loan_rates',
   'loan_checks',
+  'loan_pays',
   'views',
 ];
 
