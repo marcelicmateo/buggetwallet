@@ -104,6 +104,9 @@ String changeSettingWord(String key) {
 String changeEntityWord(String entity) => switch (entity) {
       'tx' => 'Payment',
       'goal' => 'Goal',
+      'loan' => 'Loan',
+      'loanrate' => 'Loan rate',
+      'loancheck' => 'Loan balance check',
       'wish' => 'Wish',
       'setting' => 'Setting',
       'rule' => 'Payee rule',

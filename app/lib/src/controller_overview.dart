@@ -68,7 +68,10 @@ extension OverviewData on WalletController {
   List<Finding> foundList() => _cached(
         const MemoKey('findings'),
         () => timed('findings', () {
-          final l = findings(txs, settings, categoryTable, today(), reviewDates: repo.reviewDates(), bills: recurringBills());
+          final l = findings(txs, settings, categoryTable, today(), reviewDates: repo.reviewDates(), bills: recurringBills(), loans: [
+            for (final l in repo.loans())
+              if (l.open) (l, loanSchedule(l, repo.loanRates(l.id), repo.loanChecks(l.id)))
+          ]);
           logEvent(_ovLog, Level.FINE, 'findings.shown', {'n': l.length});
           return l.take(maxFindingsShown).toList();
         }, warnMs: 16),
@@ -154,6 +157,13 @@ extension OverviewData on WalletController {
           _ => 'best streak, weeks',
         };
         return FindingCard(f, 'Milestone', '${groupInt(last)} $what', 'Since ${shortDate(f.from)}.');
+      case FindingKind.loanEnding:
+        final loan = repo.loans().where((l) => l.id == f.subjectKey).firstOrNull;
+        return FindingCard(
+            f,
+            'Loan ending',
+            '${loan?.name ?? 'A loan'} ends in ${f.n} months: ${amountText(last, currency)} a month frees up',
+            'Last payment ${shortDate(f.to)}.');
     }
   }
 

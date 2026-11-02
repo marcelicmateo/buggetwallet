@@ -31,9 +31,6 @@ class _ProjectScreenState extends State<ProjectScreen> {
   int? _year; // null = all years
   bool _reviewing = false;
 
-  /// Payments skipped in this review: hidden until the screen is opened again. The tag flow has no "not this one" mark for a payment
-  /// that never carried the tag (`setTxTag` off is a no-op there), so a skip is not written.
-  final _skipped = <String>{};
 
   /// Rows of the review list before "Show more".
   int _shown = 25;
@@ -191,10 +188,7 @@ class _ProjectScreenState extends State<ProjectScreen> {
     ]);
   }
 
-  List<Tx> _open(ProjectStats s) => [
-        for (final t in s.candidates)
-          if (!_skipped.contains(t.id)) t
-      ];
+  List<Tx> _open(ProjectStats s) => s.candidates;
 
   Widget _nudge(ProjectStats s) {
     final c = context.c, cur = wc.currency, rows = _open(s), n = rows.length;
@@ -234,7 +228,7 @@ class _ProjectScreenState extends State<ProjectScreen> {
                 child: Text('Tag all $n'),
               ),
             ),
-            const Muted('Skip hides a payment until you open this page again. Tag has Undo.'),
+            const Muted('Skip means "not this project" and keeps a payment out of this list. Tag has Undo.'),
             Rows(children: [
               for (final t in rows.take(_shown))
                 Padding(
@@ -257,9 +251,7 @@ class _ProjectScreenState extends State<ProjectScreen> {
                       TextButton(
                           key: ValueKey('projectSkip:${t.id}'),
                           style: TextButton.styleFrom(minimumSize: const Size(0, touchMin)),
-                          // shortcut: Skip only hides the row for this visit; the decision is "not this project" and should be saved as an off link,
-                          // which needs core's setTxTag(off) to write one when no link exists. Switch to tagPayments(.., on: false) then.
-                          onPressed: () => setState(() => _skipped.add(t.id)),
+                          onPressed: () => wc.tagPayments([t.id], widget.tag, false),
                           child: const Text('Skip')),
                     ]),
                   ]),

@@ -522,16 +522,23 @@ void main() {
       await tapKey(tester, 'projectReview');
       final c = wc.projectOf(w.reno).candidates;
       expect(k('candidate:${c[0].id}'), findsOneWidget);
-      // Skip the first: it leaves the list for now and is not tagged
+      // Skip the first: "not this project", written as an off link; it is not tagged and stays out of the list
       await tapKey(tester, 'projectSkip:${c[0].id}');
       expect(wc.txs.firstWhere((t) => t.tx.id == c[0].id).tags, isEmpty);
+      expect(wc.projectOf(w.reno).candidates.map((t) => t.id), [c[1].id]);
       expect(k('candidate:${c[0].id}'), findsNothing);
       expect(find.text("1 payment at the same places isn't tagged yet."), findsOneWidget);
       await settle(tester);
+      // reopen the page: the skipped row is still gone
+      await tester.pumpWidget(const SizedBox.shrink());
+      await pumpScreen(tester, ProjectScreen(wc: wc, tag: w.reno), size: const Size(900, 3000));
+      await tapKey(tester, 'projectReview');
+      expect(k('candidate:${c[0].id}'), findsNothing);
+      expect(k('candidate:${c[1].id}'), findsOneWidget);
       // Tag the other with Tag all
       final before = wc.projectOf(w.reno).total;
       await tapKey(tester, 'projectTagAll');
-      expect(wc.projectOf(w.reno).candidates.map((t) => t.id), [c[0].id], reason: 'only the skipped one is still untagged');
+      expect(wc.projectOf(w.reno).candidates, isEmpty);
       expect(wc.projectOf(w.reno).total, before - c[1].amount, reason: 'the tagged payment now counts');
       expect(wc.txs.firstWhere((t) => t.tx.id == c[1].id).tags, contains(w.reno));
       // Undo takes the tag off again

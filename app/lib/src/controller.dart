@@ -70,6 +70,7 @@ part 'controller_suggest.dart';
 part 'controller_setup.dart';
 part 'controller_warmup.dart';
 part 'controller_explore.dart';
+part 'controller_goals_loans.dart';
 part 'controller_overview.dart';
 
 final _log = Logger('bw.app');
@@ -965,7 +966,7 @@ class WalletController extends ChangeNotifier {
       });
 
   /// The sum of every goal's target (cents).
-  int get goalTargetTotal => _cached(const MemoKey('goalTargetTotal'), () => goals.fold<int>(0, (a, g) => a + g.target));
+  int get goalTargetTotal => _cached(const MemoKey('goalTargetTotal'), () => goals.fold<int>(0, (a, g) => a + goalTarget(g)));
 
   /// The sum of the prices of wishes still cooling off (cents). Not cached: it depends on the clock ([now], the injected one in tests).
   int get waitingTotal {

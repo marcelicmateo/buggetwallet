@@ -1,0 +1,389 @@
+// Big purchases from saving to a loan to paid off (ENG E6, docs/context/ENG_UI_SPEC.md §5.5): the goal planner's draft, the buy step and
+// the loan screen's numbers. Core (`goal_plan.dart`, `loans.dart`, `repo_loans.dart`) does every sum and refuses bad input with a readable
+// [ArgumentError]; this reads, caches and logs. A `part` of controller.dart so it can use the cache and `_changed`.
+//
+// Privacy: logs carry counts and enum words only, never names, lenders or amounts.
+part of 'controller.dart';
+
+/// The planner's inputs while the owner moves a slider; written to the goal only on [GoalsLoans.saveGoalDraft].
+class GoalDraft {
+  int price, monthly, depositPermille, costsPermille;
+  int? rateBp, months;
+  String? compareId;
+  GoalDraft(
+      {required this.price,
+      required this.monthly,
+      required this.depositPermille,
+      required this.costsPermille,
+      this.rateBp,
+      this.months,
+      this.compareId});
+
+  /// The draft of [g]: a goal paid in full has 1000 ‰ deposit; a missing loan length starts at 5 years.
+  factory GoalDraft.of(Goal g) => GoalDraft(
+      price: g.price ?? g.target,
+      monthly: g.monthly,
+      depositPermille: g.depositPermille ?? 1000,
+      costsPermille: g.costsPermille ?? 0,
+      rateBp: g.loanRateBp,
+      months: g.loanMonths ?? 60,
+      compareId: g.compareLineId);
+
+  /// What the draft holds, to tell whether it differs from what was written.
+  String get sig => '$price|$monthly|$depositPermille|$costsPermille|$rateBp|$months|$compareId';
+
+  GoalDraft copy() => GoalDraft(
+      price: price,
+      monthly: monthly,
+      depositPermille: depositPermille,
+      costsPermille: costsPermille,
+      rateBp: rateBp,
+      months: months,
+      compareId: compareId);
+
+  /// [g] with this draft's planner fields (for `goalPlan`).
+  Goal on(Goal g) => Goal(
+      id: g.id,
+      name: g.name,
+      target: g.target,
+      saved: g.saved,
+      monthly: monthly,
+      sort: g.sort,
+      price: price,
+      depositPermille: depositPermille,
+      costsPermille: costsPermille,
+      loanRateBp: rateBp,
+      loanMonths: months,
+      compareLineId: compareId,
+      boughtAt: g.boughtAt,
+      loanId: g.loanId);
+}
+
+/// One loan with everything the Loan screen shows, all from core: the [schedule], the bank rows that paid it ([payments]) and its
+/// [state] against them.
+class LoanView {
+  final Loan loan;
+  final List<LoanRate> rates;
+  final List<LoanCheck> checks;
+  final List<LoanMonth> schedule;
+  final List<LoanPaymentMatch> payments;
+  final LoanState state;
+  const LoanView(this.loan, this.rates, this.checks, this.schedule, this.payments, this.state);
+}
+
+extension GoalsLoans on WalletController {
+  Goal? goalOf(String id) => goals.where((g) => g.id == id).firstOrNull;
+
+  /// The plan lines a loan payment can be compared with: (id, label, cents), only those with an amount.
+  List<(String, String, int)> compareChoices() {
+    final s = effectiveSettings;
+    return [
+      if (s.rent > 0) ('rent', 'Rent', s.rent),
+      if (s.loan > 0) ('loan', 'Loan', s.loan),
+      if (s.subs > 0) ('subs', 'Bills & subscriptions', s.subs),
+      for (final id in categoryTable.planLineIds)
+        if ((s.planLines[id] ?? 0) > 0) ('plan:$id', categoryTable.label(id), s.planLines[id]!),
+      for (final e in s.loanLines.entries)
+        if (e.value > 0) ('loanrow:${e.key}', repo.loans().where((l) => l.id == e.key).firstOrNull?.name ?? 'Loan', e.value),
+    ];
+  }
+
+  /// What the compared line costs now (null: none picked, or it is gone).
+  int? compareCents(String? id) => id == null ? null : compareChoices().where((c) => c.$1 == id).firstOrNull?.$3;
+
+  /// The planner numbers of [g] with the draft [d] and the "Get there sooner" levers switched on (core's `goalPlan`).
+  GoalPlan planFor(Goal g, GoalDraft d, {List<GoalLever> applied = const []}) => goalPlan(d.on(g),
+      applied: applied,
+      savedCents: g.saved,
+      monthlyCents: d.monthly,
+      compareCents: compareCents(d.compareId),
+      toSpendPerPeriodCents: period().flexBudget,
+      today: today());
+
+  /// The "Get there sooner" chips for [plan] (core's `goalLevers`), cached per plan.
+  List<GoalLever> leversFor(String goalId, GoalPlan plan) => _cached(
+      MemoKey('goalLevers', '$goalId|${plan.left}|${plan.monthly}|${plan.months}'),
+      () => goalLevers(rawExpanded, effectiveSettings, categoryTable, today(), plan: plan, incomes: recurringBills()));
+
+  /// The words for a lever's source: a main tag's name, or the recurring income's label.
+  String leverLabel(GoalLever l) => l.kind == GoalLeverKind.tag
+      ? categoryTable.label(l.key)
+      : recurringBills().where((b) => b.id == l.key).firstOrNull?.label ?? 'Side income';
+
+  /// The goal is ready: it has a price, nothing is left to save and it is not bought yet.
+  bool goalReady(Goal g) {
+    if (g.price == null || g.boughtAt != null) return false;
+    final p = planFor(g, GoalDraft.of(g));
+    return p.need > 0 && p.left == 0;
+  }
+
+  /// Writes the planner inputs of [id] (`target` is not written: a goal with a price reads `goalPlan`'s need, see `goalTarget`). Returns
+  /// core's refusal text, or null when written.
+  String? saveGoalDraft(String id, GoalDraft d) {
+    final g = goalOf(id);
+    if (g == null) return 'No such goal.';
+    try {
+      repo.patch(GoalCols.entity, id, {
+        GoalCols.price: d.price,
+        GoalCols.depositPermille: d.depositPermille,
+        GoalCols.costsPermille: d.costsPermille,
+        GoalCols.loanRateBp: d.rateBp,
+        GoalCols.loanMonths: d.months,
+        GoalCols.compareLineId: d.compareId,
+        GoalCols.monthly: d.monthly,
+      });
+    } on ArgumentError catch (e) {
+      return '${e.message}';
+    }
+    logEvent(_log, Level.INFO, 'goal.plan', {'financed': d.depositPermille < 1000});
+    _changed();
+    return null;
+  }
+
+  /// A new big-purchase goal (Plan › Saving › + Goal): [financed] = with a loan; [property] only picks the starting costs (6 %) and loan
+  /// length (30 years) over 0 % and 5 years. Returns the id, or null with the refusal in [error].
+  String? addBigGoal(
+      {required String name, required int price, required bool financed, required bool property, void Function(String)? error}) {
+    try {
+      final draft = GoalDraft(
+          price: price, monthly: 0, depositPermille: financed ? 200 : 1000, costsPermille: property ? 60 : 0, months: property ? 360 : 60);
+      final id = repo.saveGoal(
+          name: name.trim().isEmpty ? 'Goal' : name.trim(),
+          target: 0, // a goal with a price reads `goalTarget`
+          saved: 0,
+          monthly: 0,
+          sort: goals.length + 1,
+          purchase: {
+            GoalCols.price: price,
+            GoalCols.depositPermille: draft.depositPermille,
+            GoalCols.costsPermille: draft.costsPermille,
+            GoalCols.loanMonths: draft.months,
+          });
+      logEvent(_log, Level.INFO, 'goal.addBig', {'financed': financed, 'property': property});
+      _changed();
+      return id;
+    } on ArgumentError catch (e) {
+      error?.call('${e.message}');
+      return null;
+    }
+  }
+
+  /// "I bought it" (one write, Undo = [undoBuyGoal]). Returns the loan id (null without a loan). Core's refusal: [ArgumentError].
+  String? buyGoal(String id, {required List<String> txIds, Loan? loan, String? date}) {
+    final loanId = repo.buyGoal(id, date: date ?? today(), purchaseTxIds: txIds, loan: loan);
+    _changed();
+    return loanId;
+  }
+
+  void undoBuyGoal(String id) {
+    repo.undoBuyGoal(id);
+    _changed();
+  }
+
+  /// Live payments out in the wallet currency, newest first: the rows the owner can pick as what the purchase cost.
+  List<Tx> purchaseCandidates() => [
+        for (final c in wholeTxs)
+          if (c.tx.live && c.tx.amount < 0 && c.tx.currency == currency && c.tx.transferTo == null) c.tx
+      ]..sort((a, b) => b.date.compareTo(a.date));
+
+  /// The key core matches a lender's bank rows by, from the name as the bank writes it.
+  String payeeKeyOf(String text) => merchantKey(Tx(id: '', source: 'pbz', date: '', amount: 0, description: text));
+
+  // ---------- loans ----------
+
+  /// Open loans first, then closed ones.
+  List<Loan> loansAll() => [...repo.loans().where((l) => l.open), ...repo.loans().where((l) => !l.open)];
+
+  Loan? loanOf(String id) => repo.loans().where((l) => l.id == id).firstOrNull;
+
+  /// [id]'s schedule, matched payments and state (null: no such loan), kept per data version.
+  LoanView? loanView(String id) => _cached(MemoKey('loanView', id), () => _loanView(id));
+
+  LoanView? _loanView(String id) {
+    final l = loanOf(id);
+    if (l == null) return null;
+    final rates = repo.loanRates(id), checks = repo.loanChecks(id);
+    final schedule = loanSchedule(l, rates, checks);
+    // Which rows pay the loan is core's decision (confirmed asks and silent matches), not a text match here.
+    return LoanView(l, rates, checks, schedule, repo.loanMatchedPayments(id), loanState(schedule, repo.loanMatchedDates(id), today()));
+  }
+
+  /// `YYYY-MM` of the loan's last scheduled payment; null while its amount, length or first payment date is unknown.
+  String? loanEndMonth(Loan l) => _cached(MemoKey('loanEnd', l.id), () {
+        final s = loanSchedule(l, repo.loanRates(l.id), repo.loanChecks(l.id));
+        return s.isEmpty ? null : monthOf(s.last.due);
+      });
+
+  /// The loan whose matched payments include payment [txId]; null when none.
+  Loan? loanOfPayment(String txId) {
+    for (final l in repo.loans()) {
+      if (repo.loanMatchedPayments(l.id).any((m) => m.txId == txId)) return l;
+    }
+    return null;
+  }
+
+  /// The "Loan payment?" asks that name loan [loanId] (oldest first); each lists every loan the row may belong to.
+  List<({LoanPaymentMatch payment, List<Loan> loans})> loanAsks(String loanId) => [
+        for (final a in repo.pendingLoanPayments())
+          if (a.loans.any((l) => l.id == loanId)) a
+      ];
+
+  /// "Loan payment?" yes (or Undo of [unlinkLoanPayment]): row [txId] pays loan [loanId]. Returns core's refusal text or null.
+  String? confirmLoanPayment(String loanId, String txId) {
+    try {
+      repo.confirmLoanPayment(loanId, txId);
+    } on ArgumentError catch (e) {
+      return '${e.message}';
+    }
+    _changed();
+    return null;
+  }
+
+  /// "Loan payment?" no, or Unlink: row [txId] is not a payment of the loans [loanIds]. Returns core's refusal text or null.
+  String? unlinkLoanPayment(Iterable<String> loanIds, String txId) {
+    try {
+      for (final id in loanIds) {
+        repo.unlinkLoanPayment(id, txId);
+      }
+    } on ArgumentError catch (e) {
+      return '${e.message}';
+    }
+    _changed();
+    return null;
+  }
+
+  /// "Your `<name>` loan of X a month has ended. Move it to savings or a goal?" (core's `loanEndedProposals`).
+  List<LoanEnded> loanEnded() => _cached(
+      const MemoKey('loanEnded'),
+      () => loanEndedProposals(
+          [for (final l in repo.loans()) (l, loanSchedule(l, repo.loanRates(l.id), repo.loanChecks(l.id)))], effectiveSettings, today()));
+
+  /// Puts the freed [e] payment into goal [goalId]'s monthly amount (null: no goal, spending money keeps it) and hides the card. Undo:
+  /// [undoLoanEnded]. Returns core's refusal text or null.
+  String? answerLoanEnded(LoanEnded e, {String? goalId}) {
+    try {
+      if (goalId != null) {
+        final g = goalOf(goalId);
+        if (g == null) return 'No such goal.';
+        repo.patch(GoalCols.entity, goalId, {GoalCols.monthly: g.monthly + e.payment});
+      }
+      repo.dismissFinding(e.id);
+    } on ArgumentError catch (x) {
+      return '${x.message}';
+    }
+    logEvent(_log, Level.INFO, 'loan.endedAnswer', {'goal': goalId != null});
+    _changed();
+    return null;
+  }
+
+  void undoLoanEnded(LoanEnded e, {String? goalId}) {
+    final g = goalId == null ? null : goalOf(goalId);
+    if (g != null) repo.patch(GoalCols.entity, goalId!, {GoalCols.monthly: g.monthly - e.payment});
+    repo.undismissFinding(e.id);
+    _changed();
+  }
+
+  /// The loan a goal became (null: none, or it was deleted).
+  Loan? loanOfGoal(Goal g) => g.loanId == null ? null : loanOf(g.loanId!);
+
+  /// The lender's balance [shown] on [date] against the schedule (nothing is written).
+  LoanCheckView checkLoanBalance(LoanView v, int shown, String date) =>
+      loanCheckView(v.loan, v.rates, v.checks, date: date, shownBalance: shown);
+
+  /// The balance the lender showed, confirmed by the owner: the schedule goes on from it. Returns core's refusal text, or null.
+  String? addLoanCheck(String loanId, int balance) {
+    try {
+      repo.addLoanCheck(loanId, date: today(), balance: balance);
+    } on ArgumentError catch (e) {
+      return '${e.message}';
+    }
+    logEvent(_log, Level.INFO, 'loan.check');
+    _changed();
+    return null;
+  }
+
+  /// Read-only what-if over the loan as it stands.
+  LoanWhatIf loanWhatIfFor(LoanView v, {int extraOnce = 0, int extraMonthly = 0, int? newRateBp}) => loanWhatIf(v.loan,
+      rates: v.rates,
+      checks: v.checks,
+      extraOnce: extraOnce,
+      extraOnceDate: today(),
+      extraMonthly: extraMonthly,
+      newRateBp: newRateBp,
+      newRateFrom: newRateBp == null ? null : today());
+
+  /// A new rate from today for a variable loan ("Use this" of the what-if); [payment] null = worked out. Returns core's refusal text or null.
+  String? addLoanRateNow(String loanId, int rateBp, int? payment) {
+    try {
+      repo.addLoanRate(loanId, from: today(), rateBp: rateBp, payment: payment);
+    } on ArgumentError catch (e) {
+      return '${e.message}';
+    }
+    logEvent(_log, Level.INFO, 'loan.rate');
+    _changed();
+    return null;
+  }
+
+  /// Writes the details of loan [id] from [l] (an empty field clears it). Returns core's refusal text or null.
+  String? saveLoanDetails(String id, Loan l) {
+    try {
+      repo.patch(LoanCols.entity, id, {
+        LoanCols.name: l.name,
+        LoanCols.principal: l.principal,
+        LoanCols.rateBp: l.rateBp,
+        LoanCols.months: l.months,
+        LoanCols.firstDue: l.firstDue,
+        LoanCols.payment: l.payment,
+        LoanCols.accountId: l.accountId,
+        LoanCols.payeeKey: l.payeeKey,
+        LoanCols.reference: l.reference,
+      });
+    } on ArgumentError catch (e) {
+      return '${e.message}';
+    }
+    logEvent(_log, Level.INFO, 'loan.details');
+    _changed();
+    return null;
+  }
+
+  /// Closes the loan as paid off today (Undo = [reopenLoan]). Returns core's refusal text, or null.
+  String? closeLoanNow(String id) {
+    try {
+      repo.closeLoan(id, today());
+    } on ArgumentError catch (e) {
+      return '${e.message}';
+    }
+    _changed();
+    return null;
+  }
+
+  void reopenLoan(String id) {
+    repo.closeLoan(id, null);
+    _changed();
+  }
+
+  /// "+ Loan" in the payday plan: a loan without a goal. Returns its id or null with the refusal in [error].
+  String? addLoan(Loan l, {void Function(String)? error}) {
+    try {
+      final id = repo.addLoan(l);
+      _changed();
+      return id;
+    } on ArgumentError catch (e) {
+      error?.call('${e.message}');
+      return null;
+    }
+  }
+
+  /// Turns the old plan "Loan" setting into a loan row, one write; nothing happens before this call. Returns the refusal text or null.
+  String? convertLegacyLoan(
+      {String name = 'Loan', int? principal, int? rateBp, int? months, String? firstDue, String? payeeKey, String? reference}) {
+    try {
+      repo.convertLegacyLoan(
+          name: name, principal: principal, rateBp: rateBp, months: months, firstDue: firstDue, payeeKey: payeeKey, reference: reference);
+    } on ArgumentError catch (e) {
+      return '${e.message}';
+    }
+    _changed();
+    return null;
+  }
+}

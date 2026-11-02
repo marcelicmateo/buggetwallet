@@ -136,6 +136,7 @@ class FindingCardView extends StatelessWidget {
       case FindingKind.aboveUsual:
       case FindingKind.seasonality:
       case FindingKind.milestone:
+      case FindingKind.loanEnding:
         return Sparkline(
             values: [for (final v in cents) v.toDouble()],
             color: context.c.s2,
