@@ -1,5 +1,5 @@
 # Editor defaults (https://editorconfig.org). Dart formatting itself is decided by `dart format`
-# (page width in analysis_options.yaml); run tools/build.sh format.
+# (page width in analysis_options.yaml); run make format.
 root = true
 
 [*]

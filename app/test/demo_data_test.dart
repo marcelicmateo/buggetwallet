@@ -1,5 +1,5 @@
-// The synthetic demo wallet (`integration_test/demo_data.dart`) used by `tools/emulator.sh screens`,
-// `tools/build.sh desktop-test screens` and `tools/live.sh start --demo`: seeding it must never throw (B6: a core rule
+// The synthetic demo wallet (`integration_test/demo_data.dart`) used by `make emulator-screens`,
+// `make desktop-test N=screens` and `make live-start ARGS="--demo"`: seeding it must never throw (B6: a core rule
 // once made the seeding fail only in those slow runs).
 import 'package:budget_wallet/src/controller.dart';
 import 'package:flutter_test/flutter_test.dart';

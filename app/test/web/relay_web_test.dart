@@ -1,6 +1,6 @@
 // What only a browser can show: the relay transport builds and signs its request there (Ed25519, SHA-256, `package:http` on the
 // web), with a fake HTTP client and no network, and the device-id slot of the browser key store is real localStorage.
-// Run with `tools/build.sh web-test`. SYNTHETIC key.
+// Run with `make web-test`. SYNTHETIC key.
 @TestOn('browser')
 library;
 

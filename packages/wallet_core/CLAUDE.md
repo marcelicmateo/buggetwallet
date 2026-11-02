@@ -22,7 +22,7 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   browser pure Dart; both write one standard gzip member, which is what `_wholeGzip` and older builds check.
   `test/web_core_test.dart` pins that dart:io members unseal and that pure-Dart members are accepted.
 - `hlc.dart`: no int literal above 2^53 (dart2js refuses it); `_maxInt` is 2^53 − 1 there, 2^63 − 1 elsewhere.
-- Compile check (after `dart pub get` in the package): `tools/build.sh shell -c 'cd packages/wallet_core && dart compile js
+- Compile check (after `dart pub get` in the package): `make shell C='cd packages/wallet_core && dart compile js
   -o /dev/null tool/web_smoke.dart && dart compile wasm -o ../../dist/web_smoke.wasm tool/web_smoke.dart'`
   (`tool/web_smoke.dart` imports the barrel and uses `WalletRepo.fromDatabase`, `backupBytes`, `MemoryLogSink`,
   `seal`/`unseal`, `deriveKey`; the sync half is `packages/sync/tool/web_smoke.dart`; dart2wasm wants a `.wasm` output
@@ -951,4 +951,4 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   the helpers; `dbPath:` + `reopen()` simulate a restart or upgrade), `opsInNet`, `dump`, `bookkeeping`. `match_gate_test.dart`: matching only when caught up.
   Sync engine, transport and bill-file tests: `packages/sync/test` (they import this folder's `support/`).
   `test/layering_test.dart`: `lib/` never imports `package:wallet_sync`.
-- Run: `tools/build.sh test` from the repo root (or `tools/build.sh shell`, then `cd packages/wallet_core && dart test`).
+- Run: `make test` from the repo root (or `make shell`, then `cd packages/wallet_core && dart test`).

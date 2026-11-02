@@ -47,6 +47,57 @@ class Harness {
   static final List<Map<String, Object?>> bugs = [];
   static final Map<String, Object?> report = {};
 
+  /// The combined CI entry runs every test file in one process. Each file's main() registers its private texts/amounts at
+  /// registration time, so the entry clears them before main(), takes them after it, and puts them back when the file's group starts
+  /// (a file run alone starts clean: nothing of another file counts against its log).
+  static void clearRegistered() {
+    _private
+      ..clear()
+      ..addAll(basePrivate);
+    _cents.clear();
+    _keys.clear();
+  }
+
+  static ({Set<String> texts, Set<int> cents, Set<String> keys}) takeRegistered() =>
+      (texts: {..._private}, cents: {..._cents}, keys: {..._keys});
+
+  static void useRegistered(({Set<String> texts, Set<int> cents, Set<String> keys}) r) {
+    _private
+      ..clear()
+      ..addAll(r.texts);
+    _cents
+      ..clear()
+      ..addAll(r.cents);
+    _keys
+      ..clear()
+      ..addAll(r.keys);
+    _logsCleared = false;
+    bugs.clear();
+    report.clear();
+  }
+
+  /// Start of a test file in the combined CI entry: its registered texts, a wallet-less app folder and an empty log, as when the file runs alone.
+  static Future<void> beginFile(({Set<String> texts, Set<int> cents, Set<String> keys}) r) async {
+    useRegistered(r);
+    await AppLog.init(catchErrors: false);
+    await wipe();
+    await AppLog.clear();
+    final dir = await supportDir();
+    final sep = Platform.pathSeparator;
+    expect(File('${dir.path}${sep}wallet.db').existsSync(), isFalse, reason: 'a file must not start on the previous file\'s wallet');
+    for (final n in ['wallet.key', 'device.id', 'device.key']) {
+      expect(File('${dir.path}$sep$n').existsSync(), isFalse, reason: 'a file must not start on the previous file\'s $n');
+    }
+  }
+
+  /// End of a test file in the combined entry: its app log is kept as $BW_APP_LOG_COPY/app-linux-combined-<name>.log.
+  static Future<void> endFile(String name) async {
+    final dir = Platform.environment['BW_APP_LOG_COPY'];
+    if (dir == null || dir.isEmpty) return;
+    await AppLog.flush();
+    await File('$dir/app-linux-combined-$name.log').writeAsString(await AppLog.combined());
+  }
+
   /// Call first in main(). Registers the end-of-file hook that hands the app log and the report to the driver.
   static IntegrationTestWidgetsFlutterBinding init() {
     binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -166,8 +217,8 @@ class Harness {
   /// Off for views resized by a test: the screenshot then never completes on the emulator.
   static bool shots = true;
 
-  /// Screenshot. On a phone the driver saves it (tools/emulator.sh); on a desktop flutter_test_config.dart takes it
-  /// from the render tree (tools/build.sh desktop-test).
+  /// Screenshot. On a phone the driver saves it (make emulator-test); on a desktop flutter_test_config.dart takes it
+  /// from the render tree (make desktop-test).
   static Future<void> shot(WidgetTester t, String name) async {
     if (!shots) return;
     if (!_converted) {

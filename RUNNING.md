@@ -22,13 +22,13 @@ The first command builds the dev image (Flutter, Android SDK, lint tools; about 
 ### Run the tests
 
 ```sh
-tools/build.sh test            # lint + analyze + all unit and widget tests (importer, core, relay, app), ~2 min after the image
-tools/build.sh core            # one package: importer | core | relay | app
-tools/build.sh core test/bills_test.dart     # one test file
-tools/build.sh desktop-test    # Linux integration tests under Xvfb (11 files, parallel), screenshots in dist/screens/linux/
-tools/build.sh web-test        # browser tests (headless Chrome in the container)
-tools/build.sh perf            # frame-time budgets in profile mode on a 20,000-row synthetic wallet
-tools/emulator.sh screens      # Android emulator (needs /dev/kvm, ~2 GB download once): every tab -> dist/screens/*.png
+make test            # lint + analyze + all unit and widget tests (importer, core, relay, app), ~2 min after the image
+make core            # one package: importer | core | relay | app
+make core T=test/bills_test.dart     # one test file
+make desktop-test    # Linux integration tests under Xvfb (11 files, parallel), screenshots in dist/screens/linux/
+make web-test        # browser tests (headless Chrome in the container)
+make perf            # frame-time budgets in profile mode on a 20,000-row synthetic wallet
+make emulator-screens      # Android emulator (needs /dev/kvm, ~2 GB download once): every tab -> dist/screens/*.png
 ```
 
 Each run ends with a seconds-per-step table and per-test p50/p90/max.
@@ -36,9 +36,9 @@ Each run ends with a seconds-per-step table and per-test p50/p90/max.
 ### See the app
 
 ```sh
-tools/live.sh start --demo     # the Linux app in a window on your Wayland desktop, with a synthetic demo wallet
-tools/live.sh shot out.png     # screenshot of that window
-tools/live.sh stop
+make live-start ARGS=--demo     # the Linux app in a window on your Wayland desktop, with a synthetic demo wallet
+make live-shot ARGS=out.png     # screenshot of that window
+make live-stop
 ```
 
 `--headless` runs it under Xvfb instead (no window; use `shot`). `--fresh` starts with an empty wallet so you see
@@ -46,14 +46,14 @@ onboarding. The wallet lives in a throwaway folder under `dist/live/`.
 
 To try importing, copy a synthetic export into `~/.local/share/budget-wallet/live-files/` (the file dialog shows it as
 `/files`): bank files are in `packages/wallet_importer/test/fixtures/`, bills (PDF, XML) in
-`packages/wallet_importer/test/fixtures/bills/`. `tools/make_fixtures.py` regenerates them.
+`packages/wallet_importer/test/fixtures/bills/`. `make fixtures` regenerates them.
 
 ### Web build (localhost only)
 
 ```sh
-tools/build.sh web             # dist/web/ (wasm, JS fallback); fetches sqlite3.wasm, pinned by dev/sqlite3-wasm.sha256
-tools/web.sh serve             # http://127.0.0.1:8080, loopback only
-tools/web.sh stop
+make web             # dist/web/ (wasm, JS fallback); fetches sqlite3.wasm, pinned by dev/sqlite3-wasm.sha256
+make web-serve             # http://127.0.0.1:8080, loopback only
+make web-stop
 ```
 
 Start a new wallet with a passphrase; reload to see the unlock screen. The web build has no sync by design.
@@ -61,29 +61,29 @@ Start a new wallet with a passphrase; reload to see the unlock screen. The web b
 ### Release builds
 
 ```sh
-tools/build.sh linux           # dist/BudgetWallet-linux-x64.tar.gz; unpack and run ./budget_wallet
-tools/build.sh desktop-smoke   # starts that bundle headless and checks it stays up and logs cleanly
+make linux           # dist/BudgetWallet-linux-x64.tar.gz; unpack and run ./budget_wallet
+make desktop-smoke   # starts that bundle headless and checks it stays up and logs cleanly
 ```
 
-**Android:** `tools/build.sh apk` refuses to run without a release signing key (so the owner never publishes an APK
+**Android:** `make apk` refuses to run without a release signing key (so the owner never publishes an APK
 that cannot update the installed app). Make your own throwaway key first:
 
 ```sh
-BW_SIGNING_DIR=$HOME/.config/bw-review-key tools/make-signing-key.sh
-BW_SIGNING_DIR=$HOME/.config/bw-review-key tools/build.sh apk                       # arm64 + x86_64, ~86 MB
-BW_SIGNING_DIR=$HOME/.config/bw-review-key BW_APK_ABIS=arm64 tools/build.sh apk     # phone-only, ~44 MB
+BW_SIGNING_DIR=$HOME/.config/bw-review-key make signing-key
+BW_SIGNING_DIR=$HOME/.config/bw-review-key make apk                       # arm64 + x86_64, ~86 MB
+BW_SIGNING_DIR=$HOME/.config/bw-review-key BW_APK_ABIS=arm64 make apk     # phone-only, ~44 MB
 ```
 
-Install with `adb install dist/BudgetWallet-android.apk`, or on the emulator: `tools/emulator.sh start`, then
-`tools/emulator.sh install`. An APK signed with your key installs only where the owner's build is not installed.
+Install with `adb install dist/BudgetWallet-android.apk`, or on the emulator: `make emulator-start`, then
+`make emulator-install`. An APK signed with your key installs only where the owner's build is not installed.
 
 ### The relay (sync server)
 
 ```sh
-tools/relay.sh start           # builds dev/Containerfile.relay, runs on http://127.0.0.1:8787, data in ~/.local/share/budget-wallet/relay/
+make relay-start           # builds dev/Containerfile.relay, runs on http://127.0.0.1:8787, data in ~/.local/share/budget-wallet/relay/
 curl -s http://127.0.0.1:8787/v2/health      # {"api":2}
-tools/relay.sh logs -f
-tools/relay.sh stop            # data stays; tools/relay.sh reset deletes it
+make relay-logs ARGS=-f
+make relay-stop            # data stays; make relay-reset deletes it
 ```
 
 Then in the app: Plan › Sync → relay address `http://127.0.0.1:8787` (the Android emulator reaches the host as
@@ -105,7 +105,7 @@ cd app && XDG_DATA_HOME=/tmp/bw-try flutter run -d linux                        
 cd app && BW_LIVE_DEMO=1 XDG_DATA_HOME=/tmp/bw-demo flutter run -d linux -t tool/live_demo.dart   # synthetic demo wallet in a throwaway folder
 cd app && flutter build linux --release                # build/linux/x64/release/bundle/budget_wallet
 cd app && flutter build apk --debug                    # debug-signed APK, any ABI
-cd app && flutter build web --wasm                     # needs app/web/sqlite3.wasm: see tools/build.sh build_web
+cd app && flutter build web --wasm                     # needs app/web/sqlite3.wasm: see make web
 
 cd relay && dart run bin/relay.dart --data /tmp/bw-relay --port 8787   # same relay without a container
 ```

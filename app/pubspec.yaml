@@ -43,7 +43,7 @@ dev_dependencies:
     path: ../relay
 
 # sqlite3 3.x ships SQLite through a build hook. SQLite3 Multiple Ciphers = SQLite + encryption (PRAGMA key); an unkeyed
-# database opens exactly as with plain SQLite. The web build uses the matching sqlite3mc.wasm (tools/build.sh).
+# database opens exactly as with plain SQLite. The web build uses the matching sqlite3mc.wasm (make web).
 hooks:
   user_defines:
     sqlite3:

@@ -1,4 +1,4 @@
-// Package live ports tools/live.sh: the Linux desktop app in debug mode (`flutter run -d linux`) in the build container, kept
+// Package live ports wallet-build live: the Linux desktop app in debug mode (`flutter run -d linux`) in the build container, kept
 // running in the background so Claude can hot-reload it, read the widget tree and take screenshots.
 //
 // Privacy rules kept from the script: the app window uses only the Wayland socket (never X11), the container mounts only the repo,
@@ -162,8 +162,8 @@ func Host(h *host.Host, args []string) int {
 	case "vm": // the subcommands of tools/live_vm.py, run on the host
 		return vmservice.Main(c.Ctx, rest, c.Env, c.Out, c.Err)
 	case "mcp":
-		if err := c.R.Exec(sys.Cmd{Argv: append([]string{filepath.Join(c.Root, "tools", "build.sh"), "mcp"}, rest...), Env: c.Env}); err != nil {
-			c.Eprintf("exec build.sh: %v\n", err)
+		if err := c.R.Exec(sys.Cmd{Argv: append([]string{filepath.Join(c.Root, "dist", "bin", "wallet-build"), "mcp"}, rest...), Env: c.Env}); err != nil {
+			c.Eprintf("exec wallet-build mcp: %v\n", err)
 			return 127
 		}
 		return 0
@@ -195,7 +195,7 @@ func (l *liveSide) needRunning() bool {
 	if l.running() {
 		return true
 	}
-	l.c.Eprintf("Live mode is not running. Start it with: tools/live.sh start\n")
+	l.c.Eprintf("Live mode is not running. Start it with: make live-start\n")
 	return false
 }
 
@@ -209,7 +209,7 @@ func (l *liveSide) load() bool {
 	c := l.c
 	l.runDir, l.dataDir = l.label("bw.run"), l.label("bw.data")
 	if !isDir(l.runDir) {
-		c.Eprintf("Live mode's run folder is gone; tools/live.sh stop, then start.\n")
+		c.Eprintf("Live mode's run folder is gone; make live-stop, then start.\n")
 		return false
 	}
 	l.st = vmservice.Info(filepath.Join(l.runDir, "flutter-run.jsonl"))
@@ -298,7 +298,7 @@ func (l *liveSide) start(rest []string) int {
 		}
 	}
 	if l.running() {
-		c.Printf("already running (tools/live.sh stop first):\n")
+		c.Printf("already running (make live-stop first):\n")
 		if !l.load() {
 			return 1
 		}
@@ -469,7 +469,7 @@ func (l *liveSide) reload(cmd string) int {
 		return 1
 	}
 	if l.st.Get("mode") == "profile" {
-		c.Eprintf("No hot %s in --profile mode: tools/live.sh stop, then start again.\n", cmd)
+		c.Eprintf("No hot %s in --profile mode: make live-stop, then start again.\n", cmd)
 		return 1
 	}
 	t := c.Us()
@@ -616,7 +616,7 @@ func (l *liveSide) status() int {
 		if v := l.st.Get("error"); v != "" {
 			e = " (" + v + ")"
 		}
-		c.Printf("the container has exited%s; see %s/flutter-run.err; tools/live.sh stop cleans up\n", e, l.runDir)
+		c.Printf("the container has exited%s; see %s/flutter-run.err; make live-stop cleans up\n", e, l.runDir)
 	}
 	l.show()
 	return 0

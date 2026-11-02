@@ -3,7 +3,7 @@
 // (the first visit of every tab after the data changed: what the idle warm-up should make cheap). Each action runs inside
 // `binding.traceAction`; the timelines go to the host driver (test_driver/perf_driver.dart), which writes the summary
 // and the full trace per action and checks the budgets (test_driver/perf_budget.dart).
-// Run: tools/build.sh perf   (that is `flutter drive --profile`; a plain `flutter test` run has no timeline to trace)
+// Run: make perf   (that is `flutter drive --profile`; a plain `flutter test` run has no timeline to trace)
 import 'package:budget_wallet/src/logging.dart';
 import 'package:budget_wallet/src/screens/insights.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
@@ -18,9 +18,9 @@ import 'support/harness.dart';
 const perfPrefix = 'perf_';
 
 void main() {
-  // desktop-test and emulator.sh run every file in this folder: outside `flutter drive --profile` this one has nothing to measure
+  // desktop-test and emulator-test run every file in this folder: outside `flutter drive --profile` this one has nothing to measure
   if (!kProfileMode) {
-    test('perf: only in profile mode (tools/build.sh perf)', () {}, skip: 'profile mode only: run tools/build.sh perf');
+    test('perf: only in profile mode (make perf)', () {}, skip: 'profile mode only: run make perf');
     return;
   }
   final binding = Harness.init();

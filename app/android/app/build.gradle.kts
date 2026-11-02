@@ -1,6 +1,6 @@
 // Release signing uses one fixed key, so an update installs over the existing app and keeps the wallet.
-// The key never goes into git: tools/build.sh and CI pass it in through these environment variables
-// (see tools/make-signing-key.sh). Without them a release build FAILS (check at the end of this file): there is no fallback
+// The key never goes into git: make and CI pass it in through these environment variables
+// (see make signing-key). Without them a release build FAILS (check at the end of this file): there is no fallback
 // to the debug key, because an APK signed with it cannot update the installed app and would force an uninstall, which wipes
 // the wallet. Debug and profile builds are unaffected (Flutter signs them with the debug key).
 val releaseKeystore: File? = System.getenv("BW_KEYSTORE")?.let { File(it) }?.takeIf { it.isFile }
@@ -94,7 +94,7 @@ gradle.taskGraph.whenReady {
             throw GradleException(
                 "Release build refused: the release signing key is not configured (BW_KEYSTORE must point to the keystore file" +
                     (if (missing.isEmpty()) "" else " and ${missing.joinToString(", ")} must be set") +
-                    "). Run tools/make-signing-key.sh once, then build with tools/build.sh apk. " +
+                    "). Run make signing-key once, then build with make apk. " +
                     "A release APK is never signed with the debug key: it could not update the installed app and would wipe the wallet.",
             )
         }

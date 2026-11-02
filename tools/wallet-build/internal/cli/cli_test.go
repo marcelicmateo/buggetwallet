@@ -38,7 +38,6 @@ func mkRepo(t *testing.T) string {
 	write(t, filepath.Join(root, "app/lib/main.dart"), "void main() {}\n")
 	write(t, filepath.Join(root, "tools/a.sh"), "#!/bin/sh\n")
 	write(t, filepath.Join(root, "dev/b.sh"), "#!/bin/sh\n")
-	write(t, filepath.Join(root, ".github/scripts/c.sh"), "#!/bin/sh\n")
 	for _, n := range []string{"a", "layout"} {
 		write(t, filepath.Join(root, "app/integration_test/"+n+"_test.dart"), "")
 	}
@@ -171,9 +170,8 @@ func TestGoldenArgvLint(t *testing.T) {
 	r := native(t, opts{}, "lint")
 	expect(t, r.calls, []string{
 		"$ dart format -o none --set-exit-if-changed " + allDart,
-		"$ shellcheck tools/a.sh dev/b.sh dev/install-lint-tools.sh .github/scripts/c.sh",
+		"$ shellcheck tools/a.sh dev/b.sh dev/install-lint-tools.sh",
 		"$ actionlint",
-		"$ tools/no-poll-hook.sh --self-test",
 		"$ /x/wallet-build hook no-poll --self-test", // the Go port of the hook runs next to the bash one (GO4-B)
 		"$ tools/relay-deploy.sh --self-test",
 		"$ /x/wallet-build relay-native-check",
@@ -481,13 +479,18 @@ func TestGoCheckSteps(t *testing.T) {
 	if r.code != 0 {
 		t.Fatalf("code %d\n%s", r.code, r.out)
 	}
-	for _, want := range []string{"tools/wallet-build$ go vet ./...", "tools/wallet-build$ go test ./...", "$ gofmt -l tools/wallet-build", "$ go version -m dist/bin/wallet-build"} {
+	for _, want := range []string{"tools/wallet-build$ go vet ./...", "$ gofmt -l tools/wallet-build", "$ go version -m dist/bin/wallet-build"} {
 		found := false
 		for _, c := range r.calls {
 			found = found || c == want
 		}
 		if !found {
 			t.Errorf("missing %q in %v", want, r.calls)
+		}
+	}
+	for _, c := range r.calls {
+		if c == "tools/wallet-build$ go test ./..." {
+			t.Errorf("CI must not run the tool's own tests in lint")
 		}
 	}
 	r = runCLI(t, opts{env: []string{"BW_NATIVE=1"}, handle: goHandle(false)}, "lint")
@@ -533,7 +536,7 @@ func TestUsageExitsTwo(t *testing.T) {
 
 func TestUsageTextIsBuildShHeader(t *testing.T) {
 	r := runCLI(t, opts{}, "no-such-command")
-	if !strings.HasPrefix(r.out, "Local builds in a rootless Podman container.") || !strings.Contains(r.out, "tools/build.sh [-q|--quiet] <command> [args…]") {
+	if !strings.HasPrefix(r.out, "Local builds in a rootless Podman container.") || !strings.Contains(r.out, "wallet-build [-q|--quiet] <command> [args…]") {
 		t.Errorf("usage text:\n%s", r.out[:min(len(r.out), 200)])
 	}
 	if len(r.calls) != 0 {

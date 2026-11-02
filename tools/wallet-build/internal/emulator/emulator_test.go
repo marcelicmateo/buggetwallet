@@ -183,7 +183,7 @@ func TestUsageIsTwoForEveryUnknownCommand(t *testing.T) {
 		t.Errorf("shot without a name: %d", rc)
 	}
 	r = newRig(t)
-	if rc := r.host("shot", "x"); rc != 1 || !strings.Contains(r.errb.String(), "No emulator running. Start one with: tools/emulator.sh start") {
+	if rc := r.host("shot", "x"); rc != 1 || !strings.Contains(r.errb.String(), "No emulator running. Start one with: make emulator-start") {
 		t.Errorf("shot, not running: %d %q", rc, r.errb.String())
 	}
 }
@@ -637,7 +637,7 @@ func TestStopAndReset(t *testing.T) {
 	// reset refuses while running
 	r = newRig(t)
 	r.exists["bw-emulator"], r.state.running = true, true
-	if rc := r.host("reset"); rc != 1 || !strings.Contains(r.errb.String(), "Stop the running emulator first: tools/emulator.sh stop") {
+	if rc := r.host("reset"); rc != 1 || !strings.Contains(r.errb.String(), "Stop the running emulator first: make emulator-stop") {
 		t.Errorf("reset running: %d %q", rc, r.errb.String())
 	}
 	r = newRig(t)

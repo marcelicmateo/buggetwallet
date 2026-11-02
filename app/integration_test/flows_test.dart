@@ -1,6 +1,6 @@
 // Tap-through flows on Today and Spending: add expense (validation, impulse rule), change a category once or always,
 // delete an added expense, payday checklist, "Salary landed" banner. Synthetic data, well-known chains only.
-// Run: tools/emulator.sh test flows
+// Run: make emulator-test N=flows
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/screens/today.dart';

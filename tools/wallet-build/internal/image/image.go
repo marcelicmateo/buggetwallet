@@ -58,7 +58,7 @@ func FlutterOf(tag string) string {
 // PassEnv are the variables handed to the container by name (-e NAME): the host's value, when set. BW_NATIVE=1 is fixed.
 // A test that reads BW_* through Platform.environment must be listed here (the env-selftest lint step).
 var PassEnv = []string{"BW_JOBS", "BW_GL_THREADS", "BW_APK_ABIS", "BW_FUZZ_ITERATIONS", "BW_FUZZ_SEED",
-	"BW_STEP_TIMEOUT", "BW_HEADLESS_TIMEOUT", "BW_SMOKE_SECONDS"}
+	"BW_STEP_TIMEOUT", "BW_HEADLESS_TIMEOUT", "BW_SMOKE_SECONDS", "BW_DESKTOP_COMBINED"}
 
 // ForwardEnv are the BW_TIMEOUT_<STEP> variables set on the host (sorted): the step time limits apply inside the container.
 func ForwardEnv(env []string) []string {
@@ -72,7 +72,7 @@ func ForwardEnv(env []string) []string {
 	return out
 }
 
-// RunEnv are the run variables that make the container write into the host's run (tools/timing.sh run_env).
+// RunEnv are the run variables that make the container write into the host's run (timing run_env).
 var RunEnv = []string{"BW_DATA_DIR", "BW_RUN_DIR", "BW_RUN_ID", "BW_RUN", "BW_COMMIT", "BW_CMD", "BW_IMAGE", "BW_COLD", "BW_SOURCE", "BW_WORKTREE"}
 
 // ContainerName is wallet-build-<worktree>-<runid>, with characters podman rejects replaced.

@@ -64,13 +64,13 @@ var SelfTestCases = []Case{
 	{"block", "while ! curl -s localhost:8787; do sleep 2; done"},
 	{"block", `timeout 300 bash -c "until test -f x; do :; done"`},
 	{"block", `timeout 5m sh -c "while :; do :; done"`},
-	{"pass", "timeout 120 tools/build.sh test"},
-	{"pass", "tools/build.sh app app/test/x_test.dart"},
+	{"pass", "timeout 120 wallet-build test"},
+	{"pass", "wallet-build app app/test/x_test.dart"},
 	{"pass", "sleep 1"},
 	{"pass", "grep -rn until docs"},
-	{"pass", "timeout 60s tools/build.sh lint"},
+	{"pass", "timeout 60s wallet-build lint"},
 	{"block", "until grep -q done log; do\n  sleep 5\ndone"},
-	{"pass", `tools/build.sh app --timeout 60s | while read -r l; do echo "$l"; done`},
+	{"pass", `wallet-build app --timeout 60s | while read -r l; do echo "$l"; done`},
 	// more
 	{"block", "while [ ! -f dist/x ]; do sleep 2; done"},
 	{"block", "until [ -s log ]; do sleep 1; done && echo ok"},
@@ -103,7 +103,7 @@ type stdinCase struct {
 
 var stdinCases = []stdinCase{
 	{`{"tool_input":{"command":"while true; do sleep 1; done"}}`, 2},
-	{`{"tool_input":{"command":"timeout 120 tools/build.sh test"}}`, 0},
+	{`{"tool_input":{"command":"timeout 120 wallet-build test"}}`, 0},
 	{`{"tool_input":{"command":"until x; do sleep 1; done"},"tool_name":"Bash"}`, 2},
 	{`{"tool_input":{}}`, 0},
 	{`{}`, 0},

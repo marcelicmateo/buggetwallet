@@ -72,7 +72,7 @@ func (t *Tester) Test(ctx context.Context, args []string) int {
 	}
 	bin := filepath.Join(t.Root, "dist", "relay", "relay-linux-x64")
 	if st, err := os.Stat(bin); err != nil || st.IsDir() || st.Mode()&0o111 == 0 {
-		fmt.Fprintln(t.Err, "relay-native-test: build the binary first: tools/build.sh relay-bin x64")
+		fmt.Fprintln(t.Err, "relay-native-test: build the binary first: make relay-bin ARCH=x64")
 		return 2
 	}
 	if !shaOK(bin) {

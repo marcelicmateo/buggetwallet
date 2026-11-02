@@ -6,9 +6,9 @@ effort: medium
 ---
 
 Resources: the laptop is shared with other agents. While working, run only the targeted check for what you
-changed (`tools/build.sh core|importer|app|lint`, one test file, `tools/emulator.sh test <name>`), batching changes
-between runs. End with your own files (`tools/build.sh core|importer|app <file>…`) and `tools/build.sh lint` — never the
-full `tools/build.sh test`: the lead's stage run covers it.
+changed (`make core|importer|app|lint`, one test file, `make emulator-test N=<name>`), batching changes
+between runs. End with your own files (`make core|importer|app T="<file>…"`) and `make lint` — never the
+full `make test`: the lead's stage run covers it.
 Hang tripwire: a `:one` run over 2 min or a full suite over 5 min is a hung test, not a slow one (hangs ran to the 10-minute per-test default for hours in earlier stages). Stop it (TaskStop), read `dist/logs/tests-<step>-summary.txt` and the last test name, fix or skip that test — never re-run the same command unchanged.
 
 Tests written ahead of an API (Stage H lessons): a run-time probe through `dynamic` or `Function.apply` cannot see an
@@ -18,7 +18,7 @@ the lead. `find.text` never matches a `StatusLabel` (rich text with an icon): us
 prove every `findsNothing` can fail. Never date synthetic rows from the real `DateTime.now()` without a fixed clock: a
 test that passes today can fail on the 1st of the month.
 Never wrap a build in `timeout`, `until` or `while` (a hook rejects it): `run_in_background`, then read the step log once the notification arrives.
-Waiting: never poll with `sleep`, `until` or `while` loops on local work (owner rule). Start long commands with `run_in_background` and wait for the completion notification; to wait for another process use the Monitor tool. Preferred for one test file: `tools/build.sh core|importer|app <test file>…` (no analyze, step `<pkg>:one`); `tools/build.sh shell -c '<cmd>'` runs any command non-interactively in the container.
+Waiting: never poll with `sleep`, `until` or `while` loops on local work (owner rule). Start long commands with `run_in_background` and wait for the completion notification; to wait for another process use the Monitor tool. Preferred for one test file: `make core|importer|app T="<test file>…"` (no analyze, step `<pkg>:one`); `make shell C='<cmd>'` runs any command non-interactively in the container.
 
 Reading (token rule, owner 2026-10-21): most agent tokens go to reading code, so read little and exactly.
 Start from the context pack in your brief and don't re-explore what it covers. Locate with `grep -n`, then read line
@@ -46,7 +46,7 @@ What to write:
 - Synthetic data only: build transactions with `n(...)` from `test/support/synthetic.dart`; made-up amounts,
   generic or well-known-chain merchant names. Never copy anything that looks like real account data.
 
-Only edit files under `test/` folders. Run your file(s) with `tools/build.sh core|importer|app <file>…` and `tools/build.sh lint`.
+Only edit files under `test/` folders. Run your file(s) with `make core|importer|app T="<file>…"` and `make lint`.
 If the feature isn't built yet, failing tests are expected — say which fail and why.
 
 Report back: test files, the cases covered (one line each), and the result line.

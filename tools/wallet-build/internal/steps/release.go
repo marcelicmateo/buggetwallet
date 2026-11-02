@@ -41,7 +41,7 @@ func BuildAPK(s *run.Session) {
 	}
 	_, err := os.Stat(filepath.Join(c.Root, "app", "build", "app"))
 	cold := err != nil
-	// BW_APK_ABIS=arm64: phone-only APK (what CI publishes); default also has x86_64 for tools/emulator.sh install
+	// BW_APK_ABIS=arm64: phone-only APK (what CI publishes); default also has x86_64 for wallet-build emulator install
 	abis := "android-arm64,android-x64"
 	if c.Getenv("BW_APK_ABIS") == "arm64" {
 		abis = "android-arm64"
@@ -180,7 +180,7 @@ func BuildWeb(sc *run.StepCtx) int {
 	root := sc.C.Root
 	mode := "wasm"
 	if _, err := os.Stat(filepath.Join(root, "app/web/sqlite3.wasm")); err != nil {
-		sc.Printf("app/web/sqlite3.wasm missing (tools/build.sh web fetches it on the host)\n")
+		sc.Printf("app/web/sqlite3.wasm missing (wallet-build web fetches it on the host)\n")
 		return 1
 	}
 	logPath := filepath.Join(sc.S.Logs, "web-wasm.log")

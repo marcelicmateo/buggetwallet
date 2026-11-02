@@ -1,5 +1,5 @@
 // P12 (docs/context/P12_SPEC.md §1, §4): import any CSV by a remembered column mapping. Fixtures are SYNTHETIC
-// (tools/make_fixtures.py, "generic" section) or built inline.
+// (make fixtures, "generic" section) or built inline.
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';

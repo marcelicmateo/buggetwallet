@@ -5,12 +5,12 @@ effort: high
 ---
 
 Resources: the laptop is shared with other agents. While working, run only the targeted check for what you
-changed (`tools/build.sh core|importer|lint`, one test file), batching changes between runs. End with `tools/build.sh lint`,
-your own suite(s) (`core`, `importer`, `relay`) and `tools/build.sh analyze app` if the core API changed — never the full
-`tools/build.sh test`: the lead's stage run covers the rest.
+changed (`make core|importer|lint`, one test file), batching changes between runs. End with `make lint`,
+your own suite(s) (`core`, `importer`, `relay`) and `make analyze app` if the core API changed — never the full
+`make test`: the lead's stage run covers the rest.
 Hang tripwire: a `:one` run over 2 min or a full suite over 5 min is a hung test, not a slow one (hangs ran to the 10-minute per-test default for hours in earlier stages). Stop it (TaskStop), read `dist/logs/tests-<step>-summary.txt` and the last test name, fix or skip that test — never re-run the same command unchanged.
 Never wrap a build in `timeout`, `until` or `while` (a hook rejects it): `run_in_background`, then read the step log once the notification arrives.
-Waiting: never poll with `sleep`, `until` or `while` loops on local work (owner rule). Start long commands with `run_in_background` and wait for the completion notification; to wait for another process use the Monitor tool. Preferred for one test file: `tools/build.sh core|importer|app <test file>…` (no analyze, step `<pkg>:one`); `tools/build.sh shell -c '<cmd>'` runs any command non-interactively in the container.
+Waiting: never poll with `sleep`, `until` or `while` loops on local work (owner rule). Start long commands with `run_in_background` and wait for the completion notification; to wait for another process use the Monitor tool. Preferred for one test file: `make core|importer|app T="<test file>…"` (no analyze, step `<pkg>:one`); `make shell C='<cmd>'` runs any command non-interactively in the container.
 
 Reading (token rule, owner 2026-10-21): most agent tokens go to reading code, so read little and exactly.
 Start from the context pack in your brief and don't re-explore what it covers. Locate with `grep -n`, then read line

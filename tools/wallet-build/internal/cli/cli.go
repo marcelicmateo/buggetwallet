@@ -29,7 +29,7 @@ import (
 //go:embed usage.txt
 var usageText string
 
-// UsageText is what a usage error prints (the header of tools/build.sh).
+// UsageText is what a usage error prints (the header of wallet-build).
 func UsageText() string { return usageText }
 
 // Deps are the things the tests replace.
@@ -43,7 +43,7 @@ type Deps struct {
 	Stdin io.Reader
 }
 
-// BuildCommands are the commands tools/build.sh has (the host or container side runs them).
+// BuildCommands are the commands wallet-build has (the host or container side runs them).
 var BuildCommands = []string{"test", "lint", "analyze", "stage", "outdated", "format", "apk", "linux", "relay-bin", "relay-native-test", "web", "web-test",
 	"all", "desktop-test", "desktop-smoke", "perf", "importer", "core", "sync", "relay", "app", "mutate", "shell", "image", "lsp", "mcp", "image-name"}
 
@@ -93,7 +93,7 @@ func Run(args []string, environ []string, out, errw io.Writer, d Deps) int {
 	c := run.New(root, env, out, errw, d.R)
 	// Quiet: nothing on stdout or stderr, ours or any child's (the logs are written by the steps). lsp, mcp and
 	// image-name use stdout as their result.
-	// `live` has no quiet mode (tools/live.sh has none: -q is a usage error there and BW_QUIET is ignored).
+	// `live` has no quiet mode (wallet-build live has none: -q is a usage error there and BW_QUIET is ignored).
 	if quiet && cmd != "lsp" && cmd != "mcp" && cmd != "image-name" && cmd != "live" && cmd != "hook" { // hook: its exit code and stderr line are the result
 		c.SetQuiet()
 	}

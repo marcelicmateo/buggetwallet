@@ -1,9 +1,9 @@
-// Host side of the profile-mode performance test (integration_test/perf_test.dart), run by `tools/build.sh perf`:
+// Host side of the profile-mode performance test (integration_test/perf_test.dart), run by `make perf`:
 //   flutter drive --profile -d linux --driver=test_driver/perf_driver.dart --target=integration_test/perf_test.dart
 // For every `perf_<action>` timeline the test reported it writes, into $BW_PERF_OUT (the run's log folder):
 //   <action>.timeline.json          the full trace (open in DevTools > Performance or ui.perfetto.dev)
 //   <action>.timeline_summary.json  flutter_driver's TimelineSummary
-// plus one line per action in perf-records.jsonl (perf_budget.dart `historyRecord`; tools/build_log.py perf adds them
+// plus one line per action in perf-records.jsonl (perf_budget.dart `historyRecord`; wallet-build adds them
 // to history/perf.jsonl), prints the numbers, checks the budgets and exits with 1 on an overrun.
 // Only frame numbers and counts here; no wallet data reaches the files.
 import 'dart:convert';

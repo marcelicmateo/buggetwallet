@@ -1,4 +1,4 @@
 timeline: 1.2 s, 34 events, 14 frames, 3 over 16 ms (build or raster)
 build   n=14    p50=   5.2 ms  p90=  17.0 ms  max=  31.0 ms
 raster  n=14    p50=   5.0 ms  p90=  10.0 ms  max=  20.0 ms
-(debug build: timings are not representative; tools/live.sh start --profile for real numbers)
+(debug build: timings are not representative; make live-start ARGS=--profile for real numbers)

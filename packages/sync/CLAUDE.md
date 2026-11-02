@@ -19,7 +19,7 @@ put what both need in core instead. Errors here that are safe to log as text imp
 dart:io code ever be needed, it goes in a `*_io.dart` file with a `*_web.dart` twin (core's rule).
 - The sync engine and both transports are shared code (no dart:io): `RelayTransport` uses `package:http` (IOClient on
   the VM, fetch in the browser). The real relay server (`relay/`) is only a dev dependency for the end-to-end test.
-- Compile check (after `dart pub get`): `tools/build.sh shell -c 'cd packages/sync && dart compile js -o /dev/null
+- Compile check (after `dart pub get`): `make shell C='cd packages/sync && dart compile js -o /dev/null
   tool/web_smoke.dart && dart compile wasm -o ../../dist/web_smoke.wasm tool/web_smoke.dart'` (`SyncEngine` over
   `MemoryTransport` or `RelayTransport`, `BlobStore.add`). Run it whenever an import changes.
 
@@ -208,4 +208,4 @@ dart:io code ever be needed, it goes in a `*_io.dart` file with a `*_web.dart` t
   rules, end to end with the real `relay/` server on port 0 incl. a wrong signature and skewed device clocks).
 - `relay_usage_test.dart`, `i3_relay_usage_test.dart` (relay usage), `h12_sync_memory_test.dart`, `h12_sync_relay_test.dart`
   (Stage H spec tests), `web_sync_test.dart` (web-safe files, `LogSafeError`).
-- Run: `tools/build.sh sync` (analyze + tests) or `tools/build.sh sync <test file>`; part of `tools/build.sh test`.
+- Run: `make sync` (analyze + tests) or `make sync T=<test file>`; part of `make test`.

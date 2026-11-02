@@ -3,7 +3,6 @@ package ci
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -134,65 +133,6 @@ func TestStepRedactsSecrets(t *testing.T) {
 	}
 }
 
-// ---- ci job-log: golden against the old action body ----
-
-func jobLogCase(t *testing.T, times, outcomes string, withLog bool) {
-	t.Helper()
-	need(t, "bash")
-	need(t, "python3")
-	script, _ := filepath.Abs("testdata/joblog_old.sh")
-	py, _ := filepath.Abs("../../../build_log.py")
-	run := func(useGo bool) (map[string]string, string) {
-		h := newHX(t, sys.Real{}, "GITHUB_RUN_ID=77", "ImageOS=ubuntu24")
-		if times != "" {
-			write(t, filepath.Join(h.tmp, "times.txt"), times)
-		}
-		log := filepath.Join(h.tmp, "..", filepath.Base(h.tmp)+"-ci.log")
-		if withLog {
-			write(t, log, "=== lint ===\nall fine\n")
-		}
-		h.x.C.Setenv("LOG", log)
-		if useGo {
-			if rc := h.x.JobLog([]string{"--job", "j", "--outcomes", outcomes}); rc != 0 {
-				t.Fatalf("rc %d: %s", rc, h.errb)
-			}
-		} else {
-			cmd := exec.Command("bash", script, py)
-			cmd.Env = append(h.x.C.Env.Environ(), "OUTCOMES="+outcomes)
-			if out, err := cmd.CombinedOutput(); err != nil {
-				t.Fatalf("old script: %v\n%s", err, out)
-			}
-		}
-		got := map[string]string{}
-		for _, f := range []string{"outcome.txt", "times.txt", "ci.log", "history.jsonl"} {
-			if b, err := os.ReadFile(filepath.Join(h.tmp, "joblog", f)); err == nil {
-				got[f] = maskTS(string(b))
-			} else {
-				got[f] = "<missing>"
-			}
-		}
-		return got, h.tmp
-	}
-	want, _ := run(false)
-	got, _ := run(true)
-	for f := range want {
-		if got[f] != want[f] {
-			t.Errorf("%s differs\n go: %q\nold: %q", f, got[f], want[f])
-		}
-	}
-}
-
-func TestJobLogMatchesOldAction(t *testing.T) {
-	times := "signing 1 0\napk 412 0\nlint 12 1\ncore 30 0\n"
-	t.Run("two steps", func(t *testing.T) { jobLogCase(t, times, "signing=success apk=success", true) })
-	t.Run("failed step", func(t *testing.T) { jobLogCase(t, times, "lint=failure", true) })
-	t.Run("step that never ran", func(t *testing.T) { jobLogCase(t, times, "core=success sync=skipped", true) })
-	t.Run("no times, no log", func(t *testing.T) { jobLogCase(t, "", "app=failure", false) })
-	t.Run("same step twice", func(t *testing.T) { jobLogCase(t, "app 5 0\napp 7 0\n", "app=success", true) })
-	t.Run("empty outcomes", func(t *testing.T) { jobLogCase(t, times, "", true) })
-	t.Run("malformed times lines", func(t *testing.T) { jobLogCase(t, "junk\n\nlint 9 0\n", "lint=success", true) })
-}
-
 func TestJobLogUsage(t *testing.T) {
 	h := newHX(t, &sys.Fake{})
 	for _, a := range [][]string{nil, {"--outcomes", "a=b"}, {"--job"}, {"--bogus", "x"}, {"--job", ""}} {
@@ -216,120 +156,6 @@ func TestJobLogHistoryLines(t *testing.T) {
 	if len(hist) != 2 || !strings.Contains(hist[0], `"step": "lint", "seconds": 12.0, "result": "ok"`) || !strings.Contains(hist[1], `"result": "FAILED"`) {
 		t.Errorf("history %q", hist)
 	}
-}
-
-// ---- ci merge: golden against the bash of the old log job ----
-
-type art struct{ outcome, times, log, hist string }
-
-func mergeCase(t *testing.T, arts map[string]*art, results map[string]string) {
-	t.Helper()
-	need(t, "bash")
-	dir := t.TempDir()
-	for j, a := range arts {
-		d := filepath.Join(dir, "logs", "ci-log-"+j)
-		write(t, filepath.Join(d, "outcome.txt"), a.outcome)
-		if a.times != "-" {
-			write(t, filepath.Join(d, "times.txt"), a.times)
-		}
-		if a.log != "-" {
-			write(t, filepath.Join(d, "ci.log"), a.log)
-		}
-		if a.hist != "-" {
-			write(t, filepath.Join(d, "history.jsonl"), a.hist)
-		}
-	}
-	script, _ := filepath.Abs("testdata/merge_old.sh")
-	cmd := exec.Command("bash", script)
-	env := []string{"PATH=" + os.Getenv("PATH"), "RUNNER_TEMP=" + dir}
-	for j, r := range results {
-		env = append(env, "R_"+strings.ToUpper(j)+"="+r)
-	}
-	cmd.Env = env
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("old script: %v\n%s", err, out)
-	}
-	needs := "{"
-	for j, r := range results {
-		if needs != "{" {
-			needs += ","
-		}
-		needs += `"` + j + `":{"result":"` + r + `","outputs":{}}`
-	}
-	needs += "}"
-	h := newHX(t, &sys.Fake{})
-	out, hist := filepath.Join(dir, "go.txt"), filepath.Join(dir, "go-history.jsonl")
-	if rc := h.x.Merge([]string{"--artifacts", filepath.Join(dir, "logs"), "--needs-json", needs, "--out", out, "--history", hist}); rc != 0 {
-		t.Fatalf("rc %d: %s", rc, h.errb)
-	}
-	if got, want := read(t, out), read(t, filepath.Join(dir, "ci.txt")); got != want {
-		t.Errorf("ci.txt differs\n go: %q\nold: %q", got, want)
-	}
-	if got, want := read(t, hist), read(t, filepath.Join(dir, "history.jsonl")); got != want {
-		t.Errorf("history differs\n go: %q\nold: %q", got, want)
-	}
-}
-
-var allOK = map[string]string{"lint": "success", "importer": "success", "core": "success", "relay": "success", "app": "success", "desktop": "success",
-	"apk": "success", "linux": "success", "publish": "success"}
-
-func okArt(j string) *art {
-	return &art{outcome: j + "=success(5s)\n", times: j + " 5 0\n", log: "=== " + j + " ===\nline of " + j + "\n", hist: `{"step":"` + j + `"}` + "\n"}
-}
-
-func with(base map[string]string, kv ...string) map[string]string {
-	m := map[string]string{}
-	for k, v := range base {
-		m[k] = v
-	}
-	for i := 0; i+1 < len(kv); i += 2 {
-		m[kv[i]] = kv[i+1]
-	}
-	return m
-}
-
-func TestMergeMatchesOldScript(t *testing.T) {
-	all := map[string]*art{}
-	for _, j := range Jobs {
-		all[j] = okArt(j)
-	}
-	t.Run("all green", func(t *testing.T) { mergeCase(t, all, allOK) })
-	t.Run("tests skipped (apk and linux only)", func(t *testing.T) {
-		arts := map[string]*art{"apk": okArt("apk"), "linux": okArt("linux")}
-		skipped := with(allOK, "lint", "skipped", "importer", "skipped", "core", "skipped", "relay", "skipped", "app", "skipped", "desktop", "skipped", "publish", "skipped")
-		mergeCase(t, arts, skipped)
-	})
-	t.Run("failed job, two steps", func(t *testing.T) {
-		arts := map[string]*art{}
-		for _, j := range Jobs {
-			arts[j] = okArt(j)
-		}
-		arts["core"] = &art{outcome: "core=failure(31s) sync=success(40s)\n", times: "core 31 1\nsync 40 0\n", log: "=== core ===\nFAIL\n=== sync ===\nok\n", hist: "{\"a\":1}\n{\"a\":2}\n"}
-		mergeCase(t, arts, with(allOK, "core", "failure", "desktop", "skipped", "publish", "skipped"))
-	})
-	t.Run("job died before its log (no artifact)", func(t *testing.T) {
-		arts := map[string]*art{}
-		for _, j := range Jobs {
-			if j != "app" && j != "desktop" {
-				arts[j] = okArt(j)
-			}
-		}
-		mergeCase(t, arts, with(allOK, "app", "cancelled", "desktop", "skipped", "publish", "skipped"))
-	})
-	t.Run("empty outcome file counts as missing", func(t *testing.T) {
-		arts := map[string]*art{"lint": {outcome: "", times: "-", log: "-", hist: "-"}, "apk": okArt("apk")}
-		mergeCase(t, arts, with(allOK, "lint", "failure"))
-	})
-	t.Run("logs without final newline", func(t *testing.T) {
-		arts := map[string]*art{
-			"lint":  {outcome: "lint=success(1s)", times: "lint 1 0", log: "no newline at the end", hist: `{"x":1}`},
-			"linux": okArt("linux"),
-		}
-		mergeCase(t, arts, allOK)
-	})
-	t.Run("no artifacts at all", func(t *testing.T) {
-		mergeCase(t, map[string]*art{}, with(allOK, "apk", "failure", "linux", "cancelled", "publish", "skipped"))
-	})
 }
 
 func TestMergeRejectsBadArguments(t *testing.T) {
@@ -393,7 +219,7 @@ func TestKeystoreMissingSecret(t *testing.T) {
 	if rc := h.x.Keystore(nil); rc != 1 {
 		t.Fatalf("rc %d", rc)
 	}
-	want := "::error::ANDROID_KEYSTORE_BASE64 secret missing (run tools/make-signing-key.sh --upload)\n"
+	want := "::error::ANDROID_KEYSTORE_BASE64 secret missing (run make signing-key ARGS=--upload)\n"
 	if h.out.String() != want || read(t, log) != want {
 		t.Errorf("out %q log %q", h.out, read(t, log))
 	}

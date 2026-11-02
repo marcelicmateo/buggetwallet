@@ -20,10 +20,10 @@ How to search:
    (Read with offset/limit, or `sed -n 120,180p`). Never read a whole file over ~150 lines; never `cat` several files.
 3. Follow each lead one hop: the function to change, its callers, the controller method the screen uses, the
    existing test file and its helpers. Stop when the builder could start editing.
-4. For exact callers and definitions use the Dart analysis server, not grep guesses: `tools/lsp.py refs <path>:<line>:<col>`
-   lists every reference as `path:line`, `tools/lsp.py def <path>:<line>:<col>` the definition. Batch every lookup into one call
+4. For exact callers and definitions use the Dart analysis server, not grep guesses: `make lsp-query ARGS="refs <path>:<line>:<col>"`
+   lists every reference as `path:line`, `make lsp-query ARGS="def <path>:<line>:<col>"` the definition. Batch every lookup into one call
    (each call starts the server in the build container, ~30 s). Grep is for finding the first occurrence and for strings, keys
-   and test names. If `tools/lsp.py` does not exist yet, say so in "Not found / unsure" and fall back to grep.
+   and test names. If `make lsp-query` fails, say so in "Not found / unsure" and fall back to grep.
 
 Return the pack, at most ~200 lines, in this shape:
 

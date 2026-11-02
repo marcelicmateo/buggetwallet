@@ -230,7 +230,7 @@ func (r *Relay) start(cfg config) int {
 func (r *Relay) reset(cfg config) int {
 	c := r.C
 	if c.Getenv("BW_YES") != "1" {
-		if r.IsTTY != nil && r.IsTTY() { // M6: rename with the scripts
+		if r.IsTTY != nil && r.IsTTY() {
 			c.Eprintf("Delete %s (all relay wallets)? [y/N] ", cfg.data)
 		}
 		line, err := bufio.NewReader(r.In).ReadString('\n')

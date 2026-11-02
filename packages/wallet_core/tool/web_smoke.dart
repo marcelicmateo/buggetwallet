@@ -2,7 +2,7 @@
 // anything the barrel exports pulls in dart:io, dart:ffi or the native sqlite3 library. It is never run; the
 // database it would need is the WASM one the web app opens (`package:sqlite3/wasm.dart`).
 //
-//   tools/build.sh shell -c 'cd packages/wallet_core && dart pub get && dart compile js -o /tmp/web_smoke.js tool/web_smoke.dart \
+//   make shell C='cd packages/wallet_core && dart pub get && dart compile js -o /tmp/web_smoke.js tool/web_smoke.dart \
 //     && dart compile wasm -o /tmp/web_smoke.wasm tool/web_smoke.dart'
 import 'dart:convert';
 import 'dart:typed_data';

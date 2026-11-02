@@ -1,4 +1,4 @@
-// Bill readers against the SYNTHETIC fixtures in test/fixtures/bills (tools/make_fixtures.py ... bills) and their edges.
+// Bill readers against the SYNTHETIC fixtures in test/fixtures/bills (make fixtures ... bills) and their edges.
 // pdfText itself (fixtures, edges, fuzz) is in pdf_text_test.dart.
 import 'dart:convert';
 import 'dart:io';

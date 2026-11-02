@@ -38,10 +38,7 @@ jobs:
           cd build/windows/x64/runner/Release && 7z a -tzip ../../../../../../dist/BudgetWallet-windows-x64.zip . > /dev/null
       - uses: actions/upload-artifact@v4
         with: { name: windows, path: dist/* }
-      - if: always()
-        shell: bash
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: .github/scripts/publish-log.sh release-windows build.log
+      - { uses: actions/upload-artifact@v4, if: always(), with: { name: log-windows, path: build.log, if-no-files-found: ignore, retention-days: 1 } }
 
   apple:
     runs-on: macos-latest
@@ -62,9 +59,25 @@ jobs:
           zip -qr ../dist/BudgetWallet-ios-unsigned.ipa Payload
       - uses: actions/upload-artifact@v4
         with: { name: apple, path: dist/* }
-      - if: always()
+      - { uses: actions/upload-artifact@v4, if: always(), with: { name: log-apple, path: build.log, if-no-files-found: ignore, retention-days: 1 } }
+
+  # The Windows and Apple build logs go to ci-logs:release-windows / release-apple (wallet-build runs on Linux only)
+  logs:
+    needs: [windows, apple]
+    if: always()
+    runs-on: ubuntu-latest
+    env: { LOG: "${{ github.workspace }}/../ci.log" }
+    steps:
+      - uses: actions/checkout@v4
+      - { id: setup, uses: ./.github/actions/setup, with: { flutter: false } }
+      - { uses: actions/download-artifact@v4, continue-on-error: true, with: { pattern: "log-*", path: "${{ runner.temp }}/logs" } }
+      - name: Publish logs
         env: { GH_TOKEN: "${{ github.token }}" }
-        run: .github/scripts/publish-log.sh release-apple build.log
+        run: |
+          for p in windows apple; do
+            [ -f "$RUNNER_TEMP/logs/log-$p/build.log" ] && wallet-build ci publish-log "release-$p" "$RUNNER_TEMP/logs/log-$p/build.log"
+          done
+          true
 
   publish:
     needs: [build, windows, apple]

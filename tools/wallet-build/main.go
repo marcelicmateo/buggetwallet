@@ -1,4 +1,4 @@
-// wallet-build is Budget Wallet's build tool: the Go port of tools/build.sh and its helpers.
+// wallet-build is Budget Wallet's build tool: the Go port of wallet-build and its helpers.
 // `wallet-build [-q] <command> [args…]`; the command list is in internal/cli/usage.txt.
 package main
 

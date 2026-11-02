@@ -1,5 +1,5 @@
 // Robustness of importBankFile against damaged, truncated and odd files. Everything here is derived from the
-// SYNTHETIC fixtures (tools/make_fixtures.py) or generated. The contract: a valid batch or an ImportException, never
+// SYNTHETIC fixtures (make fixtures) or generated. The contract: a valid batch or an ImportException, never
 // another exception, never a hang, and no file contents in the logs.
 //
 // Randomized parts use fixed seeds; BW_FUZZ_ITERATIONS / BW_FUZZ_SEED run them longer or with other seeds.

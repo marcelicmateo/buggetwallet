@@ -1,4 +1,4 @@
-// A keyed database on IndexedDB in the browser: sqlite3mc.wasm (fetched by tools/build.sh as web/sqlite3.wasm and
+// A keyed database on IndexedDB in the browser: sqlite3mc.wasm (fetched by make as web/sqlite3.wasm and
 // test/sqlite3.wasm). Synthetic data. In sqlite3mc.wasm a key only works on the wrapped VFS `multipleciphers-<name>` that
 // registerVirtualFileSystem(fs) also creates; opening through the plain name (or as the default VFS) gives
 // "Encryption is not supported by the VFS".

@@ -1,5 +1,5 @@
 // Tap-through: Wishlist (affordability check, cooling off, buy / skip, save for it) and Goals (create, edit, add
-// money, delete, months-to-goal text). Run: tools/emulator.sh test wishlist_goals
+// money, delete, months-to-goal text). Run: make emulator-test N=wishlist_goals
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/screens/save.dart';
 import 'package:budget_wallet/src/screens/wishlist.dart';

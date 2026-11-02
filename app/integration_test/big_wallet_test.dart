@@ -1,7 +1,7 @@
 // Performance with a big SYNTHETIC wallet (~5 years, ~20,000 transactions): seeding, restart, weekly and yearly
 // imports, every tab and scrolling Spending. Measured from the app's own perf log (bw.perf) and frame timings, with
 // generous upper bounds so it fails on real regressions, not noise. Numbers: dist/logs/report-big_wallet.json.
-// Run: tools/emulator.sh test big_wallet
+// Run: make emulator-test N=big_wallet
 import 'dart:convert';
 import 'dart:typed_data';
 

@@ -1,5 +1,5 @@
 // Screenshots of the dashboard kit (RX2), for eyes only: every component with synthetic numbers, light and dark, at 360 and
-// 1280 dp wide (+ 320 dp at text scale 2.0). Desktop only. Run: tools/build.sh desktop-test dash_gallery
+// 1280 dp wide (+ 320 dp at text scale 2.0). Desktop only. Run: make desktop-test N=dash_gallery
 // -> dist/screens/linux/dash_gallery/<mode>-<width>.png
 import 'package:budget_wallet/src/platform.dart';
 import 'package:budget_wallet/src/theme.dart';
@@ -11,7 +11,7 @@ import 'support/dash_gallery.dart';
 
 void main() {
   if (isAndroid) {
-    test('dash gallery: desktop windows only', () {}, skip: 'run with tools/build.sh desktop-test dash_gallery');
+    test('dash gallery: desktop windows only', () {}, skip: 'run with make desktop-test N=dash_gallery');
     return;
   }
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();

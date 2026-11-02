@@ -1,5 +1,5 @@
 # Budget Wallet relay (relay/): one self-contained executable on a small base.
-#   podman build -f dev/Containerfile.relay -t localhost/budget-wallet-relay .   (tools/relay.sh does this)
+#   podman build -f dev/Containerfile.relay -t localhost/budget-wallet-relay .   (make relay-image does this)
 # Build stage: the official `dart` image at the Dart version bundled in the pinned Flutter (app/pubspec.yaml,
 # Flutter 3.47.7 = Dart 3.13.5), so the relay is compiled by the same compiler as the rest, without dragging the
 # multi-GB Flutter/Android dev image into a server build. Bump DART_VERSION together with the Flutter pin.

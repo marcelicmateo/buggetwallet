@@ -72,7 +72,7 @@ func (f *fixture) pidFile() string { return filepath.Join(f.root, "dist", "web-s
 
 func TestServeNeedsTheBuild(t *testing.T) {
 	f := newFixture(t, false)
-	if rc := f.w.Main([]string{"serve"}); rc != 1 || !strings.Contains(f.err.String(), "no dist/web: run tools/build.sh web first") || len(f.spawned) != 0 {
+	if rc := f.w.Main([]string{"serve"}); rc != 1 || !strings.Contains(f.err.String(), "no dist/web: run make web first") || len(f.spawned) != 0 {
 		t.Errorf("rc %d err %q", rc, f.err.String())
 	}
 }

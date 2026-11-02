@@ -1,6 +1,6 @@
-# Android emulator on top of the build image (tools/emulator.sh). Needs /dev/kvm on the host.
+# Android emulator on top of the build image (make emulator-*). Needs /dev/kvm on the host.
 # Only the libraries live here: the emulator, the system image and the AVD (~2 GB) are installed by
-# tools/emulator.sh into the `bw-emulator` Podman volume on first use, so rebuilding the build image never
+# wallet-build emulator into the `bw-emulator` Podman volume on first use, so rebuilding the build image never
 # downloads them again.
 ARG BASE
 FROM ${BASE}

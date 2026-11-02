@@ -1,7 +1,7 @@
-// Desktop support for every integration test (tools/build.sh desktop-test). `flutter test` runs this around each
+// Desktop support for every integration test (make desktop-test). `flutter test` runs this around each
 // file in this folder. On Linux, `binding.takeScreenshot(name)` has no platform side (the integration_test plugin is
 // Android/iOS only), so the screenshot is taken from the render tree instead and saved as $BW_SCREENS_DIR/<name>.png.
-// Does nothing on Android and iOS, and `flutter drive` (tools/emulator.sh) doesn't load this file.
+// Does nothing on Android and iOS, and `flutter drive` (make emulator-test) doesn't load this file.
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -11,6 +11,9 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+
+/// Set per file by the generated combined entry (CI): screenshots go to `$BW_SCREENS_DIR/<this>/`.
+String? screensSubdir;
 
 Future<void> testExecutable(FutureOr<void> Function() testMain) async {
   if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
@@ -23,7 +26,7 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
       final bytes = await _capture(binding);
       final name = (call.arguments as Map<Object?, Object?>)['name']! as String;
       if (dir != null && dir.isNotEmpty) {
-        final f = File('$dir/$name.png');
+        final f = File(screensSubdir == null ? '$dir/$name.png' : '$dir/$screensSubdir/$name.png');
         await f.parent.create(recursive: true);
         await f.writeAsBytes(bytes);
       }

@@ -1,5 +1,5 @@
 // The web page's Content Security Policy (app/web/index.html) is pinned here: changing it is a decision, not an accident.
-// The browser enforcing it is covered by `tools/build.sh web` + `tools/web.sh shot` (see app/CLAUDE.md, Web build).
+// The browser enforcing it is covered by `make web` + `make web-shot` (see app/CLAUDE.md, Web build).
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';

@@ -45,12 +45,12 @@ func (x *CI) Keystore(args []string) int {
 	}
 	b64 := strings.Join(strings.Fields(c.Getenv("ANDROID_KEYSTORE_BASE64")), "")
 	if b64 == "" {
-		x.logError("ANDROID_KEYSTORE_BASE64 secret missing (run tools/make-signing-key.sh --upload)")
+		x.logError("ANDROID_KEYSTORE_BASE64 secret missing (run make signing-key ARGS=--upload)")
 		return 1
 	}
 	raw, err := base64.StdEncoding.DecodeString(b64)
 	if err != nil || len(raw) == 0 {
-		x.logError("ANDROID_KEYSTORE_BASE64 is not valid base64 (run tools/make-signing-key.sh --upload)")
+		x.logError("ANDROID_KEYSTORE_BASE64 is not valid base64 (run make signing-key ARGS=--upload)")
 		return 1
 	}
 	path := filepath.Join(x.tempDir(), "release.jks")
