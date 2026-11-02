@@ -220,7 +220,7 @@ class _GoalPlannerState extends State<GoalPlannerScreen> {
       for (final l in levers)
         if (_levers.contains(l.key)) l
     ];
-    final shown = on.isEmpty ? plan : wc.planWithLevers(g, d, on);
+    final shown = on.isEmpty ? plan : wc.planFor(g, d, applied: on);
     final financed = d.depositPermille < 1000;
     final ready = plan.need > 0 && plan.left == 0;
     final compare = wc.compareChoices();
@@ -277,7 +277,7 @@ class _GoalPlannerState extends State<GoalPlannerScreen> {
                     ring: c.surface,
                     needLabel: 'Needed ${moneyExact(shown.need, cur)}',
                     meetLabel: _monthYear(shown.readyMonth!),
-                    endLabel: _monthYear(monthPlus(monthOf(wc.today()), math.max(24, shown.months! + 6)))),
+                    endLabel: _monthYear(addMonths(monthOf(wc.today()), math.max(24, shown.months! + 6)))),
               ),
             ),
           ),

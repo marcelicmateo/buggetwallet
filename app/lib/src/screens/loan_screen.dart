@@ -40,7 +40,7 @@ class _LoanScreenState extends State<LoanScreen> {
       once = TextEditingController(),
       monthly = TextEditingController(),
       newRate = TextEditingController();
-  LoanCheckResult? checkResult;
+  LoanCheckView? checkResult;
   int? checkedBalance;
   String? checkError;
 
@@ -142,9 +142,8 @@ class _LoanScreenState extends State<LoanScreen> {
 
   Widget _chart(BuildContext context, LoanView v) {
     final c = context.c, cur = wc.currency;
-    final years = wc.loanYears(v.schedule);
-    final first = v.schedule.first;
-    final start = first.balance + first.principal;
+    final years = loanYears(v.schedule);
+    final start = v.schedule.first.opening;
     return Panel(key: const ValueKey('loanChartPanel'), children: [
       const Text('Each year', style: BwType.heading),
       Wrap(spacing: 14, runSpacing: 4, children: [
@@ -173,9 +172,9 @@ class _LoanScreenState extends State<LoanScreen> {
         children: [
           Rows(children: [
             for (final y in years)
-              LedgerRow('${y.year}', moneyExact(y.principal + y.interest, cur),
-                  sub:
-                      'Principal ${moneyExact(y.principal, cur)} · interest ${moneyExact(y.interest, cur)} · left ${moneyExact(y.endBalance, cur)}'),
+              LedgerRow('${y.year}', 'Left ${moneyExact(y.endBalance, cur)}',
+                  sub: 'Principal ${moneyExact(y.principal, cur)} · interest ${moneyExact(y.interest, cur)}'
+                      '${y.adjust == 0 ? '' : ' · balance checks ${moneyExactSigned(y.adjust, cur)}'}'),
           ]),
         ],
       ),
@@ -184,7 +183,7 @@ class _LoanScreenState extends State<LoanScreen> {
 
   Widget _payments(BuildContext context, LoanView v) {
     final cur = wc.currency, l = v.loan, c = context.c;
-    final known = (l.payeeKey ?? '').isNotEmpty || (l.reference ?? '').length >= loanReferenceMin;
+    final known = (l.payeeKey ?? '').isNotEmpty || loanReferenceUsable(l.reference);
     final asks = wc.loanAsks(l.id);
     final recent = v.payments.reversed.take(12).toList();
     return Panel(key: const ValueKey('loanPayments'), children: [
@@ -314,7 +313,7 @@ class _LoanScreenState extends State<LoanScreen> {
           const SizedBox(width: 6),
           Expanded(
               child: Text(
-                  'Off by ${moneyExact(r.off.abs(), cur)} (${r.off > 0 ? 'more' : 'less'} than the schedule: ${moneyExact(r.expected, cur)})',
+                  'Off by ${moneyExact(r.diff!.abs(), cur)} (${r.diff! > 0 ? 'more' : 'less'} than the schedule: ${moneyExact(r.expected!, cur)})',
                   key: const ValueKey('loanCheckOff'),
                   style: TextStyle(color: c.warnInk, fontWeight: FontWeight.w600))),
         ]),
@@ -455,6 +454,7 @@ class _YearsPainter extends CustomPainter {
     const top = 6.0, axis = 16.0;
     final bottom = size.height - axis, h = bottom - top, n = years.length;
     final slot = size.width / n, barW = math.max(2.0, slot - 3);
+    // The bar scale (geometry only): the tallest stack of principal and interest.
     final tallest = years.map((y) => y.principal + y.interest).reduce(math.max);
     for (var i = 0; i < n; i++) {
       final y = years[i], x = i * slot + (slot - barW) / 2;

@@ -140,7 +140,7 @@ void main() {
       expect(g.price, 30000000);
       // `target` is not written: the tile reads goalPlan's need (20 % + 6 % of 300,000.00)
       expect(g.target, 0);
-      expect(wc.goalTargetOf(g), 7800000);
+      expect(goalTarget(g), 7800000);
       expect(_in('ledgerLeft', moneyExact(6800000, 'EUR')), findsOneWidget);
     });
 
@@ -249,7 +249,7 @@ void main() {
         expect(result, 'planner:${g.id}');
         expect([g.price, g.depositPermille, g.costsPermille, g.loanMonths], [1500000, 200, property ? 60 : 0, property ? 360 : 60]);
         expect(g.target, 0);
-        expect(wc.goalTargetOf(g), wc.planFor(g, GoalDraft.of(g)).need);
+        expect(goalTarget(g), wc.planFor(g, GoalDraft.of(g)).need);
       }
     });
 
@@ -541,6 +541,36 @@ void main() {
       expect(wc.loanAsks(b).where((x) => x.payment.txId == ask2.payment.txId), isEmpty);
       expect(wc.loanView(a)!.payments, isEmpty);
       expect(wc.loanView(b)!.payments, isEmpty);
+    });
+  });
+
+  group('loan ended and findings', () {
+    _test('a loan that ends within 6 months is a finding', (t) async {
+      final wc = _wallet();
+      _loan(wc, '2026-03-15'); // last payment Feb 2027
+      expect(wc.foundList().map((f) => f.kind), contains(FindingKind.loanEnding));
+    });
+
+    _test('a paid-off loan offers its freed payment to a goal; Undo puts it back', (t) async {
+      final wc = _wallet();
+      final loan = _loan(wc, '2026-08-15');
+      final goal = wc.repo.saveGoal(name: 'Reserve', target: 100000, saved: 0, monthly: 10000);
+      wc.reload();
+      expect(wc.closeLoanNow(loan), isNull);
+      final e = wc.loanEnded().single;
+      expect(e.loanId, loan);
+      await pumpApp(t, Scaffold(body: SingleChildScrollView(child: PaydayPlan(wc: wc))), size: _big);
+      expect(_key('planLoanEnded'), findsOneWidget);
+      expect(find.textContaining('has ended'), findsOneWidget);
+      await t.tap(_key('loanEndedGoal:$loan:$goal'));
+      await _settle(t);
+      expect(wc.goalOf(goal)!.monthly, 10000 + e.payment);
+      expect(wc.loanEnded(), isEmpty);
+      expect(_key('planLoanEnded'), findsNothing);
+      await t.tap(_key('toastUndo'));
+      await _settle(t);
+      expect(wc.goalOf(goal)!.monthly, 10000);
+      expect(wc.loanEnded(), hasLength(1));
     });
   });
 

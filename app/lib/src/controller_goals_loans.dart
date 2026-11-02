@@ -71,28 +71,6 @@ class LoanView {
   const LoanView(this.loan, this.rates, this.checks, this.schedule, this.payments, this.state);
 }
 
-/// One year of a loan's schedule for the chart: what was paid as [principal] and [interest], and the balance at its end.
-class LoanYear {
-  final int year, principal, interest, endBalance;
-  const LoanYear(this.year, this.principal, this.interest, this.endBalance);
-}
-
-/// A balance the lender showed against the schedule: [expected] is the schedule's balance on that date, [off] = shown − expected.
-class LoanCheckResult {
-  final int expected, off;
-  const LoanCheckResult(this.expected, this.off);
-  bool get matches => off == 0;
-}
-
-/// `YYYY-MM` of [ym] plus [n] months (core's `addMonths` is not exported).
-String monthPlus(String ym, int n) {
-  final k = int.parse(ym.substring(0, 4)) * 12 + int.parse(ym.substring(5, 7)) - 1 + n;
-  return '${k ~/ 12}-${(k % 12 + 1).toString().padLeft(2, '0')}';
-}
-
-/// The shortest loan reference core matches by (`loanReferenceMinLength`, not exported).
-const loanReferenceMin = 4;
-
 extension GoalsLoans on WalletController {
   Goal? goalOf(String id) => goals.where((g) => g.id == id).firstOrNull;
 
@@ -113,12 +91,9 @@ extension GoalsLoans on WalletController {
   /// What the compared line costs now (null: none picked, or it is gone).
   int? compareCents(String? id) => id == null ? null : compareChoices().where((c) => c.$1 == id).firstOrNull?.$3;
 
-  /// What goal [g] needs saved: `goalPlan`'s need for a goal with a price, else its own target.
-  int goalTargetOf(Goal g) =>
-      g.price == null ? g.target : goalPlan(g, savedCents: g.saved, monthlyCents: 0, toSpendPerPeriodCents: 0, today: today()).need;
-
-  /// The planner numbers of [g] with the draft [d] (core's `goalPlan`).
-  GoalPlan planFor(Goal g, GoalDraft d) => goalPlan(d.on(g),
+  /// The planner numbers of [g] with the draft [d] and the "Get there sooner" levers switched on (core's `goalPlan`).
+  GoalPlan planFor(Goal g, GoalDraft d, {List<GoalLever> applied = const []}) => goalPlan(d.on(g),
+      applied: applied,
       savedCents: g.saved,
       monthlyCents: d.monthly,
       compareCents: compareCents(d.compareId),
@@ -135,12 +110,6 @@ extension GoalsLoans on WalletController {
       ? categoryTable.label(l.key)
       : recurringBills().where((b) => b.id == l.key).firstOrNull?.label ?? 'Side income';
 
-  /// The plan with the chosen [levers]' cuts added to the monthly amount: months and ready month "if you did these".
-  GoalPlan planWithLevers(Goal g, GoalDraft d, Iterable<GoalLever> levers) {
-    final e = d.copy()..monthly = d.monthly + levers.fold<int>(0, (a, l) => a + l.cut);
-    return planFor(g, e);
-  }
-
   /// The goal is ready: it has a price, nothing is left to save and it is not bought yet.
   bool goalReady(Goal g) {
     if (g.price == null || g.boughtAt != null) return false;
@@ -148,7 +117,7 @@ extension GoalsLoans on WalletController {
     return p.need > 0 && p.left == 0;
   }
 
-  /// Writes the planner inputs of [id] (`target` is not written: a goal with a price reads `goalPlan`'s need, see [goalTargetOf]). Returns
+  /// Writes the planner inputs of [id] (`target` is not written: a goal with a price reads `goalPlan`'s need, see `goalTarget`). Returns
   /// core's refusal text, or null when written.
   String? saveGoalDraft(String id, GoalDraft d) {
     final g = goalOf(id);
@@ -180,16 +149,16 @@ extension GoalsLoans on WalletController {
           price: price, monthly: 0, depositPermille: financed ? 200 : 1000, costsPermille: property ? 60 : 0, months: property ? 360 : 60);
       final id = repo.saveGoal(
           name: name.trim().isEmpty ? 'Goal' : name.trim(),
-          target: 0, // a goal with a price reads `goalPlan`'s need
+          target: 0, // a goal with a price reads `goalTarget`
           saved: 0,
           monthly: 0,
-          sort: goals.length + 1);
-      repo.patch(GoalCols.entity, id, {
-        GoalCols.price: price,
-        GoalCols.depositPermille: draft.depositPermille,
-        GoalCols.costsPermille: draft.costsPermille,
-        GoalCols.loanMonths: draft.months,
-      });
+          sort: goals.length + 1,
+          purchase: {
+            GoalCols.price: price,
+            GoalCols.depositPermille: draft.depositPermille,
+            GoalCols.costsPermille: draft.costsPermille,
+            GoalCols.loanMonths: draft.months,
+          });
       logEvent(_log, Level.INFO, 'goal.addBig', {'financed': financed, 'property': property});
       _changed();
       return id;
@@ -283,32 +252,43 @@ extension GoalsLoans on WalletController {
     return null;
   }
 
+  /// "Your `<name>` loan of X a month has ended. Move it to savings or a goal?" (core's `loanEndedProposals`).
+  List<LoanEnded> loanEnded() => _cached(
+      const MemoKey('loanEnded'),
+      () => loanEndedProposals(
+          [for (final l in repo.loans()) (l, loanSchedule(l, repo.loanRates(l.id), repo.loanChecks(l.id)))], effectiveSettings, today()));
+
+  /// Puts the freed [e] payment into goal [goalId]'s monthly amount (null: no goal, spending money keeps it) and hides the card. Undo:
+  /// [undoLoanEnded]. Returns core's refusal text or null.
+  String? answerLoanEnded(LoanEnded e, {String? goalId}) {
+    try {
+      if (goalId != null) {
+        final g = goalOf(goalId);
+        if (g == null) return 'No such goal.';
+        repo.patch(GoalCols.entity, goalId, {GoalCols.monthly: g.monthly + e.payment});
+      }
+      repo.dismissFinding(e.id);
+    } on ArgumentError catch (x) {
+      return '${x.message}';
+    }
+    logEvent(_log, Level.INFO, 'loan.endedAnswer', {'goal': goalId != null});
+    _changed();
+    return null;
+  }
+
+  void undoLoanEnded(LoanEnded e, {String? goalId}) {
+    final g = goalId == null ? null : goalOf(goalId);
+    if (g != null) repo.patch(GoalCols.entity, goalId!, {GoalCols.monthly: g.monthly - e.payment});
+    repo.undismissFinding(e.id);
+    _changed();
+  }
+
   /// The loan a goal became (null: none, or it was deleted).
   Loan? loanOfGoal(Goal g) => g.loanId == null ? null : loanOf(g.loanId!);
 
-  /// The schedule grouped by calendar year, for the chart.
-  List<LoanYear> loanYears(List<LoanMonth> schedule) {
-    final out = <LoanYear>[];
-    for (final m in schedule) {
-      final y = int.parse(m.due.substring(0, 4));
-      if (out.isEmpty || out.last.year != y) {
-        out.add(LoanYear(y, m.principal, m.interest, m.balance));
-      } else {
-        final p = out.removeLast();
-        out.add(LoanYear(y, p.principal + m.principal, p.interest + m.interest, m.balance));
-      }
-    }
-    return out;
-  }
-
   /// The lender's balance [shown] on [date] against the schedule (nothing is written).
-  LoanCheckResult? checkLoanBalance(LoanView v, int shown, String date) {
-    if (v.schedule.isEmpty) return null;
-    final before = v.schedule.where((m) => m.due.compareTo(date) <= 0).lastOrNull;
-    final first = v.schedule.first;
-    final expected = before?.balance ?? first.balance + first.principal;
-    return LoanCheckResult(expected, shown - expected);
-  }
+  LoanCheckView checkLoanBalance(LoanView v, int shown, String date) =>
+      loanCheckView(v.loan, v.rates, v.checks, date: date, shownBalance: shown);
 
   /// The balance the lender showed, confirmed by the owner: the schedule goes on from it. Returns core's refusal text, or null.
   String? addLoanCheck(String loanId, int balance) {

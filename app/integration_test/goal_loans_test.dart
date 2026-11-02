@@ -86,7 +86,7 @@ void main() {
     t.view.physicalSize = const Size(390, 2200);
     t.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
     t.platformDispatcher.textScaleFactorTestValue = 1;
-    wc.repo.saveGoal(id: id, name: 'Synthetic Boat', target: 0, saved: wc.goalTargetOf(wc.goalOf(id)!), monthly: 65000);
+    wc.repo.saveGoal(id: id, name: 'Synthetic Boat', target: 0, saved: goalTarget(wc.goalOf(id)!), monthly: 65000);
     wc.reload();
     unawaited(openGoalPlanner(ctx(), wc, id));
     await t.pumpAndSettle();

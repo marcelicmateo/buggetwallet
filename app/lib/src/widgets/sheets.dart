@@ -793,7 +793,7 @@ class GoalSheet extends StatefulWidget {
 class _GoalSheetState extends State<GoalSheet> {
   late final g = widget.goal;
   late final name = TextEditingController(text: g?.name ?? widget.name ?? '');
-  late final target = TextEditingController(text: centsToFieldText(g?.target ?? widget.target ?? 0, blankZero: true));
+  late final target = TextEditingController(text: centsToFieldText(g == null ? widget.target ?? 0 : goalTarget(g!), blankZero: true));
   late final monthly = TextEditingController(text: centsToFieldText(g?.monthly ?? 5000, blankZero: true));
   late final saved = TextEditingController(text: centsToFieldText(g?.saved ?? 0, blankZero: true));
   final add = TextEditingController();
@@ -834,7 +834,7 @@ class _GoalSheetState extends State<GoalSheet> {
 
   void _save() {
     // A new goal needs a target; an old goal that has none may keep it empty.
-    final keepsNone = g != null && g!.target == 0;
+    final keepsNone = g != null && goalTarget(g!) == 0;
     final t = keepsNone && target.text.trim().isEmpty ? 0 : parseMoney(target.text);
     final targetOk = t != null && (t > 0 || keepsNone);
     final m = _amount(monthly), sv = _amount(saved), ad = _amount(add), pa = _amount(periodAmt);

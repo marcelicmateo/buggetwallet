@@ -9,6 +9,7 @@ import '../widgets/charts.dart' show ForecastStepChart;
 import '../widgets/common.dart';
 import '../widgets/dash.dart';
 import '../widgets/sheets.dart';
+import 'loan_ended.dart';
 import 'loan_screen.dart';
 import 'plan_suggestions.dart';
 
@@ -342,6 +343,7 @@ class _PaydayPlanState extends State<PaydayPlan> {
             showSheet<void>(context, PlanSuggestionsSheet(wc: wc));
           },
         ),
+      if (wc.loanEnded().isNotEmpty) DashItem(span: 2, child: LoanEndedTile(wc: wc)),
       DashItem(
         span: 2,
         child: Tile(

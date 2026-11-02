@@ -53,7 +53,7 @@ class GoalsScreen extends StatelessWidget {
     double share(int saved, int target) => target > 0 ? (saved / target).clamp(0.0, 1.0) : 0.0;
 
     Widget goal(Goal g) {
-      final target = wc.goalTargetOf(g);
+      final target = goalTarget(g);
       final f = share(g.saved, target);
       final reached = target > 0 && g.saved >= target;
       return RingTile(

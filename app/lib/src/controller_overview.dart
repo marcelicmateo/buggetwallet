@@ -68,7 +68,10 @@ extension OverviewData on WalletController {
   List<Finding> foundList() => _cached(
         const MemoKey('findings'),
         () => timed('findings', () {
-          final l = findings(txs, settings, categoryTable, today(), reviewDates: repo.reviewDates(), bills: recurringBills());
+          final l = findings(txs, settings, categoryTable, today(), reviewDates: repo.reviewDates(), bills: recurringBills(), loans: [
+            for (final l in repo.loans())
+              if (l.open) (l, loanSchedule(l, repo.loanRates(l.id), repo.loanChecks(l.id)))
+          ]);
           logEvent(_ovLog, Level.FINE, 'findings.shown', {'n': l.length});
           return l.take(maxFindingsShown).toList();
         }, warnMs: 16),
