@@ -11,6 +11,7 @@ import '../layout.dart';
 import '../logging.dart';
 import '../platform.dart';
 import '../screens/bill_sheet.dart';
+import '../screens/goal_bought_sheet.dart';
 import '../screens/loan_screen.dart';
 import '../screens/owed.dart';
 import '../screens/rules_panel.dart';
@@ -150,6 +151,10 @@ void txSheetToast(BuildContext context, WalletController wc, String? result) {
 void goalSheetToast(BuildContext context, WalletController wc, String? result) {
   final id = wc.lastDeletedGoal;
   if (result == 'deleted' && id != null) toast(context, 'Goal deleted', actionLabel: 'Undo', onAction: () => wc.undeleteGoal(id));
+  if (result != null && result.startsWith('bought:')) {
+    final goal = result.substring(7);
+    toast(context, '${wc.goalOf(goal)?.name ?? 'Goal'} is marked as bought', actionLabel: 'Undo', onAction: () => wc.undoBuyGoal(goal));
+  }
 }
 
 /// The X at the top right of a phone sheet.
@@ -969,6 +974,17 @@ class _GoalSheetState extends State<GoalSheet> {
               child: OutlinedButton(key: const ValueKey('takeOutConfirm'), onPressed: _takeOut, child: const Text('Take it out'))),
         ],
       ],
+      if (g != null && g!.boughtAt == null)
+        Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton.icon(
+                key: const ValueKey('goalIBought'),
+                icon: const Icon(Icons.shopping_bag_outlined),
+                label: const Text('I bought it'),
+                onPressed: () async {
+                  final r = await showSheet<String>(context, BoughtSheet(wc: widget.wc, goal: g!, draft: GoalDraft.of(g!)));
+                  if (r == 'bought' && context.mounted) Navigator.pop(context, 'bought:${g!.id}');
+                })),
       const SizedBox(height: 8),
       Muted(hint()),
       const SizedBox(height: 12),

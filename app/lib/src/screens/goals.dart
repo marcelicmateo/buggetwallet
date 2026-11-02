@@ -30,9 +30,16 @@ class GoalsScreen extends StatelessWidget {
     final cur = wc.currency;
     final p = wc.period();
     final extraAbove = p.aboveSalary;
-    final tot = goalTotals(wc.goals);
+    final sums = goalTotals(wc.goals);
+    final tot = GoalTotals(saved: sums.saved, target: wc.goalTargetTotal, count: sums.count);
 
     String eta(Goal g) {
+      if (g.price != null) {
+        // A goal with a price: the planner's months (core's `goalPlan`).
+        final plan = wc.planFor(g, GoalDraft.of(g));
+        if (plan.months == null) return 'Set a monthly amount';
+        return plan.months == 0 ? 'Reached' : 'by ${monthLong(plan.readyMonth!)}';
+      }
       if (g.target <= 0) return 'No target';
       final n = monthsToGoal(g);
       if (n == null) return 'Set a monthly amount';
@@ -46,8 +53,9 @@ class GoalsScreen extends StatelessWidget {
     double share(int saved, int target) => target > 0 ? (saved / target).clamp(0.0, 1.0) : 0.0;
 
     Widget goal(Goal g) {
-      final f = share(g.saved, g.target);
-      final reached = g.target > 0 && g.saved >= g.target;
+      final target = wc.goalTargetOf(g);
+      final f = share(g.saved, target);
+      final reached = target > 0 && g.saved >= target;
       return RingTile(
         key: ValueKey('goal:${g.id}'),
         label: g.name,
@@ -57,7 +65,7 @@ class GoalsScreen extends StatelessWidget {
         color: c.s3,
         compact: true,
         // A reached goal says so once, in the chip.
-        sub: g.target > 0 ? '${goalPercent(g.saved, g.target)}% of ${moneyExact(g.target, cur)}${reached ? '' : '\n${eta(g)}'}' : eta(g),
+        sub: target > 0 ? '${goalPercent(g.saved, target)}% of ${moneyExact(target, cur)}${reached ? '' : '\n${eta(g)}'}' : eta(g),
         chip: g.saved < 0
             ? const StateChip.over(text: 'Below zero')
             : g.boughtAt != null

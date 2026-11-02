@@ -93,28 +93,35 @@ class _BoughtSheetState extends State<BoughtSheet> {
           else
             Rows(children: [
               for (final t in rows)
-                InkWell(
-                  key: ValueKey('pick:${t.id}'),
-                  onTap: () => setState(() => picked.contains(t.id) ? picked.remove(t.id) : picked.add(t.id)),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: rowMin),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      child: Row(children: [
-                        Icon(picked.contains(t.id) ? Icons.check_box : Icons.check_box_outline_blank,
-                            color: picked.contains(t.id) ? c.accent : c.muted),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: SplitRow(
-                            start: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              Text(merchantName(t),
-                                  maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
-                              Text(shortDateOrRaw(t.date), style: TextStyle(fontSize: BwType.metaSize, color: c.muted)),
-                            ]),
-                            end: Text(moneyExact(-t.amount, cur), textAlign: TextAlign.end, style: numStyle),
+                Semantics(
+                  checked: picked.contains(t.id),
+                  child: InkWell(
+                    key: ValueKey('pick:${t.id}'),
+                    onTap: () => setState(() => picked.contains(t.id) ? picked.remove(t.id) : picked.add(t.id)),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: rowMin),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Row(children: [
+                          Icon(picked.contains(t.id) ? Icons.check_box : Icons.check_box_outline_blank,
+                              color: picked.contains(t.id) ? c.accent : c.muted),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: LayoutBuilder(builder: (context, box) {
+                              final name = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                Text(merchantName(t),
+                                    maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
+                                Text(shortDateOrRaw(t.date), style: TextStyle(fontSize: BwType.metaSize, color: c.muted)),
+                              ]);
+                              final amount = Text(moneyExact(-t.amount, cur), textAlign: TextAlign.end, style: numStyle);
+                              // Too narrow for both side by side at this text size: the amount goes under the name.
+                              return box.maxWidth / MediaQuery.textScalerOf(context).scale(1.0) < 260
+                                  ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [name, amount])
+                                  : SplitRow(start: name, end: amount);
+                            }),
                           ),
-                        ),
-                      ]),
+                        ]),
+                      ),
                     ),
                   ),
                 ),
@@ -134,6 +141,8 @@ class _BoughtSheetState extends State<BoughtSheet> {
             ],
           ],
           if (error != null) StatusLabel(key: const ValueKey('boughtError'), good: false, text: error!),
+          if (financed && withLoan && loanState.unsure.isNotEmpty)
+            const Muted('Check the marked values: they come from your plan.', key: ValueKey('boughtCheckMarked')),
           Wrap(spacing: 8, runSpacing: 8, children: [
             FilledButton(key: const ValueKey('boughtConfirm'), onPressed: _confirm, child: const Text('Confirm')),
             OutlinedButton(key: const ValueKey('boughtCancel'), onPressed: () => Navigator.pop(context), child: const Text('Cancel')),

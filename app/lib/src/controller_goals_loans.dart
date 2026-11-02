@@ -29,6 +29,9 @@ class GoalDraft {
       months: g.loanMonths ?? 60,
       compareId: g.compareLineId);
 
+  /// What the draft holds, to tell whether it differs from what was written.
+  String get sig => '$price|$monthly|$depositPermille|$costsPermille|$rateBp|$months|$compareId';
+
   GoalDraft copy() => GoalDraft(
       price: price,
       monthly: monthly,
@@ -110,6 +113,10 @@ extension GoalsLoans on WalletController {
   /// What the compared line costs now (null: none picked, or it is gone).
   int? compareCents(String? id) => id == null ? null : compareChoices().where((c) => c.$1 == id).firstOrNull?.$3;
 
+  /// What goal [g] needs saved: `goalPlan`'s need for a goal with a price, else its own target.
+  int goalTargetOf(Goal g) =>
+      g.price == null ? g.target : goalPlan(g, savedCents: g.saved, monthlyCents: 0, toSpendPerPeriodCents: 0, today: today()).need;
+
   /// The planner numbers of [g] with the draft [d] (core's `goalPlan`).
   GoalPlan planFor(Goal g, GoalDraft d) => goalPlan(d.on(g),
       savedCents: g.saved,
@@ -141,8 +148,8 @@ extension GoalsLoans on WalletController {
     return p.need > 0 && p.left == 0;
   }
 
-  /// Writes the planner inputs of [id] (and `target` = what is needed, so the Save tab's ring and the period split agree). Returns core's
-  /// refusal text, or null when written.
+  /// Writes the planner inputs of [id] (`target` is not written: a goal with a price reads `goalPlan`'s need, see [goalTargetOf]). Returns
+  /// core's refusal text, or null when written.
   String? saveGoalDraft(String id, GoalDraft d) {
     final g = goalOf(id);
     if (g == null) return 'No such goal.';
@@ -155,7 +162,6 @@ extension GoalsLoans on WalletController {
         GoalCols.loanMonths: d.months,
         GoalCols.compareLineId: d.compareId,
         GoalCols.monthly: d.monthly,
-        GoalCols.target: planFor(g, d).need,
       });
     } on ArgumentError catch (e) {
       return '${e.message}';
@@ -174,9 +180,7 @@ extension GoalsLoans on WalletController {
           price: price, monthly: 0, depositPermille: financed ? 200 : 1000, costsPermille: property ? 60 : 0, months: property ? 360 : 60);
       final id = repo.saveGoal(
           name: name.trim().isEmpty ? 'Goal' : name.trim(),
-          target: planFor(
-                  Goal(id: '', name: name, price: price, depositPermille: draft.depositPermille, costsPermille: draft.costsPermille), draft)
-              .need,
+          target: 0, // a goal with a price reads `goalPlan`'s need
           saved: 0,
           monthly: 0,
           sort: goals.length + 1);
@@ -223,8 +227,10 @@ extension GoalsLoans on WalletController {
 
   Loan? loanOf(String id) => repo.loans().where((l) => l.id == id).firstOrNull;
 
-  /// [id]'s schedule, matched payments and state (null: no such loan). Not cached: the screen is small and reads it once per build.
-  LoanView? loanView(String id) {
+  /// [id]'s schedule, matched payments and state (null: no such loan), kept per data version.
+  LoanView? loanView(String id) => _cached(MemoKey('loanView', id), () => _loanView(id));
+
+  LoanView? _loanView(String id) {
     final l = loanOf(id);
     if (l == null) return null;
     final rates = repo.loanRates(id), checks = repo.loanChecks(id);
@@ -234,10 +240,10 @@ extension GoalsLoans on WalletController {
   }
 
   /// `YYYY-MM` of the loan's last scheduled payment; null while its amount, length or first payment date is unknown.
-  String? loanEndMonth(Loan l) {
-    final s = loanSchedule(l, repo.loanRates(l.id), repo.loanChecks(l.id));
-    return s.isEmpty ? null : monthOf(s.last.due);
-  }
+  String? loanEndMonth(Loan l) => _cached(MemoKey('loanEnd', l.id), () {
+        final s = loanSchedule(l, repo.loanRates(l.id), repo.loanChecks(l.id));
+        return s.isEmpty ? null : monthOf(s.last.due);
+      });
 
   /// The loan whose matched payments include payment [txId]; null when none.
   Loan? loanOfPayment(String txId) {

@@ -13,6 +13,7 @@ import '../layout.dart';
 import '../logging.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/ledger_row.dart';
 import '../widgets/param_slider.dart';
 import '../widgets/sheets.dart';
 import 'goal_bought_sheet.dart';
@@ -56,9 +57,35 @@ class _GoalPlannerState extends State<GoalPlannerScreen> {
   bool _notYet = false;
   String? _error;
 
+  /// The slider ends: fixed while a thumb moves (they grow only after a value is let go or typed beyond them), so dragging never runs away.
+  late double _priceMax, _monthlyMax;
+  static double _maxFor(int v, int floor) => math.max(v * 2, floor).toDouble();
+
+  /// What was last written (or read); the planner writes a draft that differs when it closes (keyboard and screen-reader changes).
+  late String _committed;
+
+  @override
+  void initState() {
+    super.initState();
+    _priceMax = _maxFor(d.price, 1000000);
+    _monthlyMax = _maxFor(d.monthly, 300000);
+    _committed = d.sig; // read now: a late initialiser would run only when first used, after the draft moved
+  }
+
   void _commit() {
+    if (d.price > _priceMax * 0.9) _priceMax = _maxFor(d.price, 1000000);
+    if (d.monthly > _monthlyMax * 0.9) _monthlyMax = _maxFor(d.monthly, 300000);
     final err = wc.saveGoalDraft(widget.goalId, d);
-    if (err != null) setState(() => _error = err);
+    if (err != null) return setState(() => _error = err);
+    _committed = d.sig;
+  }
+
+  void _commitOnClose() {
+    final g = wc.goalOf(widget.goalId);
+    if (g != null && g.boughtAt == null && d.sig != _committed) {
+      wc.saveGoalDraft(widget.goalId, d);
+      _committed = d.sig;
+    }
   }
 
   void _set(VoidCallback f, {bool commit = false}) {
@@ -127,28 +154,32 @@ class _GoalPlannerState extends State<GoalPlannerScreen> {
         builder: (context, _) {
           final g = wc.goalOf(widget.goalId);
           if (g == null) return const Scaffold(body: SizedBox.shrink());
-          return Scaffold(
-            appBar: DialogAppBar(title: g.name, actions: [
-              IconButton(
-                  key: const ValueKey('plannerEdit'),
-                  icon: const Icon(Icons.edit_outlined),
-                  tooltip: 'Edit goal',
-                  onPressed: () async {
-                    final r = await showSheet<String>(context, GoalSheet(wc: wc, goal: g));
-                    if (!context.mounted) return;
-                    goalSheetToast(context, wc, r);
-                    if (r == 'deleted') Navigator.pop(context);
-                  })
-            ]),
-            body: ColoredBox(
-              color: context.c.desk,
-              child: ListView(
-                key: const ValueKey('plannerPage'),
-                padding: const EdgeInsets.fromLTRB(pagePad, 12, pagePad, pageBottomPad + 48),
-                children: gapped(g.boughtAt != null ? _boughtView(context, g) : _planView(context, g), gap: 14),
-              ),
-            ),
-          );
+          return PopScope(
+              onPopInvokedWithResult: (didPop, _) {
+                if (didPop) _commitOnClose();
+              },
+              child: Scaffold(
+                appBar: DialogAppBar(title: g.name, actions: [
+                  IconButton(
+                      key: const ValueKey('plannerEdit'),
+                      icon: const Icon(Icons.edit_outlined),
+                      tooltip: 'Edit goal',
+                      onPressed: () async {
+                        final r = await showSheet<String>(context, GoalSheet(wc: wc, goal: g));
+                        if (!context.mounted) return;
+                        goalSheetToast(context, wc, r);
+                        if (r == 'deleted') Navigator.pop(context);
+                      })
+                ]),
+                body: ColoredBox(
+                  color: context.c.desk,
+                  child: ListView(
+                    key: const ValueKey('plannerPage'),
+                    padding: const EdgeInsets.fromLTRB(pagePad, 12, pagePad, pageBottomPad + 48),
+                    children: gapped(g.boughtAt != null ? _boughtView(context, g) : _planView(context, g), gap: 14),
+                  ),
+                ),
+              ));
         },
       );
 
@@ -245,7 +276,8 @@ class _GoalPlannerState extends State<GoalPlannerScreen> {
                     muted: c.muted,
                     ring: c.surface,
                     needLabel: 'Needed ${moneyExact(shown.need, cur)}',
-                    endLabel: _endLabel(math.max(24, shown.months! + 6))),
+                    meetLabel: _monthYear(shown.readyMonth!),
+                    endLabel: _monthYear(monthPlus(monthOf(wc.today()), math.max(24, shown.months! + 6)))),
               ),
             ),
           ),
@@ -275,7 +307,7 @@ class _GoalPlannerState extends State<GoalPlannerScreen> {
         min: 0,
         max: 20,
         divisions: 40,
-        onChanged: (v) => _set(() => d.costsPermille = (v * 20).round() * 5),
+        onChanged: (v) => _set(() => d.costsPermille = (v * 2).round() * 5),
         onEnd: (_) => _commit(),
         onType: () => _typeScaled('Costs on top', 10, 1000, (v) => d.costsPermille = v),
       ),
@@ -303,23 +335,23 @@ class _GoalPlannerState extends State<GoalPlannerScreen> {
     final ledger = Panel(key: const ValueKey('plannerLedger'), children: [
       const Text('The numbers', style: BwType.heading),
       Rows(children: [
-        LineItem(financed ? 'Deposit' : 'Price', moneyExact(plan.deposit, cur), key: const ValueKey('ledgerDeposit')),
-        LineItem('Costs on top', moneyExact(plan.costs, cur), key: const ValueKey('ledgerCosts')),
-        LineItem('Already in the fund', '−${moneyExact(plan.need - plan.left, cur)}', key: const ValueKey('ledgerSaved')),
-        LineItem('Still to save', moneyExact(plan.left, cur), bold: true, key: const ValueKey('ledgerLeft')),
+        LedgerRow(financed ? 'Deposit' : 'Price', moneyExact(plan.deposit, cur), key: const ValueKey('ledgerDeposit')),
+        LedgerRow('Costs on top', moneyExact(plan.costs, cur), key: const ValueKey('ledgerCosts')),
+        LedgerRow('Already in the fund', '−${moneyExact(plan.need - plan.left, cur)}', key: const ValueKey('ledgerSaved')),
+        LedgerRow('Still to save', moneyExact(plan.left, cur), bold: true, key: const ValueKey('ledgerLeft')),
         if (financed) ...[
-          LineItem(d.months == null ? 'Loan' : 'Loan, ${spanText(d.months!)}', moneyExact(plan.loan, cur),
+          LedgerRow(d.months == null ? 'Loan' : 'Loan, ${spanText(d.months!)}', moneyExact(plan.loan, cur),
               key: const ValueKey('ledgerLoan')),
-          LineItem('Payment a month (estimate)', plan.payment == null ? 'Set a length' : moneyExact(plan.payment!, cur),
+          LedgerRow('Payment a month (estimate)', plan.payment == null ? 'Set a length' : moneyExact(plan.payment!, cur),
               key: const ValueKey('ledgerPayment')),
           if (plan.vsCompare != null)
-            LineItem('vs ${compare.where((x) => x.$1 == d.compareId).firstOrNull?.$2 ?? 'that line'}',
+            LedgerRow('vs ${compare.where((x) => x.$1 == d.compareId).firstOrNull?.$2 ?? 'that line'}',
                 '${moneyExactSigned(plan.vsCompare!, cur)} a month',
                 key: const ValueKey('ledgerVs')),
           if (plan.afterPerPeriod != null)
-            LineItem('Spending money per period after', moneyExact(plan.afterPerPeriod!, cur), key: const ValueKey('ledgerAfter'))
+            LedgerRow('Spending money per period after', moneyExact(plan.afterPerPeriod!, cur), key: const ValueKey('ledgerAfter'))
           else if (plan.shortBy != null)
-            LineItem('Spending money per period after', 'Short by ${moneyExact(plan.shortBy!, cur)}',
+            LedgerRow('Spending money per period after', 'Short by ${moneyExact(plan.shortBy!, cur)}',
                 key: const ValueKey('ledgerAfter'), valueColor: c.bad, leading: Icon(Icons.warning_amber_rounded, color: c.bad, size: 18)),
         ],
       ]),
@@ -372,14 +404,11 @@ class _GoalPlannerState extends State<GoalPlannerScreen> {
     ];
   }
 
-  /// "Nov 28": the month [n] months from now, for the chart's right end.
-  String _endLabel(int n) {
-    final ym = monthPlus(monthOf(wc.today()), n);
-    return '${monthShort(ym)} ${ym.substring(2, 4)}';
-  }
+  /// "Jul 2030": a `YYYY-MM` for the chart (the year in full, so it never reads as a day).
+  String _monthYear(String ym) => '${monthShort(ym)} ${ym.substring(0, 4)}';
 
   Widget _price(Goal g, GoalPlan plan) {
-    final max = math.max(d.price * 2, 1000000).toDouble();
+    final max = _priceMax;
     final step = _niceStep(max);
     return ParamSlider(
       id: 'plannerPrice',
@@ -395,7 +424,7 @@ class _GoalPlannerState extends State<GoalPlannerScreen> {
   }
 
   Widget _monthly() {
-    final max = math.max(d.monthly * 3, 300000).toDouble();
+    final max = _monthlyMax;
     final step = _niceStep(max);
     return ParamSlider(
       id: 'plannerMonthly',
@@ -472,7 +501,7 @@ class _GoalPlannerState extends State<GoalPlannerScreen> {
 class _FundPainter extends CustomPainter {
   final int saved, monthly, need, months, span;
   final Color fund, line, muted, ring;
-  final String needLabel, endLabel;
+  final String needLabel, meetLabel, endLabel;
   const _FundPainter(
       {required this.saved,
       required this.monthly,
@@ -484,6 +513,7 @@ class _FundPainter extends CustomPainter {
       required this.muted,
       required this.ring,
       required this.needLabel,
+      required this.meetLabel,
       required this.endLabel});
 
   void _text(Canvas canvas, String t, Offset at, {double size = 11, TextAlign align = TextAlign.left}) {
@@ -521,6 +551,9 @@ class _FundPainter extends CustomPainter {
     canvas.restore();
     canvas.drawCircle(Offset(x(months), needY), 6, Paint()..color = ring);
     canvas.drawCircle(Offset(x(months), needY), 4.5, Paint()..color = fund);
+    // The ready month under the dot, kept inside the box: right-aligned on its right half.
+    final mx = x(months);
+    _text(canvas, meetLabel, Offset(mx > w / 2 ? mx + 4 : mx - 4, needY + 9), align: mx > w / 2 ? TextAlign.right : TextAlign.left);
     canvas.drawLine(
         Offset(0, bottom),
         Offset(w, bottom),
@@ -533,6 +566,7 @@ class _FundPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_FundPainter o) =>
+      o.meetLabel != meetLabel ||
       o.saved != saved ||
       o.monthly != monthly ||
       o.need != need ||

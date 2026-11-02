@@ -14,6 +14,7 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/dash.dart';
 import '../widgets/insight_charts.dart' show LegendItem;
+import '../widgets/ledger_row.dart';
 import '../widgets/sheets.dart';
 import 'goal_planner.dart' show openGoalPlanner, scaledNumber;
 import 'loan_fields.dart';
@@ -128,12 +129,12 @@ class _LoanScreenState extends State<LoanScreen> {
               key: const ValueKey('loanOwed'), style: BwType.amount.copyWith(fontSize: 30, fontWeight: FontWeight.w700, color: c.ink)),
         ]),
         Rows(children: [
-          LineItem('Months left', '${st.monthsLeft}', key: const ValueKey('loanMonthsLeft')),
-          LineItem('Paid off in', st.payoffMonth == null ? '-' : monthLong(st.payoffMonth!), key: const ValueKey('loanPayoff')),
-          LineItem('Interest paid so far', moneyExact(st.interestPaid, cur), key: const ValueKey('loanInterestPaid')),
-          LineItem('Interest still to pay', moneyExact(st.interestToPay, cur),
+          LedgerRow('Months left', '${st.monthsLeft}', key: const ValueKey('loanMonthsLeft')),
+          LedgerRow('Paid off in', st.payoffMonth == null ? '-' : monthLong(st.payoffMonth!), key: const ValueKey('loanPayoff')),
+          LedgerRow('Interest paid so far', moneyExact(st.interestPaid, cur), key: const ValueKey('loanInterestPaid')),
+          LedgerRow('Interest still to pay', moneyExact(st.interestToPay, cur),
               sub: 'An estimate', key: const ValueKey('loanInterestToPay')),
-          if (payment != null) LineItem('Payment a month', moneyExact(payment, cur), key: const ValueKey('loanPayment')),
+          if (payment != null) LedgerRow('Payment a month', moneyExact(payment, cur), key: const ValueKey('loanPayment')),
         ]),
       ],
     ]);
@@ -172,7 +173,7 @@ class _LoanScreenState extends State<LoanScreen> {
         children: [
           Rows(children: [
             for (final y in years)
-              LineItem('${y.year}', moneyExact(y.principal + y.interest, cur),
+              LedgerRow('${y.year}', moneyExact(y.principal + y.interest, cur),
                   sub:
                       'Principal ${moneyExact(y.principal, cur)} · interest ${moneyExact(y.interest, cur)} · left ${moneyExact(y.endBalance, cur)}'),
           ]),
@@ -242,11 +243,17 @@ class _LoanScreenState extends State<LoanScreen> {
     final wide = layoutOf(context) != LayoutSize.compact, accessible = MediaQuery.accessibleNavigationOf(context);
     void yes(Loan to) {
       final err = wc.confirmLoanPayment(to.id, p.txId);
+      // Core has no "unanswered" state: Undo answers No for this loan, so the row is not asked about again.
       toastOn(messenger, err ?? 'Marked as a payment on ${to.name}',
           wide: wide,
           accessible: accessible,
           actionLabel: err == null ? 'Undo' : null,
-          onAction: err == null ? () => wc.unlinkLoanPayment([to.id], p.txId) : null);
+          onAction: err == null
+              ? () {
+                  wc.unlinkLoanPayment([to.id], p.txId);
+                  toastOn(messenger, 'Undone. This payment is not matched to ${to.name}.', wide: wide, accessible: accessible);
+                }
+              : null);
     }
 
     return Container(

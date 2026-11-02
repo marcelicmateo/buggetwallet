@@ -9,10 +9,12 @@ import 'package:budget_wallet/src/screens/loan_screen.dart';
 import 'package:budget_wallet/src/screens/payday_plan.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
+import 'support/fonts.dart';
 import 'support/wallet.dart';
 
 const _big = Size(400, 3200);
@@ -30,7 +32,7 @@ String _boat(WalletController wc, {int saved = 1000000, int monthly = 100000}) {
   final id = wc.addBigGoal(name: 'Boat', price: 20000000, financed: true, property: true)!;
   final g = wc.goalOf(id)!;
   wc.saveGoalDraft(id, GoalDraft.of(g)..monthly = monthly);
-  wc.repo.saveGoal(id: id, name: 'Boat', target: wc.goalOf(id)!.target, saved: saved, monthly: monthly);
+  wc.repo.saveGoal(id: id, name: 'Boat', target: 0, saved: saved, monthly: monthly);
   wc.reload();
   return id;
 }
@@ -57,6 +59,26 @@ String _loan(WalletController wc, String first, {List<String> paid = const []}) 
 void _confirmFirst(WalletController wc, String loanId) {
   final ask = wc.loanAsks(loanId).first;
   expect(wc.confirmLoanPayment(loanId, ask.payment.txId), isNull);
+}
+
+/// The texts on screen that break inside a word (a line ends between two non-space characters): what a squeezed ledger row does.
+List<String> _brokenWords(WidgetTester t) {
+  final out = <String>[];
+  for (final rp in t.renderObjectList<RenderParagraph>(find.byType(RichText))) {
+    final text = rp.text.toPlainText();
+    final tp = TextPainter(text: rp.text, textDirection: TextDirection.ltr, textScaler: rp.textScaler, maxLines: rp.maxLines)
+      ..layout(maxWidth: rp.size.width + 1); // +1: a single line is as wide as its text, which could wrap on rounding
+    var pos = 0;
+    while (pos < text.length) {
+      final end = tp.getLineBoundary(TextPosition(offset: pos)).end;
+      if (end <= pos || end >= text.length) break;
+      if (text[end - 1] != '-' && !RegExp(r'\s').hasMatch(text[end - 1]) && !RegExp(r'\s').hasMatch(text[end])) {
+        out.add('${text.substring(0, end)} | ${text.substring(end)}');
+      }
+      pos = end;
+    }
+  }
+  return out;
 }
 
 Future<void> _settle(WidgetTester t) async {
@@ -116,8 +138,9 @@ void main() {
       await _settle(t);
       final g = wc.goalOf(id)!;
       expect(g.price, 30000000);
-      // target follows what is needed (20 % + 6 % of 300,000.00), so the Save tab's ring agrees
-      expect(g.target, 7800000);
+      // `target` is not written: the tile reads goalPlan's need (20 % + 6 % of 300,000.00)
+      expect(g.target, 0);
+      expect(wc.goalTargetOf(g), 7800000);
       expect(_in('ledgerLeft', moneyExact(6800000, 'EUR')), findsOneWidget);
     });
 
@@ -161,6 +184,7 @@ void main() {
       expect(_key('boughtSheet'), findsOneWidget);
       // the loan as the plan guessed it, marked Unsure until touched
       expect(find.text('Unsure: from the plan. Check it.'), findsWidgets);
+      expect(_key('boughtCheckMarked'), findsOneWidget);
       await t.tap(_key('pick:${row.id}'));
       await t.pump();
       expect(find.text('1 picked'), findsOneWidget);
@@ -224,7 +248,8 @@ void main() {
         final g = wc.goals.firstWhere((x) => x.name == (property ? 'Flat' : 'Car'));
         expect(result, 'planner:${g.id}');
         expect([g.price, g.depositPermille, g.costsPermille, g.loanMonths], [1500000, 200, property ? 60 : 0, property ? 360 : 60]);
-        expect(g.target, wc.planFor(g, GoalDraft.of(g)).need);
+        expect(g.target, 0);
+        expect(wc.goalTargetOf(g), wc.planFor(g, GoalDraft.of(g)).need);
       }
     });
 
@@ -368,6 +393,154 @@ void main() {
       await t.tap(_key('toastUndo'));
       await _settle(t);
       expect(wc.loanOf(id)!.open, isTrue);
+    });
+  });
+
+  group('review fixes', () {
+    setUpAll(loadAppFonts); // the test font (Ahem) is far wider than the real one: a broken-word check needs the real fonts
+    _test('Edit details keeps the lender: matching goes on after changing only the rate', (t) async {
+      final wc = _wallet();
+      final id = _loan(wc, '2026-09-15', paid: ['2026-09-15']);
+      _confirmFirst(wc, id);
+      final key = wc.loanOf(id)!.payeeKey;
+      expect(key, isNotEmpty);
+      await pumpApp(
+          t,
+          Builder(
+              builder: (c) => TextButton(
+                  onPressed: () => showLoanForm(c, wc, mode: LoanFormMode.details, loan: wc.loanOf(id)), child: const Text('edit'))),
+          size: _big);
+      await t.tap(find.text('edit'));
+      await _settle(t);
+      await t.enterText(_key('lf:rate'), '7');
+      await t.tap(_key('loanFormSave'));
+      await _settle(t);
+      expect(wc.loanOf(id)!.rateBp, 700);
+      expect(wc.loanOf(id)!.payeeKey, key);
+      expect(wc.loanView(id)!.payments, hasLength(1));
+    });
+
+    _test('dragging the costs slider writes whole half percents inside 0-20 %', (t) async {
+      final wc = _wallet();
+      final id = _boat(wc);
+      await pumpApp(t, GoalPlannerScreen(wc: wc, goalId: id), size: _big);
+      await t.drag(_key('plannerCosts:slider'), const Offset(40, 0));
+      await _settle(t);
+      final p = wc.goalOf(id)!.costsPermille!;
+      expect(p, inInclusiveRange(61, 200), reason: 'dragged right from 6 %');
+      expect(p % 5, 0);
+    });
+
+    _test('dragging the price slider cannot run past its own end', (t) async {
+      final wc = _wallet();
+      final id = _boat(wc);
+      await pumpApp(t, GoalPlannerScreen(wc: wc, goalId: id), size: _big);
+      final g = await t.startGesture(t.getCenter(_key('plannerPrice:slider')));
+      for (var i = 0; i < 8; i++) {
+        await g.moveBy(const Offset(60, 0));
+        await t.pump();
+      }
+      await g.up();
+      await _settle(t);
+      expect(wc.goalOf(id)!.price, inInclusiveRange(20000000, 40000000),
+          reason: 'the end of the slider was twice the price when it started');
+    });
+
+    _test('a keyboard or screen-reader change is written when the planner closes', (t) async {
+      final wc = _wallet();
+      final id = _boat(wc);
+      await pumpApp(t, Builder(builder: (c) => TextButton(onPressed: () => openGoalPlanner(c, wc, id), child: const Text('open'))),
+          size: _big);
+      await t.tap(find.text('open'));
+      await _settle(t);
+      // what the keyboard does: the slider reports a change without ever reporting that a drag ended
+      t.widget<Slider>(_key('plannerMonthly:slider')).onChanged!(500000);
+      await t.pump();
+      expect(wc.goalOf(id)!.monthly, 100000, reason: 'only the draft moved so far');
+      await t.tap(find.byTooltip('Close'));
+      await _settle(t);
+      expect(wc.goalOf(id)!.monthly, greaterThan(100000));
+    });
+
+    for (final (name, size, scale) in [('320 at 2.0', const Size(320, 4200), 2.0), ('360 at 1.3', const Size(360, 3200), 1.3)]) {
+      _test('no word is broken in the planner, loan screen or sheets at $name', (t) async {
+        final wc = _wallet();
+        final id = _boat(wc, saved: 5200000);
+        final loan = _loan(wc, '2026-08-15', paid: ['2026-08-15']);
+        wc.repo.addTransaction(date: '2026-10-14', amount: 4000000, category: 'Shopping');
+        wc.reload();
+        await pumpApp(t, GoalPlannerScreen(wc: wc, goalId: id), size: size, textScale: scale);
+        expect(_brokenWords(t), isEmpty, reason: 'planner');
+        await t.tap(_key('plannerIBought'));
+        await _settle(t);
+        expect(_brokenWords(t), isEmpty, reason: 'bought sheet');
+        await pumpApp(t, LoanScreen(wc: wc, loanId: loan), size: size, textScale: scale);
+        expect(_brokenWords(t), isEmpty, reason: 'loan screen');
+        await pumpApp(t, Scaffold(body: SingleChildScrollView(child: LoanFormSheet(wc: wc, mode: LoanFormMode.add))),
+            size: size, textScale: scale);
+        expect(_brokenWords(t), isEmpty, reason: 'loan form');
+      });
+    }
+
+    _test('a plain goal gets I bought it from its sheet, paid in full, with Undo', (t) async {
+      final wc = _wallet();
+      final id = wc.repo.saveGoal(name: 'Bike', target: 50000, saved: 50000, monthly: 0);
+      wc.repo.addTransaction(date: '2026-10-14', amount: 50000, category: 'Shopping');
+      wc.reload();
+      final row = wc.purchaseCandidates().firstWhere((x) => x.amount == -50000);
+      await pumpApp(t, Scaffold(body: GoalsScreen(wc: wc)), size: _big);
+      await t.tap(_key('goal:$id'));
+      await _settle(t);
+      await t.tap(_key('goalIBought'));
+      await _settle(t);
+      expect(find.text('With a loan'), findsNothing, reason: 'a goal without a loan has no loan part');
+      await t.tap(_key('pick:${row.id}'));
+      await t.tap(_key('boughtConfirm'));
+      await _settle(t);
+      expect(wc.goalOf(id)!.boughtAt, wc.today());
+      expect(wc.repo.loans(), isEmpty);
+      await t.tap(_key('toastUndo'));
+      await _settle(t);
+      expect(wc.goalOf(id)!.boughtAt, isNull);
+    });
+
+    _test('several loans for one lender: Yes per loan, No for all', (t) async {
+      final wc = _wallet();
+      final a = _loan(wc, '2026-09-15', paid: ['2026-09-15']);
+      final b = wc.addLoan(Loan(
+          id: '',
+          name: 'Second loan',
+          principal: 500000,
+          rateBp: 500,
+          months: 6,
+          firstDue: '2026-09-15',
+          payeeKey: wc.payeeKeyOf('LENDER SYNTHETIC')))!;
+      final ask = wc.loanAsks(a).single;
+      expect(ask.loans.map((l) => l.id), unorderedEquals([a, b]));
+      final tx = ask.payment.txId;
+      await pumpApp(t, LoanScreen(wc: wc, loanId: a), size: _big);
+      expect(_key('loanAskYes:$tx:$a'), findsOneWidget);
+      expect(_key('loanAskYes:$tx:$b'), findsOneWidget);
+      await t.tap(_key('loanAskYes:$tx:$b'));
+      await _settle(t);
+      expect(wc.loanView(b)!.payments.map((m) => m.txId), [tx]);
+      expect(wc.loanView(a)!.payments, isEmpty);
+      // Undo answers No for that loan (core has no "unanswered"): the row is matched to neither
+      await t.tap(_key('toastUndo'));
+      await _settle(t);
+      expect(wc.loanView(b)!.payments, isEmpty);
+      // a second row, answered No for both loans
+      wc.repo.importBatch(
+          ImportBatch(source: 'pbz', transactions: [syntheticTx('2026-10-15', -103000, 'Trajni nalog', 'LENDER SYNTHETIC 124')]));
+      wc.reload();
+      final ask2 = wc.loanAsks(a).firstWhere((x) => x.payment.date == '2026-10-15');
+      await pumpApp(t, LoanScreen(wc: wc, loanId: a), size: _big);
+      await t.tap(_key('loanAskNo:${ask2.payment.txId}'));
+      await _settle(t);
+      expect(wc.loanAsks(a).where((x) => x.payment.txId == ask2.payment.txId), isEmpty);
+      expect(wc.loanAsks(b).where((x) => x.payment.txId == ask2.payment.txId), isEmpty);
+      expect(wc.loanView(a)!.payments, isEmpty);
+      expect(wc.loanView(b)!.payments, isEmpty);
     });
   });
 

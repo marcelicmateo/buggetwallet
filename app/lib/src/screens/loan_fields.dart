@@ -14,6 +14,11 @@ class LoanFieldsState {
   final payment = TextEditingController(), lender = TextEditingController(), reference = TextEditingController();
   String? firstDue, accountId;
 
+  /// The lender key stored on the loan, and whether the lender field was edited: an untouched field keeps the stored key (the field
+  /// only shows it as words), so saving other details never stops the matching.
+  String? storedKey;
+  bool lenderTouched = false;
+
   /// Field ids still carrying a guess (`principal|rate|years|first|payment`).
   final Set<String> unsure = {};
 
@@ -32,6 +37,8 @@ class LoanFieldsState {
     firstDue = l.firstDue;
     reference.text = l.reference ?? '';
     accountId = l.accountId;
+    storedKey = l.payeeKey;
+    lender.text = (l.payeeKey ?? '').replaceAll('_', ' ');
   }
 
   void dispose() {
@@ -65,7 +72,7 @@ class LoanFieldsState {
           firstDue: firstDue,
           payment: pay,
           accountId: accountId,
-          payeeKey: lenderText.isEmpty ? null : wc.payeeKeyOf(lenderText),
+          payeeKey: !lenderTouched ? storedKey : (lenderText.isEmpty ? null : wc.payeeKeyOf(lenderText)),
           reference: ref.isEmpty ? null : ref),
       null
     );
@@ -162,6 +169,7 @@ class _LoanFieldsState extends State<LoanFields> {
           TextField(
               key: const ValueKey('lf:lender'),
               controller: s.lender,
+              onChanged: (_) => s.lenderTouched = true,
               decoration:
                   const InputDecoration(labelText: 'Lender, as your bank shows it', helperText: 'Used to find its payments in Money.')),
           TextField(
