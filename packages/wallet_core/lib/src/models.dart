@@ -30,22 +30,41 @@ void resetInvalidSettingLog() {
   _invalidRangeLogged = false;
 }
 
-/// A stored column read as text or a whole number; any other type (a damaged value) reads as null.
+/// A stored column read as text; any other type (a damaged value) reads as null.
 String? _str(Object? v) => v is String ? v : null;
-int? _int(Object? v) => v is int ? v : null;
 
-/// A stored `kind_hint` as a [TxKind]; a name this build does not know (a newer importer) reads as null.
-TxKind? _kind(Object? v) => v is String ? TxKind.values.asNameMap()[v] : null;
-
-/// The typed columns of the synced entity `tx` added since F1 ([Col]; the older columns stay `ColumnDef`s in
-/// `entitySchema` until F2).
+/// The columns of the synced entity `tx` (table `tx`), in table order ([Col]; see [BillCols]). A row amount keeps the
+/// synced cap of rows imported before Stage Q ([legacyRowCapCents]); new local writes are checked lower (`isSafeCents`).
 abstract final class TxCols {
   static const entity = 'tx';
+  static const source = TextCol(entity, 'source', label: 'Source'); // pbz | revolut | csv:<shape> | manual
+  static const date = DateCol(entity, 'date', label: 'Date');
+  static const amount = MoneyCol(entity, 'amount', label: 'Amount', searchable: true, cap: legacyRowCapCents);
+  static const currency = TextCol(entity, 'currency', label: 'Currency', defaultValue: 'EUR');
+  static const bankType = TextCol(entity, 'bank_type', label: 'Bank type');
+  static const description = TextCol(entity, 'description', label: 'Description', searchable: true);
+  static const category = TextCol(entity, 'category', label: 'Category', nullable: true, searchable: true); // the owner's
+  static const note = TextCol(entity, 'note', label: 'Note', nullable: true, searchable: true);
+  static const manual = FlagCol(entity, 'manual', label: 'Added by hand');
+  static const matchedTo = RefCol(entity, 'matched_to', label: 'Matched to', target: entity, nullable: true);
+  static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
+  static const seenBank = TextCol(entity, 'seen_bank', label: 'Bank rows seen', nullable: true); // `SeenBank`
+  // v3: the importer's TxKind name, written once by importBatch (a name this build does not know reads as none); the
+  // other side of an own transfer.
+  static const kindHint = EnumCol(entity, 'kind_hint', label: 'Bank kind', values: TxKind.values, nullable: true);
+  static const transferTo = RefCol(entity, 'transfer_to', label: 'Transfer partner', target: entity, nullable: true);
+  // v19 (D2 Unlink): a hand-added entry's bank rows the owner unlinked it from, a JSON list (`matchOffIds`).
+  static const matchOff = JsonCol(entity, 'match_off', label: 'Unlinked rows', nullable: true);
 
   /// v20 (UX-ACC): the app account (`accounts.id`) this bank row belongs to, written by `importBatch` (the row's
   /// `accountKey` matched an account's [AccountCols.matchKey]) or by the owner (`setTxAccount`); null = the main account
   /// of its (source, currency) (`RowAccounts`). Never set on hand-added rows.
   static const account = RefCol(entity, 'account', label: 'Account', target: 'account', nullable: true);
+
+  static const all = <Col>[
+    source, date, amount, currency, bankType, description, category, note, manual, matchedTo, deleted, seenBank, //
+    kindHint, transferTo, matchOff, account,
+  ];
 }
 
 /// A transaction as stored in the wallet database. Amounts are in minor units (cents).
@@ -129,19 +148,19 @@ class Tx {
   /// reads as its default, so one damaged row never breaks a whole list.
   static Tx fromRow(Map<String, Object?> r) => Tx(
         id: r['id'] as String,
-        source: _str(r['source']) ?? '',
-        date: _str(r['date']) ?? '',
-        amount: _int(r['amount']) ?? 0,
-        currency: _str(r['currency']) ?? 'EUR',
-        bankType: _str(r['bank_type']) ?? '',
-        description: _str(r['description']) ?? '',
-        category: _str(r['category']),
-        note: _str(r['note']),
-        manual: r['manual'] == 1,
-        matchedTo: _str(r['matched_to']),
-        deleted: r['deleted'] == 1,
-        kindHint: _kind(r['kind_hint']),
-        transferTo: _str(r['transfer_to']),
+        source: TxCols.source.read(r) ?? '',
+        date: TxCols.date.read(r) ?? '',
+        amount: TxCols.amount.read(r) ?? 0,
+        currency: TxCols.currency.read(r)!,
+        bankType: TxCols.bankType.read(r) ?? '',
+        description: TxCols.description.read(r) ?? '',
+        category: TxCols.category.read(r),
+        note: TxCols.note.read(r),
+        manual: TxCols.manual.read(r)!,
+        matchedTo: TxCols.matchedTo.read(r),
+        deleted: TxCols.deleted.read(r)!,
+        kindHint: TxCols.kindHint.read(r),
+        transferTo: TxCols.transferTo.read(r),
         matchPending: r['match_pending'] == 1,
         account: TxCols.account.read(r),
       );

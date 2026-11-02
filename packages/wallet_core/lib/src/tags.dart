@@ -1,8 +1,8 @@
 // Tags (stage T1, docs/context/T1_SPEC.md). The main tag is a row's category (CategoryTable); extra tags are the
 // owner's own labels (entity `tag`), given to rows by per-payee rule tags (`ruletag`) and per-row links (`txtag`).
 // Everything here is pure and read time: nothing is written on import.
-import 'cols.dart';
 import 'categories.dart' show BudgetKind, Categorizer, CategoryTable, merchantKey, merchantName;
+import 'cols.dart';
 import 'models.dart';
 import 'search.dart' show foldText;
 

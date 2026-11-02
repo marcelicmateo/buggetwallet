@@ -383,6 +383,46 @@ void main() {
     });
   });
 
+  group('batch 4: tx', () {
+    test('a tx is changed by its own actions only; addTransaction keeps its op', () {
+      final before = repo.pendingOps().length;
+      final id = repo.addTransaction(date: '2026-10-02', amount: -1250, category: 'Groceries', note: 'synthetic');
+      final o = repo.pendingOps().skip(before).map((e) => e.$2).first;
+      expect([o.entity, o.id, o.fields['date'], o.fields['amount'], o.fields['manual'], o.fields['category']],
+          ['tx', id, '2026-10-02', 1250, 1, 'Groceries']);
+      expect(() => repo.patch('tx', id, {TxCols.note: 'x'}), _refused('Changed by its own actions, not edited.'));
+    });
+
+    test('rows read through TxCols as before (damaged values read as their defaults)', () {
+      final t = Tx.fromRow({'id': 'x', 'amount': 'big', 'currency': null, 'manual': 1, 'kind_hint': 'nope', 'note': 3});
+      expect([t.source, t.date, t.amount, t.currency, t.bankType, t.description, t.note, t.manual, t.deleted, t.kindHint],
+          ['', '', 0, 'EUR', '', '', null, true, false, null]);
+      final u = Tx.fromRow({'id': 'y', 'kind_hint': 'salary', 'matched_to': 'm', 'transfer_to': 't', 'deleted': 1});
+      expect([u.kindHint, u.matchedTo, u.transferTo, u.deleted], [TxKind.salary, 'm', 't', true]);
+    });
+
+    test('the sync caps stay: row and recurring amounts at legacyRowCapCents, the others at maxAmountCents', () {
+      expect(TxCols.amount.cap, legacyRowCapCents);
+      for (final c in [RecurringCols.expectedAmount, RecurringCols.minAmount, RecurringCols.maxAmount]) {
+        expect(c.cap, legacyRowCapCents, reason: c.column);
+      }
+      for (final c in [PlannedCols.amount, WishCols.price, GoalCols.monthly, IouCols.amount, IouPartCols.amount]) {
+        expect(c.cap, maxAmountCents, reason: '$c');
+      }
+      for (final c in [GoalCols.target, GoalCols.saved, GoalContribCols.amount]) {
+        expect(c, isNot(isA<MoneyCol>()), reason: '$c has no cap');
+      }
+    });
+  });
+
+  test('every synced entity but setting comes from a Col holder', () {
+    for (final e in entitySchema.entries) {
+      if (e.key == 'setting') continue;
+      expect(e.value.columns, everyElement(isA<Col>()), reason: e.key);
+      expect({for (final c in e.value.columns.cast<Col>()) c.entity}, {e.key}, reason: e.key);
+    }
+  });
+
   group('holders declare the schema', () {
     final holders = <String, List<Col>>{
       'iou': IouCols.all,
@@ -400,6 +440,7 @@ void main() {
       'split': SplitCols.all,
       'review': ReviewCols.all,
       'payee_alias': PayeeAliasCols.all,
+      'tx': TxCols.all,
     };
     for (final h in holders.entries) {
       test('${h.key}: entitySchema uses ${h.key} Cols.all, each with a label', () {

@@ -42,7 +42,7 @@ extension WalletRepoSyncApply on WalletRepo {
     for (final e in op.fields.entries) {
       final col = def.column(e.key);
       if (col == null) continue;
-      final v = _fieldValue(op.entity, col, e.value);
+      final v = _fieldValue(col, e.value);
       if (identical(v, _bad)) {
         logEvent(_log, Level.WARNING, 'repo.badField', {'entity': op.entity, 'field': e.key});
         continue;
@@ -110,34 +110,18 @@ extension WalletRepoSyncApply on WalletRepo {
 
   static const _bad = Object();
 
-  /// The largest magnitude each synced amount column takes (Q3). Imported row amounts and recurring amounts:
-  /// [legacyRowCapCents] (10^12, what builds before Q imported), so no device drops a value an older build could
-  /// write; planned costs, bills, wishes, account openings and a goal's `monthly` (summed in `computePeriod`): the one
-  /// cap [maxAmountCents], which every build checked when typed. Goals' `target`/`saved` and contributions have none
-  /// here: `goalTotal` already clamps each contribution and the total (`test/goal_contrib_test.dart`). Other integer
-  /// columns (dates in ms, sort keys, sizes, counts) have none. New local writes stay at [maxAmountCents]
-  /// ([isSafeCents]: `addTransaction`, `importBatch`). A [MoneyCol] (a bill's total, an account opening) carries its
-  /// own cap ([MoneyCol.cap], the same [maxAmountCents]) and is not listed here.
-  static const _amountCaps = <(String, String), int>{
-    ('tx', 'amount'): legacyRowCapCents,
-    ('planned', 'amount'): maxAmountCents,
-    ('recurring', 'expected_amount'): legacyRowCapCents,
-    ('recurring', 'min_amount'): legacyRowCapCents,
-    ('recurring', 'max_amount'): legacyRowCapCents,
-    ('wish', 'price'): maxAmountCents,
-    ('goal', 'monthly'): maxAmountCents,
-    ('iou', 'amount'): maxAmountCents,
-    ('iou_part', 'amount'): maxAmountCents,
-  };
-
   /// [value] as it is stored in column [col] ([ColumnType]: a 0/1 flag takes a bool or 0/1, an integer column an
   /// int, every other column text), or [_bad] if it has the wrong type. NULL only in a nullable column. A whole
   /// number sent as a float (`12.0`) within the range a double holds exactly is accepted; fractions, huge or
   /// non-finite floats are not.
   ///
-  /// Q3: an amount column ([_amountCaps]) beyond its cap is [_bad] too, so an op over it is quarantined like a
-  /// wrong-typed one (logged with the entity and field only): sums of amounts stay exact (see [isSafeCents]).
-  static Object? _fieldValue(String entity, ColumnDef col, Object? value) {
+  /// Q3: an amount column ([MoneyCol]) beyond its [MoneyCol.cap] is [_bad] too, so an op over it is quarantined like a
+  /// wrong-typed one (logged with the entity and field only): sums of amounts stay exact (see [isSafeCents]). Imported
+  /// row and recurring amounts are capped at [legacyRowCapCents] (10^12, what builds before Q imported), so no device
+  /// drops a value an older build could write; the other amounts at [maxAmountCents], which every build checked when
+  /// typed. Goals' `target`/`saved` and contributions are `IntCol`s without a cap (`goalTotal` clamps them), as are
+  /// other integer columns (dates in ms, sort keys, sizes, counts).
+  static Object? _fieldValue(ColumnDef col, Object? value) {
     if (value == null) return col.nullable ? null : _bad;
     switch (col.type) {
       case ColumnType.flag:
@@ -150,7 +134,7 @@ extension WalletRepoSyncApply on WalletRepo {
           _ => null,
         };
         if (v == null) return _bad;
-        final cap = col is MoneyCol ? col.cap : _amountCaps[(entity, col.name)];
+        final cap = col is MoneyCol ? col.cap : null;
         // Both bounds, never `abs()`: the smallest int's abs() is itself (negative) and would pass.
         return cap != null && (v > cap || v < -cap) ? _bad : v;
       case ColumnType.text:

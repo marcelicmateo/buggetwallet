@@ -90,30 +90,7 @@ void addTestEntity(String entity, EntityDef def) {
 final Map<String, EntityDef> _entities = {..._schema};
 
 const Map<String, EntityDef> _schema = {
-  'tx': EntityDef('tx', [
-    ColumnDef('source'),
-    ColumnDef('date'),
-    ColumnDef.integer('amount', searchable: true),
-    ColumnDef('currency', defaultSql: "'EUR'"),
-    ColumnDef('bank_type'),
-    ColumnDef('description', searchable: true),
-    ColumnDef('category', nullable: true, searchable: true),
-    ColumnDef('note', nullable: true, searchable: true),
-    ColumnDef.flag('manual'),
-    ColumnDef('matched_to', nullable: true),
-    ColumnDef.flag('deleted'),
-    ColumnDef('seen_bank', nullable: true),
-    // v3: the importer's TxKind name, written once by importBatch; the other side of an own transfer.
-    ColumnDef('kind_hint', nullable: true),
-    ColumnDef('transfer_to', nullable: true),
-    // v19 (D2 Unlink): a hand-added entry's bank rows the owner unlinked it from, a JSON list (`matchOffIds`).
-    ColumnDef('match_off', nullable: true),
-    // v20 (UX-ACC): the app account of a bank row (`TxCols.account`).
-    TxCols.account,
-  ], indexes: {
-    'tx_date': 'date',
-    'tx_amount': 'amount'
-  }),
+  'tx': EntityDef('tx', TxCols.all, indexes: {'tx_date': 'date', 'tx_amount': 'amount'}),
   'goal': EntityDef('goals', GoalCols.all),
   'wish': EntityDef('wish', WishCols.all),
   'setting': EntityDef('settings', [ColumnDef('value', nullable: true), ColumnDef.flag('deleted')]),
