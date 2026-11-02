@@ -42,6 +42,7 @@ export 'src/bills.dart'
         attachmentTypes,
         Bill,
         BillCols,
+        PayeeAliasCols,
         billItemsProblem,
         billCandidates,
         billCoveredBy,
@@ -112,6 +113,7 @@ export 'src/budget.dart'
 export 'src/categories.dart'
     show
         BudgetKind,
+        CategoryCols,
         builtInMerchantRules,
         BuiltInRule,
         builtInRuleById,
@@ -268,6 +270,7 @@ export 'src/models.dart'
         RecurringCols,
         RecurringPeriod,
         resetInvalidSettingLog,
+        ReviewCols,
         ReviewState,
         RuleCols,
         ReviewStep,
@@ -339,11 +342,12 @@ export 'src/series.dart'
         incomeSeries,
         SeriesBar,
         spendingSeries;
-export 'src/splits.dart' show decodeSplitParts, encodeSplitParts, SplitPart, splitFits;
+export 'src/splits.dart' show decodeSplitParts, encodeSplitParts, SplitCols, SplitPart, splitFits;
 export 'src/suggest.dart' show PlanSuggestion, planProposals, SettingProposal, Suggested, suggestPlan;
 export 'src/sync_conflicts.dart' show SyncConflict;
 export 'src/tags.dart' show recentPayees, suggestCategoriesForText;
-export 'src/tags.dart' show recommendedMainTags, recommendedTags, suggestTags, TagContext, tagPayee, TagRow, tagsOf, TagTable;
+export 'src/tags.dart'
+    show recommendedMainTags, recommendedTags, RuleTagCols, suggestTags, TagCols, TagContext, tagPayee, TagRow, tagsOf, TagTable, TxTagCols;
 export 'src/transfers.dart' show openTransfers, planTransfers, transferDays, TransferPlan;
 export 'src/vault.dart'
     show

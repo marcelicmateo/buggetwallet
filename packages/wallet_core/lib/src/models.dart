@@ -350,6 +350,15 @@ abstract final class WishCols {
   static const all = <Col>[name, price, added, status, decided, deleted];
 }
 
+/// The columns of the synced entity `review` (table `reviews`, id = the review date): a weekly review done.
+abstract final class ReviewCols {
+  static const entity = 'review';
+  static const done = DateCol(entity, 'done', label: 'Done');
+  static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
+
+  static const all = <Col>[done, deleted];
+}
+
 /// The columns of the synced entity `rule` (table `merchant_rules`): a payee key's category (id = the payee key).
 abstract final class RuleCols {
   static const entity = 'rule';

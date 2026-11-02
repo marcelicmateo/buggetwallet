@@ -6,6 +6,17 @@ library;
 
 import 'dart:convert';
 
+import 'cols.dart';
+
+/// The columns of the synced entity `split` (table `tx_splits`, id = the tx id), in table order ([Col]).
+abstract final class SplitCols {
+  static const entity = 'split';
+  static const parts = JsonCol(entity, 'parts', label: 'Parts', defaultValue: '[]'); // the whole split, one field
+  static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
+
+  static const all = <Col>[parts, deleted];
+}
+
 /// One part of a split payment: [amount] in cents (the payment's sign), [category] its main tag, [tags] its extra
 /// tags (tag ids), [note] its own note (null when none).
 class SplitPart {

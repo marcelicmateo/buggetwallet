@@ -276,6 +276,113 @@ void main() {
     });
   });
 
+  group('batch 3: category and tag (whole duplicate group); holder-only entities', () {
+    Future<List<Object?>> one(Future<void> Function() edit) async {
+      final before = repo.pendingOps().length;
+      await edit();
+      final o = repo.pendingOps().skip(before).map((e) => e.$2).single;
+      return [o.entity, o.id, o.fields, o.fields.keys.toList()];
+    }
+
+    for (final surface in ['old', 'patch']) {
+      test('category edits via $surface', () async {
+        final k = await repo.addCategory(name: 'Pets', kind: BudgetKind.flex);
+        final p = surface == 'patch';
+        Future<void> edit({String? name, int? position, bool? hidden, String id = ''}) async => p
+            ? repo.patch('category', id.isEmpty ? k : id, {
+                if (name != null) CategoryCols.name: name,
+                if (position != null) CategoryCols.position: position,
+                if (hidden != null) CategoryCols.hidden: hidden,
+              })
+            : repo.updateCategory(id.isEmpty ? k : id, name: name, position: position, hidden: hidden);
+        expect(await one(() => edit(name: ' Animals ')), [
+          'category',
+          k,
+          {'name': 'Animals'},
+          ['name']
+        ]);
+        expect(await one(() => edit(position: 3)), [
+          'category',
+          k,
+          {'position': 3},
+          ['position']
+        ]);
+        expect(await one(() => edit(hidden: true)), [
+          'category',
+          k,
+          {'hidden': 1},
+          ['hidden']
+        ]);
+        expect(await one(() => edit(hidden: false, position: 0, name: 'Pets')), [
+          'category', k, {'name': 'Pets', 'position': 0, 'hidden': 0}, ['name', 'position', 'hidden'] //
+        ]);
+        expect(await one(() => edit(id: 'Groceries', hidden: true)), [
+          'category',
+          'Groceries',
+          {'hidden': 1},
+          ['hidden']
+        ]);
+      });
+
+      test('tag edits via $surface', () async {
+        final t = await repo.addTag('Trip');
+        final p = surface == 'patch';
+        Future<void> edit({String? name, int? position, bool? hidden}) async => p
+            ? repo.patch('tag', t, {
+                if (name != null) TagCols.name: name,
+                if (position != null) TagCols.position: position,
+                if (hidden != null) TagCols.hidden: hidden,
+              })
+            : repo.updateTag(t, name: name, position: position, hidden: hidden);
+        expect(await one(() => edit(name: 'Holiday')), [
+          'tag',
+          t,
+          {'name': 'Holiday'},
+          ['name']
+        ]);
+        expect(await one(() => edit(hidden: true, position: 4)), [
+          'tag',
+          t,
+          {'position': 4, 'hidden': 1},
+          ['position', 'hidden']
+        ]);
+      });
+    }
+
+    test('refusals keep the old messages; holder-only entities are not edited by patch', () async {
+      final k = await repo.addCategory(name: 'Pets', kind: BudgetKind.flex);
+      final t = await repo.addTag('Trip');
+      await expectLater(repo.updateCategory(k, parent: 'Groceries'), _refused('Use a tag for this.'));
+      expect(() => repo.patch('category', k, {CategoryCols.parent: 'Groceries'}), _refused('Use a tag for this.'));
+      expect(() => repo.patch('category', k, {CategoryCols.position: -1}), _refused('Bad position.'));
+      expect(() => repo.patch('category', 'k000000000000', {CategoryCols.name: 'x'}), _refused('No such category.'));
+      expect(
+          () => repo.patch('category', k, {CategoryCols.kind: BudgetKind.fixed}), _refused('Kind: changed by its own action, not edited.'));
+      expect(() => repo.patch('tag', t, {TagCols.position: -1}), _refused('Bad position.'));
+      expect(() => repo.patch('tag', 'tnope', {TagCols.name: 'x'}), _refused('No such tag.'));
+      for (final (e, c) in <(String, Col)>[
+        ('txtag', TxTagCols.state),
+        ('ruletag', RuleTagCols.deleted),
+        ('split', SplitCols.parts),
+        ('review', ReviewCols.done),
+        ('payee_alias', PayeeAliasCols.payee),
+      ]) {
+        expect(() => repo.patch(e, 'x', {c: null}), _refused('Changed by its own actions, not edited.'), reason: e);
+      }
+      final before = repo.pendingOps().length;
+      await repo.updateCategory(k, clearParent: true);
+      expect(repo.pendingOps().length, before, reason: 'clearParent writes nothing');
+    });
+
+    test('rows read through the holders as before', () {
+      final c = CategoryRow.fromRow({'id': 'k1', 'name': 7, 'kind': 'nope', 'parent': '', 'position': 'x', 'hidden': 1});
+      expect([c.name, c.kind, c.parent, c.position, c.hidden, c.deleted], ['', null, null, null, true, false]);
+      expect(CategoryRow.fromRow({'id': 'k1', 'kind': 'fixed', 'parent': 'Rent', 'position': 2}).parent, 'Rent');
+      final r = TagRow.fromRow({'id': 't1', 'name': 'A', 'position': 5, 'deleted': 1});
+      expect([r.name, r.position, r.hidden, r.deleted], ['A', 5, false, true]);
+    });
+  });
+
   group('holders declare the schema', () {
     final holders = <String, List<Col>>{
       'iou': IouCols.all,
@@ -286,6 +393,13 @@ void main() {
       'goal_contrib': GoalContribCols.all,
       'wish': WishCols.all,
       'rule': RuleCols.all,
+      'category': CategoryCols.all,
+      'tag': TagCols.all,
+      'txtag': TxTagCols.all,
+      'ruletag': RuleTagCols.all,
+      'split': SplitCols.all,
+      'review': ReviewCols.all,
+      'payee_alias': PayeeAliasCols.all,
     };
     for (final h in holders.entries) {
       test('${h.key}: entitySchema uses ${h.key} Cols.all, each with a label', () {

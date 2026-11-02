@@ -60,21 +60,34 @@ extension WalletRepoTags on WalletRepo {
 
   /// Changes the given fields only (null = unchanged), on [id]'s whole duplicate group ([TagTable.resolve]), so the
   /// tag the owner sees changes as one. An unknown or deleted id, a bad or taken name, or a negative position:
-  /// [ArgumentError].
-  Future<void> updateTag(String id, {String? name, int? position, bool? hidden}) async {
+  /// [ArgumentError]. A thin wrapper over [patch] (F2).
+  Future<void> updateTag(String id, {String? name, int? position, bool? hidden}) async => patch(TagCols.entity, id, {
+        if (name != null) TagCols.name: name,
+        if (position != null) TagCols.position: position,
+        if (hidden != null) TagCols.hidden: hidden,
+      });
+
+  static const _tagEdited = <Col>{TagCols.name, TagCols.position, TagCols.hidden};
+
+  /// [patch] of a tag: [updateTag]'s rules, written to [id]'s whole duplicate group (position none = last).
+  int _patchTag(String id, Map<Col, Object?> v) {
+    WalletRepoPatch._needValues(v);
     final t = tagTable();
     if (!t.isLive(id)) throw ArgumentError('No such tag.');
+    final name = v[TagCols.name] as String?, position = v[TagCols.position] as int?, hidden = v[TagCols.hidden] as bool?;
     if (position != null && position < 0) throw ArgumentError('Bad position.');
     final group = _group(t, id);
     final n = name == null ? null : _checkTagName(name, t, except: group.toSet());
     final fields = <String, Object?>{
       if (n != null) 'name': n,
-      if (position != null) 'position': position,
+      if (v.containsKey(TagCols.position)) 'position': position,
       if (hidden != null) 'hidden': hidden ? 1 : 0,
+      ..._patchRest(v, _tagEdited),
     };
-    if (fields.isEmpty) return;
+    if (fields.isEmpty) return 0;
     _write([for (final g in group) ('tag', g, fields)]);
     logEvent(_log, Level.INFO, 'tag.update', {'fields': fields.length, 'group': group.length});
+    return fields.length;
   }
 
   /// Removes a tag (`deleted: 1`) with its whole duplicate group. Its links and rule tags stay, unused until

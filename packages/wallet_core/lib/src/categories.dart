@@ -1,5 +1,6 @@
 import 'package:wallet_importer/wallet_importer.dart' show TxKind, csvSourcePrefix;
 
+import 'cols.dart';
 import 'logs.dart';
 import 'models.dart';
 import 'rules.dart' show MerchantPattern, merchantPatternId;
@@ -52,6 +53,19 @@ bool isSpendingCategory(String category) => switch (categories[category]) { Budg
 
 BudgetKind kindOf(String category) => categories[category] ?? BudgetKind.flex;
 
+/// The columns of the synced entity `category` (table `categories`), in table order ([Col]; see `BillCols`).
+abstract final class CategoryCols {
+  static const entity = 'category';
+  static const name = TextCol(entity, 'name', label: 'Name', searchable: true, maxLength: CategoryRow.maxName);
+  static const kind = EnumCol(entity, 'kind', label: 'Kind', values: BudgetKind.values); // '' or unknown = not known yet
+  static const parent = RefCol(entity, 'parent', label: 'Parent', target: entity, nullable: true); // read, unused (T1)
+  static const position = IntCol(entity, 'position', label: 'Position', nullable: true);
+  static const hidden = FlagCol(entity, 'hidden', label: 'Hidden');
+  static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
+
+  static const all = <Col>[name, kind, parent, position, hidden, deleted];
+}
+
 /// One row of the synced `category` entity (P1, schema 10; table `categories`). A row whose [id] is a built-in name
 /// ([categories]) is an *override* of that built-in: only [name] (the label; empty = the built-in name), [hidden] and
 /// [position] count. Any other id (`k` + 12 hex) is a custom category of [kind]. [parent] is read but unused: P1's
@@ -93,12 +107,12 @@ class CategoryRow {
 
   static CategoryRow fromRow(Map<String, Object?> r) => CategoryRow(
         id: r['id'] as String,
-        name: r['name'] is String ? r['name'] as String : '',
-        kind: BudgetKind.values.asNameMap()[r['kind']],
-        parent: r['parent'] is String && (r['parent'] as String).isNotEmpty ? r['parent'] as String : null,
-        position: r['position'] is int ? r['position'] as int : null,
-        hidden: r['hidden'] == 1,
-        deleted: r['deleted'] == 1,
+        name: CategoryCols.name.read(r) ?? '',
+        kind: CategoryCols.kind.read(r),
+        parent: switch (CategoryCols.parent.read(r)) { final p? when p.isNotEmpty => p, _ => null },
+        position: CategoryCols.position.read(r),
+        hidden: CategoryCols.hidden.read(r)!,
+        deleted: CategoryCols.deleted.read(r)!,
       );
 }
 

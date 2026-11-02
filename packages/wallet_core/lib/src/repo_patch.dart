@@ -43,6 +43,10 @@ extension WalletRepoPatch on WalletRepo {
         written = _patchPlanned(id, checked);
       case RecurringCols.entity:
         written = _patchRecurring(id, checked);
+      case CategoryCols.entity:
+        written = _patchCategory(id, checked);
+      case TagCols.entity:
+        written = _patchTag(id, checked);
       default:
         final fields = _patchFields(checked);
         if (db.select('SELECT 1 FROM ${def.table} WHERE id = ?', [id]).isEmpty) throw ArgumentError('No such row.');
@@ -88,11 +92,13 @@ extension WalletRepoPatch on WalletRepo {
     'recurring': {'payee', 'status', 'last_paid_tx', 'deleted', 'manual', 'own_category', 'direction'},
     'goal': {'saved', 'deleted'}, // a total changes by contributions (saveGoal), never by its base
     'wish': {'added', 'status', 'decided', 'deleted'},
+    'category': {'kind', 'deleted'},
+    'tag': {'deleted'},
   };
 
   /// Entities changed by their own actions only (their writes keep rules a field edit would skip: matching, totals,
   /// links, repayments).
-  static const _actionEntities = {'iou_part', 'goal_contrib', 'rule'};
+  static const _actionEntities = {'iou_part', 'goal_contrib', 'rule', 'txtag', 'ruletag', 'split', 'review', 'payee_alias'};
 
   int _patchBill(String id, Map<Col, Object?> values) {
     final fields = _patchFields(values);

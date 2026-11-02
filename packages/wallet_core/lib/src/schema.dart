@@ -7,10 +7,13 @@ library;
 
 import 'dart:collection' show UnmodifiableMapView;
 
-import 'bills.dart' show BillCols;
+import 'bills.dart' show BillCols, PayeeAliasCols;
+import 'categories.dart' show CategoryCols;
 import 'ecb.dart' show FxDayCols;
 import 'models.dart'
-    show AccountCols, GoalCols, GoalContribCols, IouCols, IouPartCols, PlannedCols, RecurringCols, RuleCols, TxCols, WishCols;
+    show AccountCols, GoalCols, GoalContribCols, IouCols, IouPartCols, PlannedCols, RecurringCols, ReviewCols, RuleCols, TxCols, WishCols;
+import 'splits.dart' show SplitCols;
+import 'tags.dart' show RuleTagCols, TagCols, TxTagCols;
 
 /// How a synced column's values are stored and checked: text, an integer, or a 0/1 flag (a bool is stored as 0/1).
 enum ColumnType { text, integer, flag }
@@ -126,55 +129,25 @@ const Map<String, EntityDef> _schema = {
   // Accounts (v9, N2): the owner's bank and cash accounts with an opening balance (see `Account`, `AccountCols`).
   'account': EntityDef('accounts', AccountCols.all),
   // Categories (v10, P1): custom categories and subcategories, and overrides of the built-ins (see `CategoryRow`).
-  'category': EntityDef('categories', [
-    ColumnDef('name', searchable: true),
-    ColumnDef('kind'),
-    ColumnDef('parent', nullable: true),
-    ColumnDef.integer('position', nullable: true),
-    ColumnDef.flag('hidden'),
-    ColumnDef.flag('deleted'),
-  ]),
+  'category': EntityDef('categories', CategoryCols.all),
   // Tags (v11, T1): the owner's extra tags (see `TagRow`), per-row links (`<txId>|<tagId>`, state on/off) and
   // per-payee rule tags (`<payee>|<tagId>`).
-  'tag': EntityDef('tags', [
-    ColumnDef('name', searchable: true),
-    ColumnDef.integer('position', nullable: true),
-    ColumnDef.flag('hidden'),
-    ColumnDef.flag('deleted'),
-  ]),
-  'txtag': EntityDef('tx_tags', [
-    ColumnDef('tx'),
-    ColumnDef('tag'),
-    ColumnDef('state'),
-  ]),
-  'ruletag': EntityDef('rule_tags', [
-    ColumnDef('payee'),
-    ColumnDef('tag'),
-    ColumnDef.flag('deleted'),
-  ]),
+  'tag': EntityDef('tags', TagCols.all),
+  'txtag': EntityDef('tx_tags', TxTagCols.all),
+  'ruletag': EntityDef('rule_tags', RuleTagCols.all),
   // Split transactions (v13, P6): id = the tx id; the whole split is one JSON field (see `SplitPart`), so
   // last-writer-wins never mixes two devices' parts.
-  'split': EntityDef('tx_splits', [
-    ColumnDef('parts', defaultSql: "'[]'"),
-    ColumnDef.flag('deleted'),
-  ]),
+  'split': EntityDef('tx_splits', SplitCols.all),
   // IOUs (v17, Q8): money lent to or borrowed from a person (see `Iou`), and its repayments (`IouPart`). A payment
   // linked through `tx` is neither spending nor income (`Categorizer.iouTx`).
   'iou': EntityDef('ious', IouCols.all),
   'iou_part': EntityDef('iou_parts', IouPartCols.all, indexes: {'iou_parts_iou': 'iou_id'}),
   // Weekly reviews done (v18, V3): id = the review date (two devices reviewing on one day write the same row), `done`
   // = that date. The streak is read from these rows (`reviewStreak`), so two devices never overwrite each other's count.
-  'review': EntityDef('reviews', [
-    ColumnDef('done'),
-    ColumnDef.flag('deleted'),
-  ]),
+  'review': EntityDef('reviews', ReviewCols.all),
   // Payee aliases (v19, KL-A): id = `pa:` + 16 hex of the SHA-256 of [alias] (`payeeAliasId`); a slip's payee key
   // ([alias], `billPayeeKey` of the slip) read as the recurring bill payee key [payee] (one step, never a chain).
-  'payee_alias': EntityDef('payee_aliases', [
-    ColumnDef('alias'),
-    ColumnDef('payee'),
-    ColumnDef.flag('deleted'),
-  ]),
+  'payee_alias': EntityDef('payee_aliases', PayeeAliasCols.all),
   // ECB reference rates the wallet needs (v20, UX-FX): id `<CUR>:<YYYY-MM-DD>` (`fxDayId`), see `FxDayCols`. Written
   // only for the (currency, date) pairs the wallet needs (`WalletRepo.fillFxDays`); the full history stays in the
   // device-local `ecb_rates`.
