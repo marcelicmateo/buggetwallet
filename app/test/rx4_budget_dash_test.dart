@@ -25,8 +25,10 @@ void tw(String name, Future<void> Function(WidgetTester tester) body, {Timeout? 
       await tester.pump(const Duration(seconds: 4));
     }, timeout: timeout);
 
-Future<void> _show(WidgetTester t, WalletController wc, {Size size = const Size(400, 3000), double scale = 1}) =>
-    pumpApp(t, Scaffold(body: BudgetScreen(wc: wc)), size: size, textScale: scale);
+Future<void> _show(WidgetTester t, WalletController wc, {Size size = const Size(400, 3000), double scale = 1, bool spending = true}) {
+  if (spending) wc.setBudgetView('spending'); // the tiles under test are the Spending page; Explore is the tab's first page
+  return pumpApp(t, Scaffold(body: BudgetScreen(wc: wc)), size: size, textScale: scale);
+}
 
 /// Plan › Payday plan (it moved off the Budget tab in ENG E1).
 Future<void> _showPlan(WidgetTester t, WalletController wc, {Size size = const Size(400, 3000), double scale = 1}) =>
@@ -34,7 +36,7 @@ Future<void> _showPlan(WidgetTester t, WalletController wc, {Size size = const S
 
 void main() {
   group('RX4 the switch', () {
-    test('budgetView keeps spending and tags; anything else falls back to spending', () {
+    test('budgetView keeps explore, spending and tags; anything else falls back to explore', () {
       final wc = budgetWallet();
       addTearDown(wc.dispose);
       wc.setBudgetView('tags');
@@ -43,19 +45,22 @@ void main() {
       wc.setBudgetView('bogus');
       expect(wc.budgetView, 'tags', reason: 'an unknown view is ignored');
       wc.repo.setLocalValue('budgetView', 'old');
-      expect(wc.budgetView, 'spending', reason: 'an unknown stored value reads as the default');
+      expect(wc.budgetView, 'explore', reason: 'an unknown stored value reads as the default');
     });
 
-    tw('Explore opens on Spending, Tags is one tap away and the choice is remembered on the device', (t) async {
+    tw('Explore opens on Explore, Spending and Tags are one tap away and the choice is remembered on the device', (t) async {
       final wc = budgetWallet();
       addTearDown(wc.dispose);
-      expect(wc.budgetView, 'spending');
-      await _show(t, wc);
+      expect(wc.budgetView, 'explore');
+      await _show(t, wc, spending: false);
+      await t.tap(_key('budgetSpending'));
+      await t.pump(const Duration(milliseconds: 300));
       expect(_key('budgetSwitch'), findsOneWidget);
       expect(_key('outTile'), findsOneWidget);
       expect(_key('budgetPlan'), findsNothing, reason: 'the plan moved to Plan');
       expect(t.widget<SegmentedButton<String>>(_key('budgetSwitch')).selected, {'spending'});
 
+      await t.ensureVisible(_key('budgetTags')); // the switch scrolls sideways when the labels do not fit
       await t.tap(_key('budgetTags'));
       await t.pump(const Duration(milliseconds: 300));
       expect(wc.budgetView, 'tags');
@@ -64,14 +69,17 @@ void main() {
 
       // A new screen (an app restart) opens where the owner left it.
       await t.pumpWidget(const SizedBox());
-      await _show(t, wc);
+      await _show(t, wc, spending: false);
       expect(t.widget<SegmentedButton<String>>(_key('budgetSwitch')).selected, {'tags'});
 
       await t.tap(_key('budgetSpending'));
       await t.pump(const Duration(milliseconds: 300));
       expect(wc.budgetView, 'spending');
-      expect(wc.repo.localValue('budgetView'), isNull, reason: 'Spending is the default: nothing stored');
+      expect(wc.repo.localValue('budgetView'), 'spending');
       expect(_key('outTile'), findsOneWidget);
+      await t.tap(_key('budgetExplore'));
+      await t.pump(const Duration(milliseconds: 300));
+      expect(wc.repo.localValue('budgetView'), isNull, reason: 'Explore is the default: nothing stored');
     });
 
     tw('Plan opens on the payday plan, Saving is one tap away and the choice is remembered on the device', (t) async {
@@ -109,7 +117,7 @@ void main() {
       expect(t.widget<TextField>(find.widgetWithText(TextField, 'Rent')).controller!.text, '777');
     });
 
-    tw('a search request (Ctrl+F, the app bar) lands on Spending', (t) async {
+    tw('a search request (Ctrl+F, the app bar) lands on Explore', (t) async {
       final wc = budgetWallet()..setBudgetView('tags');
       addTearDown(wc.dispose);
       final request = ValueNotifier<int>(0);
@@ -118,7 +126,7 @@ void main() {
       expect(_key('budgetSwitch'), findsOneWidget);
       request.value++;
       await t.pump(const Duration(milliseconds: 300));
-      expect(wc.budgetView, 'spending');
+      expect(wc.budgetView, 'explore');
       expect(_key('outTile'), findsNothing, reason: 'the search view covers the page');
       expect(find.byKey(const ValueKey('searchField')).evaluate().isNotEmpty || find.byType(TextField).evaluate().isNotEmpty, isTrue);
     });

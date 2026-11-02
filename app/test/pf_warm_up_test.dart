@@ -2,9 +2,9 @@
 import 'package:budget_wallet/main.dart';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/screens/bills_tab.dart';
+import 'package:budget_wallet/src/screens/explore.dart';
 import 'package:budget_wallet/src/screens/save.dart';
 import 'package:budget_wallet/src/screens/settings.dart';
-import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/tabs.dart';
 import 'package:budget_wallet/src/theme.dart';
@@ -92,7 +92,7 @@ void main() {
       await t.sendKeyEvent(LogicalKeyboardKey.digit3);
       await t.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
       await t.pump();
-      expect(find.byType(SpendingScreen), findsOneWidget);
+      expect(find.byType(ExploreScreen), findsOneWidget);
       expect(_opacity(t, 'explore'), lessThan(0.2));
       await t.pump(const Duration(milliseconds: 250));
       expect(_opacity(t, 'explore'), 1);
@@ -104,16 +104,16 @@ void main() {
       final wc = demoWallet(clock: pinnedNoon);
       await _pumpShell(t, HomeShell(wc: wc));
       await _settle(t);
-      final spendingState = t.state(find.byType(SpendingScreen, skipOffstage: false));
-      final spendingWidget = t.widget(find.byType(SpendingScreen, skipOffstage: false));
+      final spendingState = t.state(find.byType(ExploreScreen, skipOffstage: false));
+      final spendingWidget = t.widget(find.byType(ExploreScreen, skipOffstage: false));
       final billsWidget = t.widget(find.byType(BillsScreen, skipOffstage: false));
       for (final tab in ['Explore', 'Money', 'Plan', 'Overview', 'Settings', 'Overview', 'Explore']) {
         // Settings is the gear on Overview (a phone-wide shell).
         await t.tap(tab == 'Settings' ? find.byKey(const ValueKey('openSettings')) : find.text(tab).last);
         await t.pump(const Duration(milliseconds: 250));
       }
-      expect(identical(t.state(find.byType(SpendingScreen)), spendingState), isTrue);
-      expect(identical(t.widget(find.byType(SpendingScreen)), spendingWidget), isTrue, reason: 'no new page for a switch');
+      expect(identical(t.state(find.byType(ExploreScreen)), spendingState), isTrue);
+      expect(identical(t.widget(find.byType(ExploreScreen)), spendingWidget), isTrue, reason: 'no new page for a switch');
       expect(identical(t.widget(find.byType(BillsScreen, skipOffstage: false)), billsWidget), isTrue);
       await _settle(t);
     });
@@ -142,10 +142,10 @@ void main() {
       await _pumpShell(t, HomeShell(wc: wc));
       await t.tap(find.text('Explore').last);
       await t.pump();
-      expect(find.byType(SpendingScreen, skipOffstage: false), findsNothing);
+      expect(find.byType(ExploreScreen, skipOffstage: false), findsNothing);
       expect(_opacity(t, 'explore'), 0, reason: 'nothing to show yet');
       var frames = 0;
-      while (find.byType(SpendingScreen, skipOffstage: false).evaluate().isEmpty && frames < 100) {
+      while (find.byType(ExploreScreen, skipOffstage: false).evaluate().isEmpty && frames < 100) {
         await t.pump(_frame);
         frames++;
       }
@@ -162,14 +162,14 @@ void main() {
       final wc = demoWallet(clock: pinnedNoon);
       await _pumpShell(t, ListenableBuilder(listenable: wc, builder: (context, child) => HomeShell(wc: wc)));
       await _settle(t);
-      final old = t.widget(find.byType(SpendingScreen, skipOffstage: false));
+      final old = t.widget(find.byType(ExploreScreen, skipOffstage: false));
       wc.addExpense(amount: -700, category: 'Groceries', note: 'x', date: wc.today());
       await t.pump();
       await t.tap(find.text('Explore').last);
       await t.pump();
-      expect(identical(t.widget(find.byType(SpendingScreen)), old), isTrue, reason: 'the old page, at once');
+      expect(identical(t.widget(find.byType(ExploreScreen)), old), isTrue, reason: 'the old page, at once');
       await _settle(t);
-      expect(identical(t.widget(find.byType(SpendingScreen)), old), isFalse, reason: 'then the page for the new data');
+      expect(identical(t.widget(find.byType(ExploreScreen)), old), isFalse, reason: 'then the page for the new data');
       await t.pumpWidget(const SizedBox());
       wc.dispose();
       await _settle(t);
@@ -182,7 +182,7 @@ void main() {
       final wc = demoWallet(clock: pinnedNoon);
       await _pumpShell(t, HomeShell(wc: wc));
       expect(find.byType(TodayScreen), findsOneWidget);
-      expect(find.byType(SpendingScreen, skipOffstage: false), findsNothing);
+      expect(find.byType(ExploreScreen, skipOffstage: false), findsNothing);
       expect(find.byType(SettingsScreen, skipOffstage: false), findsNothing);
       // Open Settings before its turn: it has no data to wait for, so it is there a frame later
       await t.tap(find.byKey(const ValueKey('openSettings')));
@@ -191,7 +191,7 @@ void main() {
       await t.pump(_frame);
       expect(find.byType(SettingsScreen), findsOneWidget);
       await _settle(t);
-      for (final type in [TodayScreen, SpendingScreen, BillsScreen, SaveScreen, SettingsScreen]) {
+      for (final type in [TodayScreen, ExploreScreen, BillsScreen, SaveScreen, SettingsScreen]) {
         expect(find.byType(type, skipOffstage: false), findsOneWidget, reason: '$type is built by now');
       }
     });
@@ -356,10 +356,10 @@ void main() {
       _background();
       final wc = demoWallet(clock: pinnedNoon);
       await _pumpShell(t, HomeShell(wc: wc));
-      expect(find.byType(SpendingScreen, skipOffstage: false), findsNothing);
+      expect(find.byType(ExploreScreen, skipOffstage: false), findsNothing);
       t.widget<TodayScreen>(find.byType(TodayScreen)).openSearch!();
       await t.pump();
-      expect(find.byType(SpendingScreen, skipOffstage: false), findsNothing, reason: 'its data is being worked out first');
+      expect(find.byType(ExploreScreen, skipOffstage: false), findsNothing, reason: 'its data is being worked out first');
       for (var i = 0; i < 60; i++) {
         await t.pump(_frame);
       }
@@ -383,7 +383,7 @@ void main() {
       expect(t.widget<TodayScreen>(find.byType(TodayScreen)).view, isNotNull);
       await _settle(t);
       expect(t.widget<BillsScreen>(find.byType(BillsScreen, skipOffstage: false)).wc, same(second));
-      expect(t.widget<SpendingScreen>(find.byType(SpendingScreen, skipOffstage: false)).wc, same(second));
+      expect(t.widget<ExploreScreen>(find.byType(ExploreScreen, skipOffstage: false)).wc, same(second));
     });
 
     testWidgets('a new day restarts the warm-up and refreshes the hidden pages', (t) async {

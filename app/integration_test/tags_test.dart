@@ -4,7 +4,7 @@ import 'dart:async';
 
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/screens/insights.dart';
-import 'package:budget_wallet/src/screens/tag_detail.dart';
+import 'package:budget_wallet/src/screens/project.dart';
 import 'package:budget_wallet/src/screens/tags_window.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:flutter/material.dart';
@@ -70,7 +70,7 @@ void main() {
       await Harness.shot(t, 'insights-tags-$name');
       await tapVisible(t, find.byKey(ValueKey('tagRow_$holiday')));
       await t.pumpAndSettle();
-      expect(find.byType(TagDetailScreen), findsOneWidget);
+      expect(find.byType(ProjectScreen), findsOneWidget);
       await Harness.shot(t, 'tag-detail-$name');
       await t.tap(find.byKey(const ValueKey('sheetClose')).last);
       await t.pumpAndSettle();

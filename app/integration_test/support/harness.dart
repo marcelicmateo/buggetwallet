@@ -357,6 +357,14 @@ Future<void> goTab(WidgetTester t, String label) async {
     await t.tap(find.byKey(const ValueKey('planSaving')));
     await t.pumpAndSettle();
   }
+  if (label == 'Budget') {
+    // The old Budget tab was the Spending page; Explore (E4) is the new first page of the tab.
+    final spending = find.byKey(const ValueKey('budgetSpending')); // not there while the search covers the page
+    if (spending.evaluate().isNotEmpty) {
+      await t.tap(spending);
+      await t.pumpAndSettle();
+    }
+  }
 }
 
 /// Opens Budget › Tags (main tags, tags, rules); scroll it with `scrollTo(t, f, TagsWindow)`.

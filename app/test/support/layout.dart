@@ -123,4 +123,12 @@ Future<void> tapTab(WidgetTester tester, String label) async {
     await tester.tap(find.byKey(const ValueKey('planSaving')));
     await settle();
   }
+  if (label == 'Budget') {
+    // The old Budget tab was the Spending page; Explore (E4) is the new first page of the tab.
+    final spending = find.byKey(const ValueKey('budgetSpending')); // not there while the search covers the page
+    if (spending.evaluate().isNotEmpty) {
+      await tester.tap(spending);
+      await settle();
+    }
+  }
 }

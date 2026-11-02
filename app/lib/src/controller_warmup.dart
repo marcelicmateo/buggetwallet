@@ -26,6 +26,8 @@ extension WarmUpTasks on WalletController {
           ('latestBySource', () => latestBySource),
         ],
       Tabs.explore => <WarmTask>[
+          ('exploreIndex', () => exploreIndex),
+          ('exploreQuery', () => exploreRows(exploreDefaultQuery())), // the Explore page's first build
           ('period', period),
           ('payPeriods', () => payPeriods(count: 12)),
           for (final m in monthsEnding(month, 13)) ('monthSummary', () => monthSummaryFor(m)),

@@ -7,6 +7,7 @@ import 'package:budget_wallet/src/platform.dart';
 import 'package:budget_wallet/src/screens/accounts_panel.dart';
 import 'package:budget_wallet/src/screens/bills_tab.dart';
 import 'package:budget_wallet/src/screens/category_detail.dart';
+import 'package:budget_wallet/src/screens/explore.dart';
 import 'package:budget_wallet/src/screens/insights.dart';
 import 'package:budget_wallet/src/screens/key_backup.dart';
 import 'package:budget_wallet/src/screens/onboarding.dart';
@@ -153,6 +154,16 @@ void main() {
             await settingsSection(t, SettingsSection.accounts);
           }
         }
+
+        where = 'explore';
+        debugPrint('layout $name: $where');
+        await goTab(t, 'Budget');
+        await tapVisible(t, find.byKey(const ValueKey('budgetExplore')));
+        await t.pumpAndSettle();
+        await scrollThrough(t, ExploreScreen, '$name-explore', shots: 4);
+        await tapVisible(t, find.byKey(const ValueKey('exploreRange:All')));
+        await t.pumpAndSettle();
+        await scrollThrough(t, ExploreScreen, '$name-explore-all', shots: 4);
 
         where = 'tx-sheet';
         debugPrint('layout $name: $where');
