@@ -46,7 +46,7 @@ Finder get _anyDot => find.byWidgetPredicate((w) => w.key is ValueKey<String> &&
 
 Offset _at(WidgetTester tester, String date) => tester.getTopLeft(find.byKey(ValueKey('dayDot:$date')));
 
-/// The real IBM Plex fonts: the hero number's width decides beside or under, and the test font (Ahem) is far wider.
+/// The real Manrope and JetBrains Mono fonts: the hero number's width decides beside or under, and the test font (Ahem) is far wider.
 Future<void> _loadFonts() async {
   await loadAppFonts();
 }

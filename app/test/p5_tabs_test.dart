@@ -401,12 +401,12 @@ void main() {
   });
 
   group('links from Today', () {
-    tw('the payday link ("Open Budget") opens Plan › Payday plan', (t) async {
+    tw('the payday link ("Open Plan") opens Plan › Payday plan', (t) async {
       final wc = habitsWallet();
       wc.updateSettings({'salaryConfirmed': false});
       addTearDown(wc.dispose);
       await pumpFull(t, wc, 1.0, size: const Size(400, 900));
-      final open = find.text('Open Budget');
+      final open = find.text('Open Plan');
       await _scrollInto(t, open, TodayScreen);
       await t.ensureVisible(open);
       await t.pump();

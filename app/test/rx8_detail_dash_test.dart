@@ -1,6 +1,6 @@
 // RX8: tag and category detail as Paper Tiles dashboards (hero total, compare tiles, per-month bars, merchants, payments), and the grid
 // on wide windows: the column count per width, no overflow at 1024 / 1280 / 1920 (also at text scale 2.0) and the same reading order as
-// the phone on every dashboard. SYNTHETIC wallets; the real Plex fonts are loaded (the test font is far wider).
+// the phone on every dashboard. SYNTHETIC wallets; the real fonts are loaded (the test font is far wider).
 
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';

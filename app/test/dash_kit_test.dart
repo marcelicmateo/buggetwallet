@@ -1,5 +1,5 @@
 // The dashboard kit (RX2, lib/src/widgets/dash.dart): no overflow at 320 dp x 2.0, 360 and 1280, light and dark; exact cents;
-// states in icon + word; grid columns per width; semantics. SYNTHETIC numbers. Real Plex fonts (the test font is far wider).
+// states in icon + word; grid columns per width; semantics. SYNTHETIC numbers. Real fonts (Manrope, JetBrains Mono) (the test font is far wider).
 
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/theme.dart';

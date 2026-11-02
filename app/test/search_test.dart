@@ -141,13 +141,15 @@ void main() {
       await pumpApp(t, _page(wc, openTab: tabs.add, openBills: () => bills++));
       await _open(t);
       await _type(t, 'synth');
+      expect(wc.planView, 'payday');
       await t.tap(find.text('Synthetic holiday'));
+      expect(wc.planView, 'saving', reason: 'a goal link picks Plan › Saving before it opens Plan');
       await t.tap(find.text('Synthetic lamp'));
       final bill = find.textContaining('Confirmed');
       await t.ensureVisible(bill);
       await t.tap(bill);
-      expect(tabs, [Tabs.plan], reason: 'a goal jumps to Save');
-      expect(hooked, [Tabs.plan], reason: 'a wish goes through openWish: Save, and the wish is the one to show');
+      expect(tabs, [Tabs.plan], reason: 'a goal jumps to Plan');
+      expect(hooked, [Tabs.plan], reason: 'a wish goes through openWish: Plan, and the wish is the one to show');
       expect(wc.highlightWish.value, wc.wish.firstWhere((w) => w.name == 'Synthetic lamp').id);
       expect(bills, 1);
       final tx = find.byType(TxTile).first;

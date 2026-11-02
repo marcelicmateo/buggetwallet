@@ -266,11 +266,6 @@ class _SearchIntent extends Intent {
   const _SearchIntent();
 }
 
-/// Ctrl+K: jump to Explore and open its search, from any screen.
-class _ExploreIntent extends Intent {
-  const _ExploreIntent();
-}
-
 /// Ctrl combinations and F5 only: plain keys must stay free for typing.
 final _shortcuts = <ShortcutActivator, Intent>{
   for (final (i, k) in [
@@ -285,7 +280,7 @@ final _shortcuts = <ShortcutActivator, Intent>{
   const SingleActivator(LogicalKeyboardKey.f5): const _SyncIntent(),
   const SingleActivator(LogicalKeyboardKey.comma, control: true): const _SettingsIntent(),
   const SingleActivator(LogicalKeyboardKey.keyF, control: true): const _SearchIntent(),
-  const SingleActivator(LogicalKeyboardKey.keyK, control: true): const _ExploreIntent(),
+  const SingleActivator(LogicalKeyboardKey.keyK, control: true): const _SearchIntent(), // Ctrl+K and Ctrl+F: search in Explore
 };
 
 class _HomeShellState extends State<HomeShell> {
@@ -488,12 +483,13 @@ class _HomeShellState extends State<HomeShell> {
     logNav('nav.tab', {'from': Tabs.names[tab], 'to': Tabs.names[i], 'via': via});
     AppLog.setScreen(Tabs.names[i]);
     // A page that was not built yet, or for older data, waits for its data (`_prepare`; at once when the background work is off).
-    // Overview and Plan (the wishlist) show the time of day (delivery hour, hours left): they get a fresh build when opened.
+    // Overview and Plan › Saving (the wishlist) show the time of day (delivery hour, hours left): they get a fresh build when opened
+    // (Plan builds Saving again when the switch moves to it, so the payday plan is not rebuilt on every visit).
     // The data they use is cached in the controller, so this is cheap.
     final stale = _pageKeys[i] != _pagesKey;
     if (stale && WarmUp.enabled) {
       _prepare(i);
-    } else if (stale || i == Tabs.overview || i == Tabs.plan) {
+    } else if (stale || i == Tabs.overview || (i == Tabs.plan && widget.wc.planView == 'saving')) {
       _build(i, _pagesKey!);
     }
     setState(() => tab = i);
@@ -546,9 +542,7 @@ class _HomeShellState extends State<HomeShell> {
     _SyncIntent: CallbackAction<_SyncIntent>(onInvoke: (_) => _key('sync', _syncNow)),
     _SettingsIntent: CallbackAction<_SettingsIntent>(onInvoke: (_) => _key('ctrlComma', () => _go(Tabs.settings, 'key'))),
     _SearchIntent:
-        CallbackAction<_SearchIntent>(onInvoke: (_) => _key('ctrlF', () => _goThen(Tabs.explore, 'key', () => _searchRequest.value++))),
-    _ExploreIntent:
-        CallbackAction<_ExploreIntent>(onInvoke: (_) => _key('ctrlK', () => _goThen(Tabs.explore, 'key', () => _searchRequest.value++))),
+        CallbackAction<_SearchIntent>(onInvoke: (_) => _key('search', () => _goThen(Tabs.explore, 'key', () => _searchRequest.value++))),
   };
 
   // The parent rebuilds this widget when the wallet changes; build() then makes new pages if the data or the day moved on.

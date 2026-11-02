@@ -31,6 +31,7 @@ extension WarmUpTasks on WalletController {
           for (final m in monthsEnding(month, 13)) ('monthSummary', () => monthSummaryFor(m)),
           ('averageSpending', () => averageSpending(month)),
           ('spending', spending),
+          ('budgetVsActual', () => this.budgetVsActual(month)), // Spending's first build reads it
         ],
       Tabs.money => <WarmTask>[
           ('billLists', billLists),

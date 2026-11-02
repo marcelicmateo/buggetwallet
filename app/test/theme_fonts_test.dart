@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:budget_wallet/src/theme.dart';
+import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/fonts.dart';
@@ -54,10 +55,14 @@ void main() {
     expect(p, contains('$fontDir/OFL-JetBrainsMono.txt'));
   });
 
-  test('the fonts README records a sha256 for every file', () {
+  test('the fonts README records the real sha256 of every file', () async {
     final r = File('$fontDir/README.md').readAsStringSync();
     for (final f in files) {
-      expect(r, contains(f), reason: f);
+      final line = r.split('\n').firstWhere((l) => l.contains(f), orElse: () => fail('$f is not in the README'));
+      final recorded = RegExp(r'[0-9a-f]{64}').firstMatch(line)?.group(0) ?? fail('no sha256 on the README line of $f');
+      final actual =
+          (await Sha256().hash(File('$fontDir/$f').readAsBytesSync())).bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+      expect(actual, recorded, reason: f);
     }
   });
 

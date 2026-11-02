@@ -443,7 +443,7 @@ class _RepaymentSheetState extends State<RepaymentSheet> {
       Muted('Which IOU did ${moneyExact(t.amount, t.currency)} pay back? The payment then is not counted as income.'),
       const SizedBox(height: 10),
       if (options.isEmpty)
-        const EmptyNote('No open IOU is owed at least this much. Add one in Save › Owed first.', key: ValueKey('repayNone'))
+        const EmptyNote('No open IOU is owed at least this much. Add one in Plan › Saving first.', key: ValueKey('repayNone'))
       else
         Rows(children: [
           for (final v in options)

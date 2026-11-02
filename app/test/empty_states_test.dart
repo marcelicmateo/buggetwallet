@@ -85,7 +85,7 @@ void main() {
     expect(_has(seen, 'No transactions yet'), isTrue);
     expect(_has(seen, 'No goals yet'), isTrue);
     expect(_has(seen, 'None yet'), isTrue);
-    expect(_has(seen, 'Enter your monthly salary in Budget'), isTrue, reason: 'salary 0 asks for the number instead of dividing by it');
+    expect(_has(seen, 'Enter your monthly salary in Plan'), isTrue, reason: 'salary 0 asks for the number instead of dividing by it');
   });
 
   _scenario('one income transaction only', (wc) {

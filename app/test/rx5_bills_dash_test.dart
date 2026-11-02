@@ -1,7 +1,7 @@
 // Stage RX5: the Bills tab as a Paper Tiles dashboard (Before payday, Per month, Per year, Until payday, To review, Expected bills with
 // one state chip each). Fixed clock (20 Oct 2026; the period ends 1 Nov), SYNTHETIC data only. Numbers come from core
 // (`beforePayday`, `billsCost`); these tests pin what the tiles show per state, that the anchors still jump, exact cents, and that
-// the page fits 320 dp at text 2.0, 360, 411 and 1280 dp, light and dark. Real Plex fonts (the test font is far wider).
+// the page fits 320 dp at text 2.0, 360, 411 and 1280 dp, light and dark. Real fonts (Manrope, JetBrains Mono) (the test font is far wider).
 
 import 'package:budget_wallet/main.dart';
 import 'package:budget_wallet/src/controller.dart';
