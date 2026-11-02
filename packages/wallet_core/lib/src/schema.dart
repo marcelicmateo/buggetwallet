@@ -9,7 +9,8 @@ import 'dart:collection' show UnmodifiableMapView;
 
 import 'bills.dart' show BillCols;
 import 'ecb.dart' show FxDayCols;
-import 'models.dart' show AccountCols, IouCols, IouPartCols, PlannedCols, RecurringCols, TxCols;
+import 'models.dart'
+    show AccountCols, GoalCols, GoalContribCols, IouCols, IouPartCols, PlannedCols, RecurringCols, RuleCols, TxCols, WishCols;
 
 /// How a synced column's values are stored and checked: text, an integer, or a 0/1 flag (a bool is stored as 0/1).
 enum ColumnType { text, integer, flag }
@@ -110,33 +111,12 @@ const Map<String, EntityDef> _schema = {
     'tx_date': 'date',
     'tx_amount': 'amount'
   }),
-  'goal': EntityDef('goals', [
-    ColumnDef('name', nullable: true, searchable: true),
-    ColumnDef.integer('target', searchable: true),
-    ColumnDef.integer('saved', searchable: true),
-    ColumnDef.integer('monthly'),
-    ColumnDef.integer('sort'),
-    ColumnDef.flag('deleted'),
-  ]),
-  'wish': EntityDef('wish', [
-    ColumnDef('name', nullable: true, searchable: true),
-    ColumnDef.integer('price', searchable: true),
-    ColumnDef.integer('added'),
-    ColumnDef('status', defaultSql: "'waiting'"),
-    ColumnDef.integer('decided', nullable: true),
-    ColumnDef.flag('deleted'),
-  ]),
+  'goal': EntityDef('goals', GoalCols.all),
+  'wish': EntityDef('wish', WishCols.all),
   'setting': EntityDef('settings', [ColumnDef('value', nullable: true), ColumnDef.flag('deleted')]),
-  'rule': EntityDef('merchant_rules', [ColumnDef('category', nullable: true), ColumnDef.flag('deleted')]),
+  'rule': EntityDef('merchant_rules', RuleCols.all),
   // Amounts added to a goal's saved total, one row each (see `WalletRepo.addGoalContribution`).
-  'goal_contrib': EntityDef('goal_contrib', [
-    ColumnDef('goal_id'),
-    ColumnDef.integer('amount'),
-    ColumnDef('date'),
-    ColumnDef.flag('deleted'),
-  ], indexes: {
-    'goal_contrib_goal': 'goal_id'
-  }),
+  'goal_contrib': EntityDef('goal_contrib', GoalContribCols.all, indexes: {'goal_contrib_goal': 'goal_id'}),
   // Recurring bills (v5): detected candidates and the owner's confirm/dismiss decisions (see `RecurringBill`).
   'recurring': EntityDef('recurring', RecurringCols.all),
   // Planned costs (v6, §4.3): hand-added, calendar events given an amount or dismissed (see `PlannedCost`).

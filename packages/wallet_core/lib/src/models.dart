@@ -247,6 +247,20 @@ List<Tx> wholePayments(Iterable<CategorizedTx> rows) {
 /// parts of one payment keep their stored order (List.sort is not stable).
 int comparePart(CategorizedTx a, CategorizedTx b) => (a.part ?? -1).compareTo(b.part ?? -1);
 
+/// The columns of the synced entity `goal` (table `goals`), in table order ([Col]; see [BillCols]). `target` and
+/// `saved` take any synced whole number (no amount cap: `goalTotal` clamps when read).
+abstract final class GoalCols {
+  static const entity = 'goal';
+  static const name = TextCol(entity, 'name', label: 'Name', nullable: true, searchable: true);
+  static const target = IntCol(entity, 'target', label: 'Target', searchable: true);
+  static const saved = IntCol(entity, 'saved', label: 'Saved', searchable: true); // the base; adds are `goal_contrib` rows
+  static const monthly = MoneyCol(entity, 'monthly', label: 'Monthly');
+  static const sort = IntCol(entity, 'sort', label: 'Order');
+  static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
+
+  static const all = <Col>[name, target, saved, monthly, sort, deleted];
+}
+
 class Goal {
   final String id;
   final String name;
@@ -267,11 +281,11 @@ class Goal {
 
   static Goal fromRow(Map<String, Object?> r) => Goal(
         id: r['id'] as String,
-        name: _str(r['name']) ?? 'Goal',
-        target: _int(r['target']) ?? 0,
-        saved: _int(r['saved']) ?? 0,
-        monthly: _int(r['monthly']) ?? 0,
-        sort: _int(r['sort']) ?? 0,
+        name: GoalCols.name.read(r) ?? 'Goal',
+        target: GoalCols.target.read(r) ?? 0,
+        saved: GoalCols.saved.read(r) ?? 0,
+        monthly: GoalCols.monthly.read(r) ?? 0,
+        sort: GoalCols.sort.read(r) ?? 0,
       );
 
   Goal withSaved(int saved) => Goal(id: id, name: name, target: target, saved: saved, monthly: monthly, sort: sort);
@@ -290,6 +304,18 @@ int goalTotal(int base, Iterable<int> contributions, {bool clamped = true}) {
   return clamped ? sum.clamp(-Goal.maxSaved, Goal.maxSaved) : sum;
 }
 
+/// The columns of the synced entity `goal_contrib` (table `goal_contrib`), in table order ([Col]; see [BillCols]).
+/// `amount` takes any synced whole number (no amount cap: each row counts at most [Goal.maxContribution]).
+abstract final class GoalContribCols {
+  static const entity = 'goal_contrib';
+  static const goalId = RefCol(entity, 'goal_id', label: 'Goal', target: GoalCols.entity);
+  static const amount = IntCol(entity, 'amount', label: 'Amount');
+  static const date = DateCol(entity, 'date', label: 'Date');
+  static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
+
+  static const all = <Col>[goalId, amount, date, deleted];
+}
+
 /// An amount added to a goal's saved total (negative for a correction), synced as its own row (`goal_contrib`), so
 /// adds made on two offline devices both count. Hidden while its goal is deleted or missing.
 class GoalContribution {
@@ -304,11 +330,33 @@ class GoalContribution {
 
   static GoalContribution fromRow(Map<String, Object?> r) => GoalContribution(
         id: r['id'] as String,
-        goalId: _str(r['goal_id']) ?? '',
-        amount: _int(r['amount']) ?? 0,
-        date: _str(r['date']) ?? '',
+        goalId: GoalContribCols.goalId.read(r) ?? '',
+        amount: GoalContribCols.amount.read(r) ?? 0,
+        date: GoalContribCols.date.read(r) ?? '',
         created: _str(r['created']),
       );
+}
+
+/// The columns of the synced entity `wish` (table `wish`), in table order ([Col]; see [BillCols]).
+abstract final class WishCols {
+  static const entity = 'wish';
+  static const name = TextCol(entity, 'name', label: 'Name', nullable: true, searchable: true);
+  static const price = MoneyCol(entity, 'price', label: 'Price', searchable: true);
+  static const added = IntCol(entity, 'added', label: 'Added'); // epoch millis
+  static const status = TextCol(entity, 'status', label: 'Status', defaultValue: 'waiting'); // waiting | bought | skipped
+  static const decided = IntCol(entity, 'decided', label: 'Decided', nullable: true); // epoch millis
+  static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
+
+  static const all = <Col>[name, price, added, status, decided, deleted];
+}
+
+/// The columns of the synced entity `rule` (table `merchant_rules`): a payee key's category (id = the payee key).
+abstract final class RuleCols {
+  static const entity = 'rule';
+  static const category = TextCol(entity, 'category', label: 'Category', nullable: true);
+  static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
+
+  static const all = <Col>[category, deleted];
 }
 
 class WishItem {
@@ -322,11 +370,11 @@ class WishItem {
 
   static WishItem fromRow(Map<String, Object?> r) => WishItem(
         id: r['id'] as String,
-        name: _str(r['name']) ?? '',
-        price: _int(r['price']) ?? 0,
-        added: _int(r['added']) ?? 0,
-        status: _str(r['status']) ?? 'waiting',
-        decided: _int(r['decided']),
+        name: WishCols.name.read(r) ?? '',
+        price: WishCols.price.read(r) ?? 0,
+        added: WishCols.added.read(r) ?? 0,
+        status: WishCols.status.read(r)!,
+        decided: WishCols.decided.read(r),
       );
 
   double hoursLeft(int coolHours, int nowMillis) => (added + coolHours * 3600000 - nowMillis) / 3600000;

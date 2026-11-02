@@ -86,11 +86,13 @@ extension WalletRepoPatch on WalletRepo {
     'iou': {'closed', 'deleted'},
     'planned': {'source', 'source_ref', 'status', 'paid_tx', 'deleted', 'auto_off'},
     'recurring': {'payee', 'status', 'last_paid_tx', 'deleted', 'manual', 'own_category', 'direction'},
+    'goal': {'saved', 'deleted'}, // a total changes by contributions (saveGoal), never by its base
+    'wish': {'added', 'status', 'decided', 'deleted'},
   };
 
   /// Entities changed by their own actions only (their writes keep rules a field edit would skip: matching, totals,
   /// links, repayments).
-  static const _actionEntities = {'iou_part'};
+  static const _actionEntities = {'iou_part', 'goal_contrib', 'rule'};
 
   int _patchBill(String id, Map<Col, Object?> values) {
     final fields = _patchFields(values);

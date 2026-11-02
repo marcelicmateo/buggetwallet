@@ -183,12 +183,109 @@ void main() {
     });
   });
 
+  group('batch 2: goal, goal_contrib, wish, rule', () {
+    // [entity, id, fields] per op (lists compare deeply, records with maps do not).
+    List<List<Object?>> fresh(int before) => [
+          for (final o in repo.pendingOps().skip(before).map((e) => e.$2)) [o.entity, o.id, o.fields]
+        ];
+
+    test('saveGoal keeps its ops: a create, then an edit with a new total = goal fields + one contribution', () {
+      var before = repo.pendingOps().length;
+      final g = repo.saveGoal(name: 'Bike', target: 90000, saved: 1000, monthly: 5000, sort: 7);
+      expect(fresh(before), [
+        [
+          'goal',
+          g,
+          {'name': 'Bike', 'target': 90000, 'saved': 1000, 'monthly': 5000, 'sort': 7, 'deleted': 0}
+        ],
+      ]);
+      before = repo.pendingOps().length;
+      repo.saveGoal(id: g, name: 'Bike', target: 95000, saved: 1500, monthly: 5000, sort: 7);
+      final ops = fresh(before);
+      expect(ops.first, [
+        'goal',
+        g,
+        {'name': 'Bike', 'target': 95000, 'monthly': 5000, 'sort': 7, 'deleted': 0}
+      ]);
+      expect(ops.last[0], 'goal_contrib');
+      expect((ops.last[2] as Map).keys.toList(), ['goal_id', 'amount', 'date', 'deleted']);
+      expect([(ops.last[2] as Map)['goal_id'], (ops.last[2] as Map)['amount'], (ops.last[2] as Map)['deleted']], [g, 500, 0]);
+    });
+
+    test('addWish and decideWish keep their ops', () {
+      var before = repo.pendingOps().length;
+      final w = repo.addWish('Lamp', 4999);
+      final add = fresh(before).single, af = add[2] as Map;
+      expect(af.keys.toList(), ['name', 'price', 'added', 'status', 'deleted']);
+      expect([add[0], af['name'], af['price'], af['status'], af['deleted']], ['wish', 'Lamp', 4999, 'waiting', 0]);
+      before = repo.pendingOps().length;
+      repo.decideWish(w, 'skipped');
+      final d = fresh(before).single, df = d[2] as Map;
+      expect([
+        d[0],
+        d[1],
+        df.keys.toList(),
+        df['status']
+      ], [
+        'wish',
+        w,
+        ['status', 'decided'],
+        'skipped'
+      ]);
+    });
+
+    test('patch edits a goal or wish field as one op, in the map order', () {
+      final g = repo.saveGoal(name: 'Bike', target: 90000, saved: 0, monthly: 5000, sort: 7);
+      final w = repo.addWish('Lamp', 4999);
+      final before = repo.pendingOps().length;
+      repo.patch('goal', g, {GoalCols.monthly: 6000, GoalCols.name: 'E-bike', GoalCols.target: 100000, GoalCols.sort: 2});
+      repo.patch('wish', w, {WishCols.price: 3999, WishCols.name: 'Desk lamp'});
+      expect(fresh(before), [
+        [
+          'goal',
+          g,
+          {'monthly': 6000, 'name': 'E-bike', 'target': 100000, 'sort': 2}
+        ],
+        [
+          'wish',
+          w,
+          {'price': 3999, 'name': 'Desk lamp'}
+        ],
+      ]);
+      expect(repo.goals().single.name, 'E-bike');
+      expect(repo.wishlist().single.price, 3999);
+    });
+
+    test('patch refuses the action-only columns and entities', () {
+      final g = repo.saveGoal(name: 'Bike', target: 90000, saved: 0, monthly: 5000, sort: 7);
+      final w = repo.addWish('Lamp', 4999);
+      expect(() => repo.patch('goal', g, {GoalCols.saved: 5}), _refused('Saved: changed by its own action, not edited.'));
+      expect(() => repo.patch('wish', w, {WishCols.status: 'bought'}), _refused('Status: changed by its own action, not edited.'));
+      expect(() => repo.patch('goal', g, {GoalCols.monthly: WalletSettings.maxAmount + 1}), _refused('Monthly: Over the allowed amount.'));
+      expect(() => repo.patch('goal_contrib', 'c', {GoalContribCols.amount: 1}), _refused('Changed by its own actions, not edited.'));
+      expect(() => repo.patch('rule', 'x', {RuleCols.category: 'Rent'}), _refused('Changed by its own actions, not edited.'));
+      expect(() => repo.patch('goal', 'nope', {GoalCols.name: 'x'}), _refused('No such row.'));
+    });
+
+    test('rows read through the holders as before', () {
+      expect(Goal.fromRow({'id': 'g', 'name': null, 'target': 'x'}).name, 'Goal');
+      expect(Goal.fromRow({'id': 'g', 'target': 'x', 'saved': -5}).target, 0);
+      expect(Goal.fromRow({'id': 'g', 'saved': -5}).saved, -5);
+      expect(WishItem.fromRow({'id': 'w', 'status': null}).status, 'waiting');
+      expect(GoalContribution.fromRow({'id': 'c', 'amount': -300, 'created': 'h'}).created, 'h');
+    });
+  });
+
   group('holders declare the schema', () {
     final holders = <String, List<Col>>{
       'iou': IouCols.all,
       'iou_part': IouPartCols.all,
       'planned': PlannedCols.all,
       'recurring': RecurringCols.all,
+      'goal': GoalCols.all,
+      'goal_contrib': GoalContribCols.all,
+      'wish': WishCols.all,
+      'rule': RuleCols.all,
     };
     for (final h in holders.entries) {
       test('${h.key}: entitySchema uses ${h.key} Cols.all, each with a label', () {

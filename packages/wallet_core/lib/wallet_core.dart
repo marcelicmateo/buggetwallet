@@ -249,6 +249,8 @@ export 'src/models.dart'
         comparePart,
         FxRate,
         Goal,
+        GoalCols,
+        GoalContribCols,
         GoalContribution,
         goalTotal,
         instalmentsLeft,
@@ -267,11 +269,13 @@ export 'src/models.dart'
         RecurringPeriod,
         resetInvalidSettingLog,
         ReviewState,
+        RuleCols,
         ReviewStep,
         Tx,
         TxCols,
         WalletSettings,
         wholePayments,
+        WishCols,
         WishItem;
 export 'src/periods.dart' show detectPaydays, periodSummaries, PeriodSummary, salaryPaydays, SavingsOverview, savingsOverview, trendNet;
 export 'src/planned.dart'
