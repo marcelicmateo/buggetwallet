@@ -9,6 +9,7 @@ import 'currencies.dart' show currencyInfo;
 import 'dates.dart';
 import 'ecb.dart' show EcbRates;
 import 'logs.dart';
+import 'planned.dart' show legacyRowCapCents;
 import 'rules.dart' show MerchantPattern, merchantPatternId;
 
 final _log = Logger('bw.settings');
@@ -357,6 +358,42 @@ enum RecurringPeriod {
 /// Whether `recurring.invalid` was logged in this process (once, field name only; see [RecurringBill.fromRow]).
 var _invalidRangeLogged = false;
 
+/// The columns of the synced entity `recurring` (table `recurring`), in table order ([Col]; see [BillCols]). Row
+/// amounts keep the synced cap of rows imported before Stage Q ([legacyRowCapCents]); typed ones are checked lower.
+abstract final class RecurringCols {
+  static const entity = 'recurring';
+  static const payee = TextCol(entity, 'payee', label: 'Payee');
+  static const label = TextCol(entity, 'label', label: 'Name', searchable: true);
+  static const category = TextCol(entity, 'category', label: 'Category', searchable: true);
+  static const expectedAmount =
+      MoneyCol(entity, 'expected_amount', label: 'Amount', searchable: true, positive: true, cap: legacyRowCapCents);
+  // Out of range reads as the monthly interval.
+  static const intervalDays = IntCol(entity, 'interval_days',
+      label: 'Repeats every',
+      defaultValue: RecurringBill.defaultIntervalDays,
+      min: RecurringBill.minIntervalDays,
+      max: RecurringBill.maxIntervalDays,
+      unit: 'days');
+  static const nextDue = DateCol(entity, 'next_due', label: 'Next due');
+  // candidate | confirmed | dismissed, with the `in:` prefix for an income (`RecurringBill.storedStatus`).
+  static const status = TextCol(entity, 'status', label: 'Status', defaultValue: 'candidate');
+  static const lastPaidTx = RefCol(entity, 'last_paid_tx', label: 'Last paid by', target: 'tx', nullable: true);
+  static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
+  // P4 (v12): amount range (cents), last due date of an instalment plan, added by hand.
+  static const minAmount = MoneyCol(entity, 'min_amount', label: 'Lowest amount', nullable: true, cap: legacyRowCapCents);
+  static const maxAmount = MoneyCol(entity, 'max_amount', label: 'Highest amount', nullable: true, cap: legacyRowCapCents);
+  static const endsOn = DateCol(entity, 'ends_on', label: 'Last due date', nullable: true);
+  static const manual = FlagCol(entity, 'manual', label: 'Added by hand');
+  static const ownCategory = FlagCol(entity, 'own_category', label: 'Own category'); // the owner chose the category
+  // P9 (v14): null/'out' = a bill, 'in' = a recurring income.
+  static const direction = TextCol(entity, 'direction', label: 'Direction', nullable: true);
+
+  static const all = <Col>[
+    payee, label, category, expectedAmount, intervalDays, nextDue, status, lastPaidTx, deleted, //
+    minAmount, maxAmount, endsOn, manual, ownCategory, direction,
+  ];
+}
+
 /// A bill that comes back on a fixed interval ([intervalDays]: weekly … yearly, P4): detected from bank rows
 /// (`detectRecurring`, status `candidate`), then confirmed or dismissed by the owner, or added by hand ([manual],
 /// `addRecurring`, confirmed at once). Synced entity `recurring`; a detected bill's id is `rec:<payee>` so every device
@@ -541,33 +578,29 @@ class RecurringBill {
   /// invalid stored range is kept as stored but reads as no range ([hasRange] false; logged once per process as
   /// `recurring.invalid`, field name only).
   static RecurringBill fromRow(Map<String, Object?> r) {
-    final interval = _int(r['interval_days']);
-    final lo = _int(r['min_amount']), hi = _int(r['max_amount']);
+    final lo = RecurringCols.minAmount.read(r), hi = RecurringCols.maxAmount.read(r);
+    final status = RecurringCols.status.read(r)!;
     if ((lo != null || hi != null) && !validRange(lo, hi) && !_invalidRangeLogged) {
       _invalidRangeLogged = true;
       logEvent(_recurringLog, Level.WARNING, 'recurring.invalid', {'field': 'amount_range'});
     }
     return RecurringBill(
       id: r['id'] as String,
-      payee: _str(r['payee']) ?? '',
-      label: _str(r['label']) ?? '',
-      category: _str(r['category']) ?? '',
-      expectedAmount: _int(r['expected_amount']) ?? 0,
-      intervalDays: interval == null || interval < minIntervalDays || interval > maxIntervalDays ? defaultIntervalDays : interval,
-      nextDue: _str(r['next_due']) ?? '',
-      status: switch (_str(r['status'])) {
-        null => 'candidate',
-        final s when s.startsWith(incomeStatusPrefix) => s.substring(incomeStatusPrefix.length),
-        final s => s,
-      },
-      lastPaidTx: _str(r['last_paid_tx']),
+      payee: RecurringCols.payee.read(r) ?? '',
+      label: RecurringCols.label.read(r) ?? '',
+      category: RecurringCols.category.read(r) ?? '',
+      expectedAmount: RecurringCols.expectedAmount.read(r) ?? 0,
+      intervalDays: RecurringCols.intervalDays.read(r)!,
+      nextDue: RecurringCols.nextDue.read(r) ?? '',
+      status: status.startsWith(incomeStatusPrefix) ? status.substring(incomeStatusPrefix.length) : status,
+      lastPaidTx: RecurringCols.lastPaidTx.read(r),
       minAmount: lo,
       maxAmount: hi,
-      endsOn: switch (_str(r['ends_on'])) { final e? when isIsoDate(e) => e, _ => null }, // a bad stored date = no end
-      manual: _int(r['manual']) == 1,
-      ownCategory: _int(r['own_category']) == 1,
+      endsOn: RecurringCols.endsOn.read(r), // a bad stored date = no end
+      manual: RecurringCols.manual.read(r)!,
+      ownCategory: RecurringCols.ownCategory.read(r)!,
       // An `in:` status marks an income even where `direction` was lost (a snapshot written by an older build).
-      direction: _str(r['direction']) ?? ((_str(r['status']) ?? '').startsWith(incomeStatusPrefix) ? directionIn : null),
+      direction: RecurringCols.direction.read(r) ?? (status.startsWith(incomeStatusPrefix) ? directionIn : null),
     );
   }
 
@@ -707,6 +740,22 @@ class Account extends RowModel {
 /// Which way an [Iou]'s money went: the owner lent it to the person (they owe the owner) or borrowed it from them.
 enum IouDirection { lent, borrowed }
 
+/// The columns of the synced entity `iou` (table `ious`), in table order ([Col]; see [BillCols]).
+abstract final class IouCols {
+  static const entity = 'iou';
+  static const person = TextCol(entity, 'person', label: 'Person', searchable: true, maxLength: Iou.maxPerson);
+  static const direction = EnumCol(entity, 'direction', label: 'Direction', values: IouDirection.values, defaultValue: IouDirection.lent);
+  static const amount = MoneyCol(entity, 'amount', label: 'Amount', positive: true);
+  static const currency = TextCol(entity, 'currency', label: 'Currency', defaultValue: 'EUR');
+  static const date = DateCol(entity, 'date', label: 'Date');
+  static const note = TextCol(entity, 'note', label: 'Note', nullable: true, searchable: true, maxLength: Iou.maxNote);
+  static const tx = RefCol(entity, 'tx', label: 'Payment', target: 'tx', nullable: true);
+  static const closed = FlagCol(entity, 'closed', label: 'Closed');
+  static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
+
+  static const all = <Col>[person, direction, amount, currency, date, note, tx, closed, deleted];
+}
+
 /// Money lent to or borrowed from a person (Q8), synced entity `iou` (schema 17). [amount] is positive cents in
 /// [currency]; [tx] is the payment the owner linked as the loan itself (lent: an outflow, borrowed: an inflow), which
 /// then counts as neither spending nor income (`Categorizer.iouTx`). An IOU without a link changes no number.
@@ -742,16 +791,28 @@ class Iou {
   /// An unknown stored direction (a newer build's word) reads as lent.
   static Iou fromRow(Map<String, Object?> r) => Iou(
         id: r['id'] as String,
-        person: _str(r['person']) ?? '',
-        direction: _str(r['direction']) == IouDirection.borrowed.name ? IouDirection.borrowed : IouDirection.lent,
-        amount: _int(r['amount']) ?? 0,
-        currency: _str(r['currency']) ?? 'EUR',
-        date: _str(r['date']) ?? '',
-        note: _str(r['note']),
-        tx: _str(r['tx']),
-        closed: r['closed'] == 1,
-        deleted: r['deleted'] == 1,
+        person: IouCols.person.read(r) ?? '',
+        direction: IouCols.direction.read(r)!,
+        amount: IouCols.amount.read(r) ?? 0,
+        currency: IouCols.currency.read(r)!,
+        date: IouCols.date.read(r) ?? '',
+        note: IouCols.note.read(r),
+        tx: IouCols.tx.read(r),
+        closed: IouCols.closed.read(r)!,
+        deleted: IouCols.deleted.read(r)!,
       );
+}
+
+/// The columns of the synced entity `iou_part` (table `iou_parts`), in table order ([Col]; see [BillCols]).
+abstract final class IouPartCols {
+  static const entity = 'iou_part';
+  static const iouId = RefCol(entity, 'iou_id', label: 'IOU', target: IouCols.entity);
+  static const amount = MoneyCol(entity, 'amount', label: 'Amount', positive: true);
+  static const date = DateCol(entity, 'date', label: 'Date');
+  static const tx = RefCol(entity, 'tx', label: 'Payment', target: 'tx', nullable: true);
+  static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
+
+  static const all = <Col>[iouId, amount, date, tx, deleted];
 }
 
 /// One repayment of an [Iou] (Q8), synced entity `iou_part`: positive cents in the IOU's currency, on [date]; [tx] is
@@ -768,11 +829,11 @@ class IouPart {
 
   static IouPart fromRow(Map<String, Object?> r) => IouPart(
         id: r['id'] as String,
-        iouId: _str(r['iou_id']) ?? '',
-        amount: _int(r['amount']) ?? 0,
-        date: _str(r['date']) ?? '',
-        tx: _str(r['tx']),
-        deleted: r['deleted'] == 1,
+        iouId: IouPartCols.iouId.read(r) ?? '',
+        amount: IouPartCols.amount.read(r) ?? 0,
+        date: IouPartCols.date.read(r) ?? '',
+        tx: IouPartCols.tx.read(r),
+        deleted: IouPartCols.deleted.read(r)!,
       );
 }
 
@@ -795,6 +856,25 @@ enum PlannedSource { manual, calendar, bill }
 /// open: reserves money until its date has passed; paid: the owner picked the transaction that paid it ([PlannedCost.paidTx]);
 /// skipped: not coming (also a dismissed calendar event).
 enum PlannedStatus { open, paid, skipped }
+
+/// The columns of the synced entity `planned` (table `planned`), in table order ([Col]; see [BillCols]).
+abstract final class PlannedCols {
+  static const entity = 'planned';
+  static const title = TextCol(entity, 'title', label: 'Title', searchable: true);
+  static const date = DateCol(entity, 'date', label: 'Date');
+  static const amount = MoneyCol(entity, 'amount', label: 'Amount', nullable: true, searchable: true, positive: true);
+  static const category = TextCol(entity, 'category', label: 'Category', nullable: true, searchable: true);
+  static const source = EnumCol(entity, 'source', label: 'Source', values: PlannedSource.values, defaultValue: PlannedSource.manual);
+  static const sourceRef = TextCol(entity, 'source_ref', label: 'Source ref', nullable: true);
+  static const status = EnumCol(entity, 'status', label: 'Status', values: PlannedStatus.values, defaultValue: PlannedStatus.open);
+  static const paidTx = RefCol(entity, 'paid_tx', label: 'Paid by', target: 'tx', nullable: true);
+  static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
+  // v19 (KL-A): the bank rows the owner reopened this cost from after it was paid by them, a JSON list
+  // (`PlannedCost.autoOff`): auto-Paid (`planAutoPaid`) never picks one of them again.
+  static const autoOff = JsonCol(entity, 'auto_off', label: 'Not paid by', nullable: true);
+
+  static const all = <Col>[title, date, amount, category, source, sourceRef, status, paidTx, deleted, autoOff];
+}
 
 /// A planned future cost (§4.3), synced entity `planned` (schema 6). Amounts are positive cents (a cost).
 class PlannedCost {
@@ -863,16 +943,16 @@ class PlannedCost {
   /// Unknown `source`/`status` words (a newer build) read as manual/open; a damaged amount reads as null.
   static PlannedCost fromRow(Map<String, Object?> r) => PlannedCost(
         id: r['id'] as String,
-        title: _str(r['title']) ?? '',
-        date: _str(r['date']) ?? '',
-        amount: _int(r['amount']),
-        category: _str(r['category']),
-        sourceRef: _str(r['source_ref']),
-        paidTx: _str(r['paid_tx']),
-        source: PlannedSource.values.asNameMap()[r['source']] ?? PlannedSource.manual,
-        status: PlannedStatus.values.asNameMap()[r['status']] ?? PlannedStatus.open,
-        deleted: r['deleted'] == 1,
-        autoOff: _idList(r['auto_off']),
+        title: PlannedCols.title.read(r) ?? '',
+        date: PlannedCols.date.read(r) ?? '',
+        amount: PlannedCols.amount.read(r),
+        category: PlannedCols.category.read(r),
+        sourceRef: PlannedCols.sourceRef.read(r),
+        paidTx: PlannedCols.paidTx.read(r),
+        source: PlannedCols.source.read(r)!,
+        status: PlannedCols.status.read(r)!,
+        deleted: PlannedCols.deleted.read(r)!,
+        autoOff: _idList(PlannedCols.autoOff.read(r)),
       );
 }
 

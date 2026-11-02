@@ -130,29 +130,54 @@ extension WalletRepoIou on WalletRepo {
 
   /// Changes the given fields of live IOU [id]; [clearNote] / [clearTx] remove the note / the linked payment. The
   /// result is checked as in [addIou]; the amount cannot drop below what was paid back, and every linked payment (the
-  /// IOU's and its repayments') must still fit the direction and currency. Only changed fields are written.
+  /// IOU's and its repayments') must still fit the direction and currency. Only changed fields are written. A thin
+  /// wrapper over [patch] (F2).
   void updateIou(String id,
-      {String? person,
-      IouDirection? direction,
-      int? amount,
-      String? currency,
-      String? date,
-      String? note,
-      String? tx,
-      bool clearNote = false,
-      bool clearTx = false}) {
+          {String? person,
+          IouDirection? direction,
+          int? amount,
+          String? currency,
+          String? date,
+          String? note,
+          String? tx,
+          bool clearNote = false,
+          bool clearTx = false}) =>
+      patch(IouCols.entity, id, {
+        if (person != null) IouCols.person: person,
+        if (direction != null) IouCols.direction: direction,
+        if (amount != null) IouCols.amount: amount,
+        if (currency != null) IouCols.currency: currency,
+        if (date != null) IouCols.date: date,
+        if (clearNote) IouCols.note: clearValue else if (note != null) IouCols.note: note,
+        if (clearTx) IouCols.tx: clearValue else if (tx != null) IouCols.tx: tx,
+      });
+
+  static const _iouEdited = <Col>{
+    IouCols.person,
+    IouCols.direction,
+    IouCols.amount,
+    IouCols.currency,
+    IouCols.date,
+    IouCols.note,
+    IouCols.tx
+  };
+
+  /// [patch] of an IOU: [updateIou]'s rules.
+  int _patchIou(String id, Map<Col, Object?> v) {
+    WalletRepoPatch._needValues(v);
     final old = _iou(id);
     if (old.deleted) throw ArgumentError('No such IOU.');
+    final person = v[IouCols.person] as String?, note = v[IouCols.note] as String?;
     final p = person == null ? old.person : _checkPerson(person);
-    final d = direction ?? old.direction;
-    final a = amount ?? old.amount;
+    final d = v[IouCols.direction] as IouDirection? ?? old.direction;
+    final a = v[IouCols.amount] as int? ?? old.amount;
     _checkIouAmount(a);
-    final c = currency ?? old.currency;
+    final c = v[IouCols.currency] as String? ?? old.currency;
     if (!_currency.hasMatch(c)) throw ArgumentError('Bad currency (three capital letters, like EUR).');
-    final dt = date ?? old.date;
+    final dt = v[IouCols.date] as String? ?? old.date;
     _checkIouDate(dt);
-    final n = clearNote ? null : (note == null ? old.note : _checkNote(note));
-    final t = clearTx ? null : (tx ?? old.tx);
+    final n = v.containsKey(IouCols.note) && note == null ? null : (note == null ? old.note : _checkNote(note));
+    final t = v.containsKey(IouCols.tx) ? v[IouCols.tx] as String? : old.tx;
     final parts = _liveParts(id);
     final repaid = parts.fold(0, (s, x) => s + x.amount);
     if (a < repaid) throw ArgumentError('The amount cannot be less than what was already paid back.');
@@ -173,10 +198,12 @@ extension WalletRepoIou on WalletRepo {
       if (dt != old.date) 'date': dt,
       if (n != old.note) 'note': n,
       if (t != old.tx) 'tx': t,
+      ..._patchRest(v, _iouEdited),
     };
-    if (fields.isEmpty) return;
+    if (fields.isEmpty) return 0;
     _write([('iou', id, fields)]);
     logEvent(_log, Level.INFO, 'iou.edit', {'fields': fields.length, 'linked': t != null});
+    return fields.length;
   }
 
   /// Deletes IOU [id] (its repayments stay stored and come back with [undeleteIou]); its links stop counting.

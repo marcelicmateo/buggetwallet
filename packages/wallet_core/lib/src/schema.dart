@@ -9,7 +9,7 @@ import 'dart:collection' show UnmodifiableMapView;
 
 import 'bills.dart' show BillCols;
 import 'ecb.dart' show FxDayCols;
-import 'models.dart' show AccountCols, TxCols;
+import 'models.dart' show AccountCols, IouCols, IouPartCols, PlannedCols, RecurringCols, TxCols;
 
 /// How a synced column's values are stored and checked: text, an integer, or a 0/1 flag (a bool is stored as 0/1).
 enum ColumnType { text, integer, flag }
@@ -138,42 +138,9 @@ const Map<String, EntityDef> _schema = {
     'goal_contrib_goal': 'goal_id'
   }),
   // Recurring bills (v5): detected candidates and the owner's confirm/dismiss decisions (see `RecurringBill`).
-  'recurring': EntityDef('recurring', [
-    ColumnDef('payee'),
-    ColumnDef('label', searchable: true),
-    ColumnDef('category', searchable: true),
-    ColumnDef.integer('expected_amount', searchable: true),
-    ColumnDef.integer('interval_days', defaultSql: '30'),
-    ColumnDef('next_due'),
-    ColumnDef('status', defaultSql: "'candidate'"),
-    ColumnDef('last_paid_tx', nullable: true),
-    ColumnDef.flag('deleted'),
-    // P4 (v12): amount range (cents), last due date of an instalment plan, added by hand.
-    ColumnDef.integer('min_amount', nullable: true),
-    ColumnDef.integer('max_amount', nullable: true),
-    ColumnDef('ends_on', nullable: true),
-    ColumnDef.flag('manual'),
-    ColumnDef.flag('own_category'), // the owner chose the category (updateRecurring/addRecurring)
-    // P9 (v14): null/'out' = a bill, 'in' = a recurring income.
-    ColumnDef('direction', nullable: true),
-  ]),
+  'recurring': EntityDef('recurring', RecurringCols.all),
   // Planned costs (v6, §4.3): hand-added, calendar events given an amount or dismissed (see `PlannedCost`).
-  'planned': EntityDef('planned', [
-    ColumnDef('title', searchable: true),
-    ColumnDef('date'),
-    ColumnDef.integer('amount', nullable: true, searchable: true),
-    ColumnDef('category', nullable: true, searchable: true),
-    ColumnDef('source', defaultSql: "'manual'"),
-    ColumnDef('source_ref', nullable: true),
-    ColumnDef('status', defaultSql: "'open'"),
-    ColumnDef('paid_tx', nullable: true),
-    ColumnDef.flag('deleted'),
-    // v19 (KL-A): the bank rows the owner reopened this cost from after it was paid by them, a JSON list
-    // (`PlannedCost.autoOff`): auto-Paid ([planAutoPaid]) never picks one of them again.
-    ColumnDef('auto_off', nullable: true),
-  ], indexes: {
-    'planned_date': 'date'
-  }),
+  'planned': EntityDef('planned', PlannedCols.all, indexes: {'planned_date': 'date'}),
   // Bills (v7, stage B): receipts, slips, e-invoices, PDFs and photos (see `Bill`; columns typed in `BillCols`).
   'bill': EntityDef('bills', BillCols.all, indexes: {'bills_date': 'date', 'bills_linked': 'linked_tx'}),
   // Accounts (v9, N2): the owner's bank and cash accounts with an opening balance (see `Account`, `AccountCols`).
@@ -213,26 +180,8 @@ const Map<String, EntityDef> _schema = {
   ]),
   // IOUs (v17, Q8): money lent to or borrowed from a person (see `Iou`), and its repayments (`IouPart`). A payment
   // linked through `tx` is neither spending nor income (`Categorizer.iouTx`).
-  'iou': EntityDef('ious', [
-    ColumnDef('person', searchable: true),
-    ColumnDef('direction', defaultSql: "'lent'"),
-    ColumnDef.integer('amount'),
-    ColumnDef('currency', defaultSql: "'EUR'"),
-    ColumnDef('date'),
-    ColumnDef('note', nullable: true, searchable: true),
-    ColumnDef('tx', nullable: true),
-    ColumnDef.flag('closed'),
-    ColumnDef.flag('deleted'),
-  ]),
-  'iou_part': EntityDef('iou_parts', [
-    ColumnDef('iou_id'),
-    ColumnDef.integer('amount'),
-    ColumnDef('date'),
-    ColumnDef('tx', nullable: true),
-    ColumnDef.flag('deleted'),
-  ], indexes: {
-    'iou_parts_iou': 'iou_id'
-  }),
+  'iou': EntityDef('ious', IouCols.all),
+  'iou_part': EntityDef('iou_parts', IouPartCols.all, indexes: {'iou_parts_iou': 'iou_id'}),
   // Weekly reviews done (v18, V3): id = the review date (two devices reviewing on one day write the same row), `done`
   // = that date. The streak is read from these rows (`reviewStreak`), so two devices never overwrite each other's count.
   'review': EntityDef('reviews', [

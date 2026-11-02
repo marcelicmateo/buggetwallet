@@ -18,6 +18,7 @@ extension WalletRepoPatch on WalletRepo {
   void patch(String entity, String id, Map<Col, Object?> values) {
     final def = entitySchema[entity];
     if (def == null) throw ArgumentError('Unknown entity.');
+    if (_actionEntities.contains(entity)) throw ArgumentError('Changed by its own actions, not edited.');
     final checked = <Col, Object?>{};
     for (final e in values.entries) {
       final c = e.key;
@@ -26,12 +27,22 @@ extension WalletRepoPatch on WalletRepo {
       if (!c.accepts(v)) throw ArgumentError('${c.label}: wrong kind of value.');
       checked[c] = v;
     }
+    final locked = _actionFields[entity] ?? const {};
+    for (final c in checked.keys) {
+      if (locked.contains(c.name)) throw ArgumentError('${c.label}: changed by its own action, not edited.');
+    }
     final int written;
     switch (entity) {
       case BillCols.entity:
         written = _patchBill(id, checked);
       case AccountCols.entity:
         written = _patchAccount(id, checked);
+      case IouCols.entity:
+        written = _patchIou(id, checked);
+      case PlannedCols.entity:
+        written = _patchPlanned(id, checked);
+      case RecurringCols.entity:
+        written = _patchRecurring(id, checked);
       default:
         final fields = _patchFields(checked);
         if (db.select('SELECT 1 FROM ${def.table} WHERE id = ?', [id]).isEmpty) throw ArgumentError('No such row.');
@@ -52,16 +63,36 @@ extension WalletRepoPatch on WalletRepo {
     return {for (final MapEntry(key: c, value: v) in values.entries) c.name: v == null ? null : c.encode(v)};
   }
 
-  /// Bill columns only their own actions change (confirm, link, attach, delete, import …).
-  static const _billActionFields = {
-    'source', 'status', 'external_id', 'currency', 'unsure', 'linked_tx', 'blob', 'blob_type', 'blob_bytes', 'deleted', //
-    'attached_tx',
+  /// The given values of the columns not in [handled], checked ([_patchFields]): a column an entity's own rules do not
+  /// know (one added later) is written as given.
+  Map<String, Object?> _patchRest(Map<Col, Object?> values, Set<Col> handled) => _patchFields({
+        for (final e in values.entries)
+          if (!handled.contains(e.key)) e.key: e.value
+      });
+
+  /// None (null) for a non-nullable column: `ArgumentError('<label>: Needs a value.')`, before an entity's own checks.
+  static void _needValues(Map<Col, Object?> values) {
+    for (final e in values.entries) {
+      if (e.value == null && !e.key.nullable) throw ArgumentError('${e.key.label}: Needs a value.');
+    }
+  }
+
+  /// Per entity, the columns only their own actions change (confirm, link, attach, delete, import, pay, close …).
+  static const _actionFields = <String, Set<String>>{
+    'bill': {
+      'source', 'status', 'external_id', 'currency', 'unsure', 'linked_tx', 'blob', 'blob_type', 'blob_bytes', 'deleted', //
+      'attached_tx',
+    },
+    'iou': {'closed', 'deleted'},
+    'planned': {'source', 'source_ref', 'status', 'paid_tx', 'deleted', 'auto_off'},
+    'recurring': {'payee', 'status', 'last_paid_tx', 'deleted', 'manual', 'own_category', 'direction'},
   };
 
+  /// Entities changed by their own actions only (their writes keep rules a field edit would skip: matching, totals,
+  /// links, repayments).
+  static const _actionEntities = {'iou_part'};
+
   int _patchBill(String id, Map<Col, Object?> values) {
-    for (final c in values.keys) {
-      if (_billActionFields.contains(c.name)) throw ArgumentError('${c.label}: changed by its own action, not edited.');
-    }
     final fields = _patchFields(values);
     final b = _liveBill(id);
     if (fields.isEmpty) return 0;
