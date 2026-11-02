@@ -7,6 +7,7 @@
 // index only: a drag frame never walks the payments again.
 import 'dart:convert';
 
+import 'accounts.dart' show RowAccounts;
 import 'budget.dart' show countsAsSpending;
 import 'categories.dart' show BudgetKind, CategoryTable;
 import 'cols.dart';
@@ -177,12 +178,17 @@ class DayIndex {
   /// `merchantGroupKey` per description: a bank row's key depends on its description only.
   final Map<String, String> _keyByDescription = {};
 
+  /// The counting rule for account series ([SeriesKind.account]); null: a row's `tx.account` as stored.
+  final RowAccounts? _owners;
+
   DayIndex._(this.table, this._currency, this._days, this._spentP, this._incomeP, this._extraP, this._rows, this._rowDay, this._byCategory,
-      this._byTag, this._money, this._moneyDay)
+      this._byTag, this._money, this._moneyDay, this._owners)
       : _merchant = List<String?>.filled(_rows.length, null),
         _moneyMerchant = List<String?>.filled(_money.length, null);
 
-  factory DayIndex(List<CategorizedTx> expanded, {required String currency, CategoryTable? table}) {
+  /// [accounts]: every account (`WalletRepo.accounts`), so an account series counts the rows [RowAccounts] gives it (a
+  /// main account's rows without `tx.account` included, as its balance does).
+  factory DayIndex(List<CategorizedTx> expanded, {required String currency, CategoryTable? table, Iterable<Account>? accounts}) {
     final epochOf = <String, int>{};
     final rows = <CategorizedTx>[], rowE = <int>[];
     final money = <CategorizedTx>[], moneyE = <int>[]; // income and extra rows
@@ -229,7 +235,8 @@ class DayIndex {
       income[i] += income[i - 1];
       extra[i] += extra[i - 1];
     }
-    return DayIndex._(table, currency, days, spent, income, extra, rows, rowDay, byCategory, byTag, money, moneyDay);
+    return DayIndex._(table, currency, days, spent, income, extra, rows, rowDay, byCategory, byTag, money, moneyDay,
+        accounts == null ? null : RowAccounts(accounts));
   }
 
   /// The wallet currency the sums are in.

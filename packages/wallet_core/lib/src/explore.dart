@@ -4,11 +4,12 @@ part of 'series.dart';
 // window (quarters and years: the whole history). Pure, ints only. Saved queries are the synced entity `view`.
 
 /// What a query sums: spending (the "Where it goes" rule, refunds subtracted), money in (income + extra, as
-/// `monthSummary`), kept (money in − spending) or the number of payments out.
+/// `monthSummary`), kept (money in − spending) or count: the spending payments below zero (refunds are not payments).
 enum Measure { spent, cameIn, kept, count }
 
 /// What one series filters on: the row's main tag (its category), an extra tag, a payee (`merchantGroupKey`) or an
-/// account (`tx.account`).
+/// account (the [RowAccounts] counting rule when the [DayIndex] was given the accounts, else `tx.account`; opening dates
+/// are not applied: Explore shows money moved, not balances).
 enum SeriesKind { mainTag, tag, payee, account }
 
 class SeriesKey {
@@ -186,6 +187,7 @@ extension _Query on DayIndex {
     if (hit != null) return hit;
     final money = m == Measure.cameIn;
     final rows = money ? _money : _rows, day = money ? _moneyDay : _rowDay, merchant = money ? _moneyMerchant : _merchant;
+    final owners = _owners;
     final p = List<int>.filled(this._days.length + 1, 0); // `this.`: the top-level _days() shadows the field here
     for (var i = 0; i < rows.length; i++) {
       final t = rows[i];
@@ -193,8 +195,7 @@ extension _Query on DayIndex {
             SeriesKind.mainTag => t.category == k.id,
             SeriesKind.tag => t.tags.contains(k.id),
             SeriesKind.payee => (merchant[i] ??= _keyOf(t.tx)) == k.id,
-            SeriesKind.account => t.tx.account ==
-                k.id, // shortcut: rows without tx.account (the main account's) match no key; pass accounts if Explore needs RowAccounts' fallback
+            SeriesKind.account => (owners == null ? t.tx.account : owners.accountOf(t.tx)) == k.id,
           });
       if (!hit) continue;
       p[day[i] + 1] += switch (m) {

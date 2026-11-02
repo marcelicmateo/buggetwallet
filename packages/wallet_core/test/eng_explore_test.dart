@@ -132,6 +132,47 @@ void main() {
     expect(runQuery(ix, q(Measure.spent, const [], Bucket.month, w), today: today).single.together, 0);
   });
 
+  test('account series follow RowAccounts: a main account counts its rows without tx.account, as its balance does', () {
+    Account acc(String id, String source, {String? matchKey}) => Account(
+        id: id, name: 'A $id', source: source, currency: 'EUR', opening: 0, openingDate: '2025-12-31', deleted: false, matchKey: matchKey);
+    CategorizedTx on(String date, int cents, String category, String account) {
+      final t = Tx(id: 'k-$date-$cents', source: 'pbz', date: date, amount: cents, description: 'POS SYNTH', account: account);
+      return CategorizedTx(t, category, BudgetKind.flex);
+    }
+
+    final accounts = [acc('main', 'pbz'), acc('keyed', 'pbz', matchKey: 'ak:0000000000000001'), acc('rev', 'revolut')];
+    final rows = [
+      row('2026-01-10', 200000, 'Salary'),
+      row('2026-01-12', -4500, 'Groceries'),
+      row('2026-02-03', 1200, 'Groceries'), // refund
+      row('2026-03-20', -9900, 'Shopping'),
+      on('2026-02-14', -7000, 'Shopping', 'keyed'),
+      row('2026-02-15', -3000, 'Groceries', source: 'revolut'),
+      row('2026-07-01', -100, 'Groceries'), // after the window
+    ];
+    final w = dr('2026-01-01', '2026-06-30');
+    const main = SeriesKey(SeriesKind.account, 'main'), keyed = SeriesKey(SeriesKind.account, 'keyed');
+    final ix = DayIndex(rows, currency: 'EUR', accounts: accounts);
+    final res = runQuery(ix, q(Measure.kept, [main, keyed], Bucket.quarter, w), today: today);
+    int balanceOn(String id, String day) => accountBalances(accounts, [
+          for (final t in rows)
+            if (t.date.compareTo(day) <= 0) t.tx
+        ]).firstWhere((b) => b.account.id == id).balance;
+    for (final (k, id) in [(main, 'main'), (keyed, 'keyed')]) {
+      expect(res.fold<int>(0, (s, r) => s + r.cents[k]!), balanceOn(id, w.end) - balanceOn(id, '2025-12-31'), reason: id);
+    }
+    expect(res.first.cents[main], 200000 - 4500 + 1200 - 9900);
+    expect(
+        runQuery(ix, q(Measure.spent, [const SeriesKey(SeriesKind.account, 'rev')], Bucket.quarter, w), today: today)
+            .first
+            .cents
+            .values
+            .single,
+        3000);
+    // Without the accounts only a stored tx.account counts (the main account's rows have none).
+    expect(runQuery(DayIndex(rows, currency: 'EUR'), q(Measure.kept, [main], Bucket.quarter, w), today: today).first.cents[main], 0);
+  });
+
   group('moveTogether', () {
     const a = SeriesKey(SeriesKind.mainTag, 'Groceries'), b = SeriesKey(SeriesKind.mainTag, 'Eating out');
     DayIndex ix(List<int> xs, List<int> ys) => DayIndex([
