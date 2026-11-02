@@ -53,6 +53,15 @@ int annuityPayment(int loan, int rateBp, int months) {
   return ((num * BigInt.two + den) ~/ (den * BigInt.two)).toInt();
 }
 
+/// What goal [g] saves for: with a [Goal.price], the plan's need (deposit + costs; the whole price + costs when paid in
+/// full), derived on every read so an edit of the price or a percentage moves it with no target write; else
+/// [Goal.target]. Every reader of a goal's target uses this.
+int goalTarget(Goal g) {
+  if (g.price == null) return g.target;
+  final price = g.price! < 0 ? 0 : g.price!;
+  return _ratio(price, g.depositPermille ?? 1000, 1000) + _ratio(price, g.costsPermille ?? 0, 1000);
+}
+
 /// `YYYY-MM` of [ym] + [n] months.
 String addMonths(String ym, int n) {
   final k = int.parse(ym.substring(0, 4)) * 12 + int.parse(ym.substring(5, 7)) - 1 + n;
@@ -62,13 +71,21 @@ String addMonths(String ym, int n) {
 /// The planner for goal [g] ([Goal.price], [Goal.depositPermille] (null = paid in full), [Goal.costsPermille] (null =
 /// 0), [Goal.loanRateBp] (null = 0), [Goal.loanMonths]): deposit and costs are the price's permille, need = deposit +
 /// costs, left = need − [savedCents] (never below 0), loan = price − deposit. [compareCents]: the plan line the owner
-/// compares the payment with (it ends with the purchase). [today] is `YYYY-MM-DD`.
+/// compares the payment with (it ends with the purchase). [today] is `YYYY-MM-DD`. [applied]: the "Get there sooner"
+/// levers ([goalLevers]) the owner switched on; their cuts are added to [monthlyCents] (one below 0 counted as 0), so
+/// [GoalPlan.monthly], [GoalPlan.months] and [GoalPlan.readyMonth] are those with the levers.
 GoalPlan goalPlan(Goal g,
-    {required int savedCents, required int monthlyCents, int? compareCents, required int toSpendPerPeriodCents, required String today}) {
+    {required int savedCents,
+    required int monthlyCents,
+    int? compareCents,
+    required int toSpendPerPeriodCents,
+    required String today,
+    List<GoalLever> applied = const []}) {
+  if (applied.isNotEmpty) monthlyCents = applied.fold(monthlyCents > 0 ? monthlyCents : 0, (s, l) => s + l.cut);
   final price = (g.price ?? 0) < 0 ? 0 : g.price ?? 0;
   final deposit = _ratio(price, g.depositPermille ?? 1000, 1000);
   final costs = _ratio(price, g.costsPermille ?? 0, 1000);
-  final need = deposit + costs;
+  final need = deposit + costs; // = goalTarget(g) with a price
   final left = need - savedCents > 0 ? need - savedCents : 0;
   final months = left == 0 ? 0 : (monthlyCents <= 0 ? null : (left + monthlyCents - 1) ~/ monthlyCents);
   final loan = price - deposit;

@@ -146,13 +146,20 @@ class LoanCheck {
       balance: LoanCheckCols.balance.read(r) ?? 0);
 }
 
-/// One month of a loan's schedule: due on [due] at [rateBp]; [paid] = [interest] + [principal]; [balance] after it
-/// (after a lender's balance check dated before the next due date, the check's balance).
+/// One month of a loan's schedule: due on [due] at [rateBp]; [paid] = [interest] + [principal]; [opening] = the balance
+/// before it, [balance] after it (after a lender's balance check dated before the next due date, the check's balance,
+/// and [checkDate] its date). [borrowed] = the loan's principal; [startCheckDate]: the date of a check before the first
+/// due date that set the first month's [opening] (the same on every month).
 class LoanMonth {
   final int index;
   final String due;
-  final int rateBp, paid, interest, principal, balance;
-  const LoanMonth(this.index, this.due, this.rateBp, this.paid, this.interest, this.principal, this.balance);
+  final int rateBp, paid, interest, principal, balance, opening, borrowed;
+  final String? checkDate, startCheckDate;
+  const LoanMonth(this.index, this.due, this.rateBp, this.paid, this.interest, this.principal, this.balance, this.opening,
+      {this.borrowed = 0, this.checkDate, this.startCheckDate});
+
+  /// The balance after this month as scheduled, before a lender's check replaced it.
+  int get scheduled => opening + interest - paid;
 }
 
 /// [first] (`YYYY-MM-DD`) moved [k] months on, the day clamped to the month's last day.
@@ -187,7 +194,8 @@ List<LoanMonth> _schedule(Loan l, List<LoanRate> rates, List<LoanCheck> checks,
   LoanCheck? lastCheck(String from, String? to) =>
       cs.where((c) => c.date.compareTo(from) >= 0 && (to == null || c.date.compareTo(to) < 0)).lastOrNull;
   var bal = p0;
-  if (lastCheck('', first) case final c?) bal = c.balance;
+  final start = lastCheck('', first);
+  if (start != null) bal = start.balance;
   final basePayment = l.payment ?? annuityPayment(p0, l.rateBp ?? 0, n);
   LoanRate? applied;
   var payment = basePayment, onceLeft = extraOnce;
@@ -201,7 +209,7 @@ List<LoanMonth> _schedule(Loan l, List<LoanRate> rates, List<LoanCheck> checks,
     }
     final bp = r?.rateBp ?? l.rateBp ?? 0;
     final interest = _interest(bal, bp);
-    final total = bal + interest;
+    final opening = bal, total = bal + interest;
     var pay = payment + extraMonthly;
     if (onceLeft > 0 && extraOnceDate != null && due.compareTo(extraOnceDate) >= 0) {
       pay += onceLeft;
@@ -209,10 +217,100 @@ List<LoanMonth> _schedule(Loan l, List<LoanRate> rates, List<LoanCheck> checks,
     }
     if (k == n - 1 || total <= pay) pay = total;
     bal = total - pay;
-    if (lastCheck(due, k + 1 < n ? _dueDate(first, k + 1) : null) case final c?) bal = c.balance;
-    out.add(LoanMonth(k, due, bp, pay, interest, pay - interest, bal));
+    final c = lastCheck(due, k + 1 < n ? _dueDate(first, k + 1) : null);
+    if (c != null) bal = c.balance;
+    out.add(
+        LoanMonth(k, due, bp, pay, interest, pay - interest, bal, opening, borrowed: p0, checkDate: c?.date, startCheckDate: start?.date));
   }
   return out;
+}
+
+/// [schedule]'s balance on [date] (`YYYY-MM-DD`): the balance after the last month due on or before [date], the opening
+/// balance before the first due date; 0 for an empty schedule. A lender's check counts from its own date only: before it,
+/// the month's [LoanMonth.scheduled] balance (or the principal before a check that precedes the first due date).
+int loanBalanceOn(List<LoanMonth> schedule, String date) {
+  if (schedule.isEmpty) return 0;
+  final f = schedule.first;
+  if (f.startCheckDate != null && date.compareTo(f.startCheckDate!) < 0) return f.borrowed;
+  var bal = f.opening;
+  for (final m in schedule) {
+    if (m.due.compareTo(date) > 0) break;
+    bal = m.checkDate != null && date.compareTo(m.checkDate!) < 0 ? m.scheduled : m.balance;
+  }
+  return bal;
+}
+
+/// One calendar year of a schedule ([loanYears]): Σ [principal] and Σ [interest] of the months due in [year], [adjust] =
+/// Σ the drops lender checks made (scheduled − checked balance; negative when the lender showed more owed; the first
+/// year also holds a check before the first due date, principal − its balance), and the balance after its last month.
+/// Over all years Σ ([principal] + [adjust]) = the principal borrowed − the last [endBalance].
+class LoanYear {
+  final int year, principal, interest, adjust, endBalance;
+  const LoanYear(this.year, this.principal, this.interest, this.adjust, this.endBalance);
+}
+
+/// [schedule] per calendar year of the due dates, oldest first (the Loan screen's chart).
+List<LoanYear> loanYears(List<LoanMonth> schedule) {
+  final out = <LoanYear>[];
+  for (final m in schedule) {
+    final y = int.parse(m.due.substring(0, 4)), last = out.lastOrNull;
+    final adj = m.scheduled - m.balance + (m.index == 0 ? m.borrowed - m.opening : 0);
+    if (last != null && last.year == y) {
+      out.last = LoanYear(y, last.principal + m.principal, last.interest + m.interest, last.adjust + adj, m.balance);
+    } else {
+      out.add(LoanYear(y, m.principal, m.interest, adj, m.balance));
+    }
+  }
+  return out;
+}
+
+/// "What did the lender show?" ([loanCheckView]): [expected] = the schedule's balance on the date, [diff] = shown −
+/// expected (positive: the lender shows more owed), [matches] when 0. [expected] and [diff] are null (and [matches]
+/// false) while the loan has no schedule (principal, length or first due date unknown).
+class LoanCheckView {
+  final int? expected, diff;
+  final bool matches;
+  const LoanCheckView(this.expected, this.diff, this.matches);
+}
+
+/// [shownBalance] typed from the lender's statement of [date] against [l]'s schedule ([loanSchedule] with [rates] and
+/// [checks], [loanBalanceOn]). Read-only: the app saves it with `addLoanCheck` once the owner confirms.
+LoanCheckView loanCheckView(Loan l, List<LoanRate> rates, List<LoanCheck> checks, {required String date, required int shownBalance}) {
+  final s = loanSchedule(l, rates, checks);
+  if (s.isEmpty) return const LoanCheckView(null, null, false);
+  final e = loanBalanceOn(s, date);
+  return LoanCheckView(e, shownBalance - e, shownBalance == e);
+}
+
+/// The regular monthly payment of [l]: the schedule's last full month (the one before the final rest; the only month
+/// of a one-month schedule), else [Loan.payment] (0 when unknown).
+int loanRegularPayment(Loan l, List<LoanMonth> schedule) => switch (schedule.length) {
+      0 => l.payment ?? 0,
+      1 => schedule.single.paid,
+      final n => schedule[n - 2].paid,
+    };
+
+/// A loan that closed lately ([loanEndedProposals]): "Your `<name>` loan of [payment] a month has ended. Move it to
+/// savings or a goal?". [id] `loanEnded:<loanId>` is hidden through `dismissFinding` (accepted or declined).
+class LoanEnded {
+  final String id, loanId, closedAt;
+  final int payment;
+  const LoanEnded(this.id, this.loanId, this.closedAt, this.payment);
+}
+
+/// The loans of [loans] (each with its [loanSchedule]) closed 0..60 days before [today] whose plan line has ended (not in
+/// [WalletSettings.loanLines]) and that freed a payment ([loanRegularPayment] > 0), not dismissed
+/// ([WalletSettings.dismissedFindings]); by closing date, newest first, then loan id. Read-only: the app applies the
+/// owner's pick with the existing suggestion flow.
+List<LoanEnded> loanEndedProposals(List<(Loan, List<LoanMonth>)> loans, WalletSettings st, String today) {
+  final hidden = st.dismissedFindings.toSet();
+  return [
+    for (final (l, s) in loans)
+      if (l.closedAt case final c?)
+        if (daysBetween(c, today) case final d when d >= 0 && d <= 60)
+          if (!st.loanLines.containsKey(l.id) && !hidden.contains('loanEnded:${l.id}'))
+            if (loanRegularPayment(l, s) case final p when p > 0) LoanEnded('loanEnded:${l.id}', l.id, c, p),
+  ]..sort((a, b) => a.closedAt != b.closedAt ? b.closedAt.compareTo(a.closedAt) : a.loanId.compareTo(b.loanId));
 }
 
 /// Where a loan stands: [paidMonths] months matched, [notSeen] the due dates (`YYYY-MM-DD`) of earlier months without a
@@ -269,7 +367,7 @@ LoanState loanState(List<LoanMonth> schedule, List<String> matchedPayments, Stri
       for (final m in schedule)
         if (!paid[m.index] && today.compareTo(addDays(m.due, 3)) > 0) m.due
     ],
-    owedNow: last >= 0 ? schedule[last].balance : first.balance + first.principal,
+    owedNow: last >= 0 ? schedule[last].balance : first.opening,
     monthsLeft: schedule.length - (last + 1),
     payoffMonth: monthOf(schedule.last.due),
     interestPaid: before,
@@ -302,7 +400,7 @@ LoanWhatIf loanWhatIf(Loan l,
   if (newRateBp != null && newRateFrom != null) {
     final from = base.where((m) => m.due.compareTo(newRateFrom) >= 0).firstOrNull;
     if (from != null) {
-      final before = from.index == 0 ? base.first.balance + base.first.principal : base[from.index - 1].balance;
+      final before = from.opening;
       newPayment = annuityPayment(before, newRateBp, (l.months ?? 0) - from.index);
       rs = [...rates, LoanRate(id: '~whatif', loanId: l.id, from: newRateFrom, rateBp: newRateBp, payment: newPayment)];
     }
@@ -409,6 +507,10 @@ LoanDecisions loanPaymentDecisions(Map<String, List<LoanPaymentMatch>> candidate
 /// The minimum length of [Loan.reference] (shorter text would match unrelated rows).
 const loanReferenceMinLength = 4;
 
+/// Whether [ref] can match payments: at least [loanReferenceMinLength] characters once trimmed and folded (case and
+/// accents ignored), the rule [loanPayments] uses.
+bool loanReferenceUsable(String? ref) => foldText(ref?.trim() ?? '').runes.length >= loanReferenceMinLength;
+
 /// The rows that pay [l], oldest first: live bank outflows (not hand-added, no own transfer) in [currency], from 15
 /// days before the first due date (when known) up to the closing date, whose payee key is [Loan.payeeKey] or whose
 /// description holds [Loan.reference] (at least [loanReferenceMinLength] characters; case and accents ignored). Never
@@ -417,8 +519,7 @@ const loanReferenceMinLength = 4;
 List<LoanPaymentMatch> loanPayments(Loan l, List<LoanRate> rates, List<LoanCheck> checks, Iterable<Tx> rows,
     {required String currency, Map<String, String>? keys, Map<String, String>? folded}) {
   final key = l.payeeKey ?? '';
-  final rawRef = foldText(l.reference?.trim() ?? '');
-  final ref = rawRef.runes.length >= loanReferenceMinLength ? rawRef : '';
+  final ref = loanReferenceUsable(l.reference) ? foldText(l.reference!.trim()) : '';
   if (key.isEmpty && ref.isEmpty) return const [];
   final from = l.firstDue == null ? null : addDays(l.firstDue!, -15);
   final schedule = loanSchedule(l, rates, checks);
