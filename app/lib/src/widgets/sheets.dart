@@ -11,6 +11,7 @@ import '../layout.dart';
 import '../logging.dart';
 import '../platform.dart';
 import '../screens/bill_sheet.dart';
+import '../screens/loan_screen.dart';
 import '../screens/owed.dart';
 import '../screens/rules_panel.dart';
 import '../screens/scan_bill.dart';
@@ -603,6 +604,24 @@ class _TxSheetState extends State<TxSheet> {
     if (r != null && mounted) Navigator.pop(context, r);
   }
 
+  /// ENG E6: a payment found by a loan (its lender or reference) says so and opens the Loan screen. Read-only: the match is core's.
+  Widget? _loanSection(BuildContext context) {
+    final t = row.tx;
+    if (!t.live || t.amount >= 0) return null;
+    final loan = widget.wc.loanOfPayment(t.id);
+    if (loan == null) return null;
+    return Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+                key: const ValueKey('txLoan'),
+                style: TextButton.styleFrom(minimumSize: const Size(0, touchMin)),
+                icon: const Icon(Icons.account_balance_outlined, size: 18),
+                label: Text('Payment on ${loan.name}'),
+                onPressed: () => openLoan(context, widget.wc, loan.id))));
+  }
+
   /// Q8: "Lent to someone" on an expense, "Repayment" on income; a payment already linked to an IOU says so instead.
   Widget? _iouSection(BuildContext context) {
     final t = row.tx;
@@ -721,6 +740,7 @@ class _TxSheetState extends State<TxSheet> {
             tagRule = rule;
           }),
       if (canSplit) _splitSection(context),
+      if (_loanSection(context) case final w?) w,
       if (_iouSection(context) case final w?) w,
       const SizedBox(height: 8),
       Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 8, children: [

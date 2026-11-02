@@ -57,6 +57,7 @@ part 'controller_iou.dart';
 part 'controller_suggest.dart';
 part 'controller_setup.dart';
 part 'controller_warmup.dart';
+part 'controller_goals_loans.dart';
 
 final _log = Logger('bw.app');
 final _sync = Logger('bw.sync');

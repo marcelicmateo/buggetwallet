@@ -7,6 +7,8 @@ import '../layout.dart';
 import '../theme.dart';
 import '../widgets/dash.dart';
 import '../widgets/sheets.dart';
+import 'goal_new.dart';
+import 'goal_planner.dart';
 import 'save.dart';
 
 /// Whole percent of [target] that is [saved], rounded down so 100 means reached; 0 without a target, never below 0 or above 100.
@@ -58,10 +60,15 @@ class GoalsScreen extends StatelessWidget {
         sub: g.target > 0 ? '${goalPercent(g.saved, g.target)}% of ${moneyExact(g.target, cur)}${reached ? '' : '\n${eta(g)}'}' : eta(g),
         chip: g.saved < 0
             ? const StateChip.over(text: 'Below zero')
-            : reached
-                ? const StateChip.onPace(text: 'Reached')
-                : null,
+            : g.boughtAt != null
+                ? const StateChip.onPace(text: 'Bought')
+                : g.price != null && wc.goalReady(g)
+                    ? const StateChip.onPace(text: 'Ready to buy')
+                    : reached
+                        ? const StateChip.onPace(text: 'Reached')
+                        : null,
         onTap: () async {
+          if (g.price != null) return openGoalPlanner(context, wc, g.id);
           final r = await showSheet<String>(context, GoalSheet(wc: wc, goal: g));
           if (context.mounted) goalSheetToast(context, wc, r);
         },
@@ -92,7 +99,18 @@ class GoalsScreen extends StatelessWidget {
             value: moneyExact(p.extrasForGoals, cur),
             sub: 'Not in your plan'),
       for (final g in wc.goals) goal(g),
-      AddTile(key: const ValueKey('addGoal'), label: 'Goal', onTap: () => showSheet<void>(context, GoalSheet(wc: wc))),
+      AddTile(
+          key: const ValueKey('addGoal'),
+          label: 'Goal',
+          onTap: () async {
+            final r = await showSheet<String>(context, GoalKindSheet(wc: wc));
+            if (!context.mounted || r == null) return;
+            if (r.startsWith(goalPlannerResult)) {
+              await openGoalPlanner(context, wc, r.substring(goalPlannerResult.length));
+            } else {
+              goalSheetToast(context, wc, r);
+            }
+          }),
     ]);
     final panel = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [const SaveSectionHead('Goals'), grid]);
     if (embedded) return panel;
