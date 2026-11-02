@@ -102,6 +102,13 @@ entry points). Agents: scout → devops (sonnet/high for the rewrite) + test-wri
 | PF | Perf (owner 2026-10-30): budgets for 60 Hz (build p90 ≤ 16.7 ms, ≤ 10 % frames over 16.7 ms, worst build ≤ 50 ms, raster only gated at ≤ 250 ms: software GL); Android asks 60 Hz (MainActivity preferred refresh rate); tab cross-fade ~180 ms (off with reduce motion); idle warm-up of every tab's derived data after the first frame and after each reload (Priority.idle, cancelled by a new data version, logs counts/ms only); hidden tabs built one per idle frame; perf action "first switch after new data" | ui-builder (sonnet/high) | worktree | perf A/B | done, merged 6244ce6 + PF2 bfebdf0 → 868e6c7 (A/B: pre-DD tab_switch 21.4 ms FAIL, DD 15.2 ms ok = host noise, not DD) |
 | ZC | Zoomable, scrollable graphs (spec `ZC_SPEC.md`, owner answers in §6) | scout → core + test-writer + ui | worktrees | DD, RX2 (chart look follows the picked direction) | on hold |
 
+## Resume here (end of session 2026-11-02 afternoon) — v2 pushed at d9ad6de
+Done: UX-B (Plan in place, Budget › Tags, Settings = setup, Today tiles) and PS payday auto-save (`PS_SPEC.md`), both reviewed and pushed; phone pages SafeArea fix; reviewer now also runs ponytail-review. Watcher briefs: a step failed when `dist/logs/last-failed.txt` is non-empty (`cmd || cat …` always exits 0).
+**Next, in order:**
+1. Install the latest APK on the owner's phone when it is plugged in (`adb install -r dist/BudgetWallet-android.apk`; rebuild with `tools/build.sh -q apk` first if v2 moved).
+2. Owner answer pending: two offline devices can take out the same goal money (goal shows Below zero): OK, or block Take out without a recent sync?
+3. F2, then UX-C2, then CI speed + M6 (as below). Frequent-word tag suggestions only if the owner asks.
+
 ## Resume here (end of day 2026-11-02) — v2 pushed at the commit after 8d1793b
 Done today: UX-ACC + UX-FX (core fixes, UI, 3 review rounds, stage run green), schema 20 pushed; CI with tests green on v2 (bash) and go3 (Go tool, numbers in STATUS); go3 merged into v2 (CI now runs through wallet-build). Owner chose **UX-B first**, then CI speed + M6.
 **Next, in order:**
