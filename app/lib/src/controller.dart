@@ -885,7 +885,8 @@ class WalletController extends ChangeNotifier {
     final (g, w) = timed('wc.goalsWish', () => (repo.goals(), repo.wishlist()));
     goals = g;
     wish = w;
-    _payGoals();
+    // The new pay rows go to the relay like any other change, not with the next 5-minute run.
+    if (_payGoals() && relayUrl != null) _syncSoon();
     dataVersion++;
     _memo.clear();
     _seenDay = _memoDay = today();
@@ -1159,6 +1160,10 @@ class WalletController extends ChangeNotifier {
 
   void _changed() {
     reload();
+    _syncSoon();
+  }
+
+  void _syncSoon() {
     _debounce?.cancel();
     _debounce = Timer(const Duration(seconds: 3), () => syncNow(quiet: true, trigger: 'change'));
   }
@@ -1559,7 +1564,10 @@ class WalletController extends ChangeNotifier {
 
   /// PS: takes [cents] out of goal [id] into this pay period's spending money, or into goal [toGoalId]. Throws [ArgumentError].
   void takeOutOfGoal(String id, int cents, {String? toGoalId}) {
-    repo.takeOutOfGoal(id, cents, date: today(), toGoalId: toGoalId);
+    // A period that ended but was not started again still owns the money: date it on its last day, so it counts there.
+    final ps = effectiveSettings.periodStart;
+    final last = ps == null ? null : addDays(_periodEnd(), -1);
+    repo.takeOutOfGoal(id, cents, date: last != null && today().compareTo(last) > 0 ? last : today(), toGoalId: toGoalId);
     _changed();
   }
 

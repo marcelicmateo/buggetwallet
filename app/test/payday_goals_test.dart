@@ -71,4 +71,14 @@ void main() {
     expect(() => wc.takeOutOfGoal(a, 100, toGoalId: a), throwsArgumentError);
     expect(_saved(wc, 'Emergency'), 5000);
   });
+
+  test('a take out after the period ended, before a new one is started, still counts in that period', () {
+    final wc = WalletController.forTest(WalletRepo.inMemory(), clock: () => DateTime(2026, 11, 20, 12));
+    addTearDown(wc.dispose);
+    wc.repo.updateSettings({'salary': 200000, 'periodStart': '2026-10-15', 'paydayDay': 15, 'salaryConfirmed': true});
+    wc.saveGoal(name: 'Synthetic goal', target: 100000, saved: 5000, monthly: 1000);
+    final before = wc.period().flexBudget;
+    wc.takeOutOfGoal(_id(wc, 'Synthetic'), 2000);
+    expect(wc.period().flexBudget, before + 2000, reason: 'dated on the period\'s last day (14 Nov), not today (20 Nov)');
+  });
 }
