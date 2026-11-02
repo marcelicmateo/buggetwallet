@@ -8,7 +8,6 @@ import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/screens/settings.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/screens/today.dart';
-import 'package:budget_wallet/src/widgets/dash.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
