@@ -37,6 +37,9 @@ class ChartSeries {
 class ExploreChart extends StatefulWidget {
   final List<DateRange> buckets;
   final List<bool> partial;
+
+  /// "so far" / "partial" for a running bucket (the tooltip says it), null for a whole one.
+  final List<String?> partialNotes;
   final List<ChartSeries> series;
 
   /// The labels: a bucket on the axis and in the tooltip, a value in the tooltip, a value on the y-axis.
@@ -53,6 +56,7 @@ class ExploreChart extends StatefulWidget {
     super.key,
     required this.buckets,
     required this.partial,
+    required this.partialNotes,
     required this.series,
     required this.bucketText,
     required this.valueText,
@@ -158,7 +162,7 @@ class _ExploreChartState extends State<ExploreChart> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(color: c.bg, border: Border.all(color: c.lineStrong), borderRadius: BorderRadius.circular(12)),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-            Text('${widget.bucketText(i)}${widget.partial[i] ? ' · so far' : ''}',
+            Text('${widget.bucketText(i)}${widget.partialNotes[i] != null ? ' · ${widget.partialNotes[i]}' : ''}',
                 key: const ValueKey('exploreTipTitle'), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: BwType.metaSize)),
             for (var s = 0; s < widget.series.length; s++)
               Padding(
@@ -275,14 +279,20 @@ class _ChartPainter extends CustomPainter {
       if (n > 0) ends.add((y(s.values[n - 1]), s));
     }
     if (labels) {
-      // direct labels at the line ends, pushed apart when closer than 14 px
+      // direct labels at the line ends: pushed apart when closer than 14 px, and kept above the x-axis ticks
       ends.sort((a, b) => a.$1.compareTo(b.$1));
-      var prev = -1e9;
-      for (final (ey, s) in ends) {
-        final ly = math.max(ey, prev + 14);
-        prev = ly;
-        final t = _text(s.name, ink, 12, maxWidth: size.width - plot.right - 10, family: sansFamily);
-        t.paint(canvas, Offset(plot.right + 8, ly - t.height / 2));
+      final ly = [for (final e in ends) e.$1];
+      for (var i = 1; i < ly.length; i++) {
+        ly[i] = math.max(ly[i], ly[i - 1] + 14);
+      }
+      var limit = plot.bottom - 8;
+      for (var i = ly.length - 1; i >= 0; i--) {
+        ly[i] = math.min(ly[i], limit);
+        limit = ly[i] - 14;
+      }
+      for (var i = 0; i < ends.length; i++) {
+        final t = _text(ends[i].$2.name, ink, 12, maxWidth: size.width - plot.right - 10, family: sansFamily);
+        t.paint(canvas, Offset(plot.right + 8, ly[i] - t.height / 2));
       }
     }
     final hv = hover;

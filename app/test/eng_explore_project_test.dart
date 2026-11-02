@@ -135,6 +135,17 @@ void main() {
       expect(topMonthSentence([...tie, ...year(2022, 12), ...year(2023, 12)], 2026, Measure.spent), isNull);
     });
 
+    test('the first data year is skipped unless the data starts in January', () {
+      List<HeatCell> year(int y, int topMonth) =>
+          [for (var m = 1; m <= 12; m++) HeatCell(year: y, month: m, cents: m == topMonth ? 900 : 100 + m, level: 1)];
+      final cells = [...year(2022, 12), ...year(2023, 12), ...year(2024, 12)];
+      expect(topMonthSentence(cells, 2026, Measure.spent), 'December is your priciest month every year.');
+      expect(topMonthSentence(cells, 2026, Measure.spent, dataStartsMonth: 6), isNull, reason: 'only 2 whole years left');
+      expect(topMonthSentence([...cells, ...year(2025, 12)], 2026, Measure.spent, dataStartsMonth: 6),
+          'December is your priciest month every year.',
+          reason: '2022 is left out, three whole years remain');
+    });
+
     test('kept below zero is an absolute value with the word lost, never a minus', () {
       expect(measureValue(Measure.kept, -1250, 'EUR'), '${moneyExact(1250, 'EUR')} lost');
       expect(measureValue(Measure.kept, 1250, 'EUR'), moneyExact(1250, 'EUR'));
@@ -147,8 +158,8 @@ void main() {
 
     test('share and hours', () {
       expect(permilleText(72), '7.2 %');
-      expect(hoursText(8320), '832 h');
-      expect(hoursText(125), '12.5 h');
+      expect(hoursText(8320), '832.0\u00A0h');
+      expect(hoursText(125), '12.5\u00A0h');
     });
   });
 
@@ -241,6 +252,22 @@ void main() {
       expect(find.byKey(const ValueKey('exploreChartArea')), findsOneWidget);
     }, timeout: _timeout);
 
+    testWidgets('so far only on the bucket that holds today; a bucket the window cut says partial', (tester) async {
+      final w = await exploreWallet();
+      await pumpScreen(tester, ExploreScreen(wc: w.wc));
+      await tapKey(tester, 'exploreRange:1y');
+      Finder note(String start, String word) => find.descendant(of: k('exploreRow:$start'), matching: find.textContaining(word));
+      expect(note('2025-10-21', 'partial'), findsOneWidget, reason: 'the window starts on 21 Oct 2025');
+      expect(note('2025-10-21', 'so far'), findsNothing);
+      expect(note('2026-10-01', 'so far'), findsOneWidget);
+      expect(note('2026-10-01', 'partial'), findsNothing);
+      expect(find.textContaining('so far'), findsOneWidget);
+      expect(find.textContaining('partial'), findsOneWidget);
+      await tester.tapAt(tester.getTopLeft(k('exploreChartArea')) + Offset(tester.getSize(k('exploreChartArea')).width - 120, 120));
+      await tester.pump();
+      expect((tester.widget(k('exploreTipTitle')) as Text).data, contains('so far'));
+    }, timeout: _timeout);
+
     testWidgets('kept: table and tooltip say lost, no minus sign anywhere', (tester) async {
       final w = await exploreWallet();
       await pumpScreen(tester, ExploreScreen(wc: w.wc));
@@ -283,6 +310,7 @@ void main() {
       final cells = w.wc.exploreHeat(first, Measure.spent);
       expect(find.byKey(const ValueKey('exploreHeat')), findsOneWidget);
       final sem = tester.ensureSemantics();
+      expect(tester.getSemantics(k('heatReadout')).flagsCollection.isLiveRegion, isTrue, reason: 'the chosen value is announced');
       expect(find.bySemanticsLabel(RegExp(r'^2025: Jan .*, Dec ')), findsOneWidget,
           reason: 'one spoken label per year row, every month in it');
       sem.dispose();
@@ -366,6 +394,24 @@ void main() {
       expect(k('series:2'), findsNothing);
       await tapKey(tester, 'view:$id');
       expect(k('series:2'), findsOneWidget);
+      await settle(tester);
+    }, timeout: _timeout);
+
+    testWidgets('a pin, rename or delete in Explore reaches Overview at once', (tester) async {
+      final w = await exploreWallet();
+      final wc = w.wc;
+      await pumpScreen(tester, ExploreScreen(wc: wc));
+      expect(wc.pinnedViews(), isEmpty); // warms Overview's memo
+      final id = wc.saveExploreView('Mine', wc.exploreDefaultQuery());
+      wc.pinExploreView(id, true);
+      expect(wc.pinnedViews().map((v) => v.name), ['Mine']);
+      expect(wc.pinData(wc.pinnedViews().single)!.name, 'Mine');
+      wc.renameExploreView(id, 'Renamed');
+      expect(wc.pinData(wc.pinnedViews().single)!.name, 'Renamed', reason: 'the tile shows the new name');
+      wc.deleteExploreView(id);
+      expect(wc.pinnedViews(), isEmpty);
+      wc.undeleteExploreView(id);
+      expect(wc.pinnedViews().map((v) => v.name), ['Renamed']);
       await settle(tester);
     }, timeout: _timeout);
 
@@ -493,6 +539,75 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
       expect(wc.txs.firstWhere((t) => t.tx.id == c[1].id).tags, isNot(contains(w.reno)));
       await settle(tester);
+    }, timeout: _timeout);
+
+    testWidgets('a chosen year that is gone after Undo reads as All, no crash', (tester) async {
+      final w = await exploreWallet();
+      final wc = w.wc;
+      await pumpScreen(tester, ProjectScreen(wc: wc, tag: w.reno), size: const Size(900, 3000));
+      final years = wc.projectOf(w.reno).byYear.map((y) => y.$1).toList();
+      expect(years, [2025, 2026]);
+      await tapKey(tester, 'projectYear:2026');
+      expect((tester.widget(k('projectYearText')) as Text).data, startsWith('2026: '));
+      // the only 2026 payment loses the tag (what an Undo of its Tag does): 2026 is no longer a year of the project
+      await wc.tagPayments([w.tagged.last], w.reno, false);
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(tester.takeException(), isNull);
+      expect(wc.projectOf(w.reno).byYear.map((y) => y.$1), [2025]);
+      expect((tester.widget(k('projectYearText')) as Text).data, startsWith('all years: '));
+      expect(k('projectYear:2026'), findsNothing);
+      await settle(tester);
+    }, timeout: _timeout);
+
+    testWidgets('the split: the biggest five and Other add up to the total; refunds are listed, not in the bar', (tester) async {
+      final w = await exploreWallet();
+      final wc = w.wc;
+      final wide = await wc.repo.addTag('Wide');
+      final refunds = await wc.repo.addTag('Back');
+      const cats = ['Groceries', 'Eating out', 'Shopping', 'Car & transport', 'Home & tools', 'Sport & fitness', 'Health & care'];
+      for (var i = 0; i < cats.length; i++) {
+        final id = wc.repo.addTransaction(date: '2026-09-1${i + 1}', amount: 10000 - i * 1000, category: cats[i], note: 'Wide $i');
+        await wc.repo.setTxTag(id, wide, true);
+      }
+      final spend = wc.repo.addTransaction(date: '2026-09-02', amount: 3000, category: 'Groceries', note: 'Back spend');
+      final back = wc.repo.addTransaction(date: '2026-09-03', amount: -5000, category: 'Shopping', note: 'Back refund');
+      await wc.repo.setTxTag(spend, refunds, true);
+      await wc.repo.setTxTag(back, refunds, true);
+      wc.reload();
+      final sw = wc.projectSplit(wide);
+      expect(sw.parts.length, 6);
+      expect(sw.parts.last.label, 'Other');
+      expect(sw.parts.fold<int>(0, (a, p) => a + p.cents), wc.projectOf(wide).total);
+      expect(sw.hasRefunds, isFalse);
+      final sr = wc.projectSplit(refunds);
+      expect(sr.hasRefunds, isTrue);
+      expect(sr.parts.fold<int>(0, (a, p) => a + p.cents), wc.projectOf(refunds).total);
+      expect(sr.barTotal, 3000, reason: 'only the positive row is in the bar');
+      await pumpScreen(tester, ProjectScreen(wc: wc, tag: refunds), size: const Size(900, 3000));
+      expect(k('projectRefundNote'), findsOneWidget);
+      expect(find.textContaining('refunded'), findsWidgets);
+      expect(find.textContaining('−'), findsNothing, reason: 'no negative figure on the page');
+    }, timeout: _timeout);
+
+    testWidgets('a long review list shows 25 rows and Show more', (tester) async {
+      final w = await exploreWallet();
+      final wc = w.wc;
+      wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [
+        for (var i = 0; i < 30; i++)
+          syntheticTx('2026-01-${(i % 28 + 1).toString().padLeft(2, '0')}', -(1000 + i), 'POS plaćanje', 'POS KONZUM 0000 ZAGREB'),
+      ]));
+      wc.reload();
+      final open = wc.projectOf(w.reno).candidates.length;
+      expect(open, 32);
+      await pumpScreen(tester, ProjectScreen(wc: wc, tag: w.reno), size: const Size(900, 12000));
+      await tapKey(tester, 'projectReview');
+      Finder rows() =>
+          find.byWidgetPredicate((x) => x.key is ValueKey<String> && (x.key as ValueKey<String>).value.startsWith('candidate:'));
+      expect(rows(), findsNWidgets(25));
+      await tapKey(tester, 'projectMore');
+      expect(rows(), findsNWidgets(32));
+      expect(k('projectMore'), findsNothing);
+      expect(find.text('Tag all 32'), findsOneWidget, reason: 'Tag all covers the whole list');
     }, timeout: _timeout);
 
     testWidgets('an empty project and an overlap note', (tester) async {

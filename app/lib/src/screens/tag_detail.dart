@@ -12,9 +12,9 @@ import '../widgets/detail_tiles.dart';
 import '../widgets/sheets.dart';
 import 'project.dart';
 
-/// Opens [tag]: since ENG E5 the Project screen (the tag's whole span, so [range] is not used). `TagDetailScreen` below is the older
-/// per-range page; nothing opens it any more.
-Future<void> openTag(BuildContext context, WalletController wc, String tag, DateRange range) => openProject(context, wc, tag);
+/// Opens [tag]: since ENG E5 the Project screen (all time). `TagDetailScreen` below is the older per-range page; nothing opens it any
+/// more (E7 deletes it with its tests).
+Future<void> openTag(BuildContext context, WalletController wc, String tag) => openProject(context, wc, tag);
 
 class TagDetailScreen extends StatelessWidget {
   final WalletController wc;

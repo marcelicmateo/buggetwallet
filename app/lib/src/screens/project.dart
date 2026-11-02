@@ -24,6 +24,9 @@ class ProjectScreen extends StatefulWidget {
   State<ProjectScreen> createState() => _ProjectScreenState();
 }
 
+/// An amount for the page: never a minus; money back reads "12 € refunded".
+String _amount(int cents, String cur) => cents < 0 ? '${moneyExact(-cents, cur)} refunded' : moneyExact(cents, cur);
+
 class _ProjectScreenState extends State<ProjectScreen> {
   int? _year; // null = all years
   bool _reviewing = false;
@@ -31,6 +34,9 @@ class _ProjectScreenState extends State<ProjectScreen> {
   /// Payments skipped in this review: hidden until the screen is opened again. The tag flow has no "not this one" mark for a payment
   /// that never carried the tag (`setTxTag` off is a no-op there), so a skip is not written.
   final _skipped = <String>{};
+
+  /// Rows of the review list before "Show more".
+  int _shown = 25;
 
   WalletController get wc => widget.wc;
 
@@ -79,7 +85,7 @@ class _ProjectScreenState extends State<ProjectScreen> {
       FittedBox(
         fit: BoxFit.scaleDown,
         alignment: Alignment.centerLeft,
-        child: Text(moneyExact(s.total, cur),
+        child: Text(_amount(s.total, cur),
             key: const ValueKey('projectTotal'), style: numStyle.copyWith(fontSize: 44, fontWeight: FontWeight.w700)),
       ),
       Text.rich(
@@ -103,13 +109,15 @@ class _ProjectScreenState extends State<ProjectScreen> {
   Widget _running(ProjectStats s) {
     final c = context.c, cur = wc.currency;
     final years = [for (final y in s.byYear) y.$1];
-    final yearTotal = _year == null ? s.total : s.byYear.firstWhere((y) => y.$1 == _year).$2;
+    // The chosen year may be gone after Undo, Tag all or a sync: then it reads as All.
+    final year = years.contains(_year) ? _year : null;
+    final yearTotal = year == null ? s.total : s.byYear.firstWhere((y) => y.$1 == year).$2;
     final slot = wc.tagTable.liveIds.indexOf(widget.tag).clamp(0, 5);
     final color = [c.s1, c.s2, c.s3, c.s4, c.s5, c.s6][slot];
     return Panel(key: const ValueKey('projectRunning'), children: [
       HeadingRow(
         const Heading('Running total', size: BwType.headingSize),
-        Text(_year == null ? 'all years: ${moneyExact(s.total, cur)}' : '$_year: ${moneyExact(yearTotal, cur)}',
+        Text(year == null ? 'all years: ${_amount(s.total, cur)}' : '$year: ${_amount(yearTotal, cur)}',
             key: const ValueKey('projectYearText'), style: numStyle.copyWith(fontSize: BwType.metaSize, color: c.muted)),
       ),
       Wrap(spacing: 6, runSpacing: 6, children: [
@@ -117,7 +125,7 @@ class _ProjectScreenState extends State<ProjectScreen> {
           ChoiceChip(
             key: ValueKey('projectYear:${y ?? 'All'}'),
             label: Text(y == null ? 'All' : '$y'),
-            selected: _year == y,
+            selected: year == y,
             onSelected: (_) => setState(() => _year = y),
           ),
       ]),
@@ -130,7 +138,7 @@ class _ProjectScreenState extends State<ProjectScreen> {
             child: CustomPaint(
               key: const ValueKey('projectChart'),
               size: Size.infinite,
-              painter: _RunningPainter(s.running, _year, color, c.lineStrong, c.muted, c.ink),
+              painter: _RunningPainter(s.running, year, color, c.lineStrong, c.muted, c.ink),
             ),
           ),
         ),
@@ -140,21 +148,19 @@ class _ProjectScreenState extends State<ProjectScreen> {
 
   Widget _split(ProjectStats s) {
     final c = context.c, cur = wc.currency;
-    // The five biggest main tags, the rest as "Other": the rows still add up to the total.
-    final parts = <(String, int)>[for (final p in s.byMainTag.take(5)) (wc.categoryTable.label(p.$1), p.$2)];
-    final rest = s.byMainTag.skip(5).fold<int>(0, (a, p) => a + p.$2);
-    if (s.byMainTag.length > 5) parts.add(('Other', rest));
+    final split = wc.projectSplit(widget.tag);
+    final parts = split.parts;
     final colors = [c.s1, c.s2, c.s3, c.s4, c.s5, c.s6];
     final bar = [
       for (var i = 0; i < parts.length; i++)
-        if (parts[i].$2 > 0) (i, parts[i].$2)
+        if (parts[i].inBar) i
     ];
-    final sum = bar.fold<int>(0, (a, b) => a + b.$2);
+    String value(ProjectPart p) => _amount(p.cents, cur);
     return Panel(key: const ValueKey('projectSplit'), padding: const EdgeInsets.only(top: 12), children: [
       const Heading('What it went on', size: BwType.headingSize),
-      if (sum > 0)
+      if (split.barTotal > 0)
         Semantics(
-          label: parts.map((p) => '${p.$1} ${moneyExact(p.$2, cur)}').join('; '),
+          label: parts.map((p) => '${p.label} ${value(p)}').join('; '),
           child: ExcludeSemantics(
             child: SizedBox(
               height: 14,
@@ -162,10 +168,10 @@ class _ProjectScreenState extends State<ProjectScreen> {
                 for (var j = 0; j < bar.length; j++) ...[
                   if (j > 0) const SizedBox(width: 2),
                   Expanded(
-                    flex: (bar[j].$2 * 1000 ~/ sum).clamp(1, 1000),
+                    flex: (parts[bar[j]].cents * 1000 ~/ split.barTotal).clamp(1, 1000),
                     child: DecoratedBox(
                         decoration: BoxDecoration(
-                            color: colors[bar[j].$1],
+                            color: colors[bar[j]],
                             borderRadius: BorderRadius.horizontal(
                                 left: Radius.circular(j == 0 ? 4 : 0), right: Radius.circular(j == bar.length - 1 ? 4 : 0)))),
                   ),
@@ -176,11 +182,12 @@ class _ProjectScreenState extends State<ProjectScreen> {
         ),
       Rows(children: [
         for (var i = 0; i < parts.length; i++)
-          LineItem(parts[i].$1, moneyExact(parts[i].$2, cur),
+          LineItem(parts[i].label, value(parts[i]),
               key: ValueKey('projectPart:$i'),
               leading:
                   Container(width: 10, height: 10, decoration: BoxDecoration(color: colors[i], borderRadius: BorderRadius.circular(3)))),
       ]),
+      if (split.hasRefunds) const Muted('Refunds are listed but left out of the bar.', key: ValueKey('projectRefundNote')),
     ]);
   }
 
@@ -229,7 +236,7 @@ class _ProjectScreenState extends State<ProjectScreen> {
             ),
             const Muted('Skip hides a payment until you open this page again. Tag has Undo.'),
             Rows(children: [
-              for (final t in rows)
+              for (final t in rows.take(_shown))
                 Padding(
                   key: ValueKey('candidate:${t.id}'),
                   padding: const EdgeInsets.symmetric(vertical: 8),
@@ -258,6 +265,12 @@ class _ProjectScreenState extends State<ProjectScreen> {
                   ]),
                 ),
             ]),
+            if (rows.length > _shown)
+              TextButton(
+                  key: const ValueKey('projectMore'),
+                  style: TextButton.styleFrom(minimumSize: const Size(0, touchMin)),
+                  onPressed: () => setState(() => _shown += 25),
+                  child: Text('Show more (${rows.length - _shown} left)')),
           ]),
         ], gap: 12));
   }

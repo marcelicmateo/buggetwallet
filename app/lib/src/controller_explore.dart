@@ -13,6 +13,23 @@ class SeriesChoice {
   const SeriesChoice(this.key, this.label);
 }
 
+/// One row of a project's "What it went on": a main tag (or "Other"), its cents, and whether it is in the bar (a refund is not).
+class ProjectPart {
+  final String label;
+  final int cents;
+  final bool inBar;
+  const ProjectPart(this.label, this.cents, this.inBar);
+}
+
+/// The rows of "What it went on" (the five biggest main tags, the rest as "Other": they add up to the project total) and the sum
+/// the bar's widths are shares of (the positive rows only).
+class ProjectSplit {
+  final List<ProjectPart> parts;
+  final int barTotal;
+  const ProjectSplit(this.parts, this.barTotal);
+  bool get hasRefunds => parts.any((p) => p.cents < 0);
+}
+
 extension ExploreDb on WalletController {
   /// The day index every graph reads (it holds the accounts, which account series need), once per data version.
   DayIndex get exploreIndex => dayIndex;
@@ -115,6 +132,7 @@ extension ExploreDb on WalletController {
 
   void _viewsChanged() {
     _memo.remove(const MemoKey('explore.views'));
+    _memo.removeWhere((k, _) => k.name.startsWith('ov.pin')); // Overview's pinned list and tiles read the same views
     _refreshView();
     _syncSoon();
   }
@@ -157,6 +175,17 @@ extension ExploreDb on WalletController {
       () => timed('project.stats',
           () => projectStats(tagId, txs, tags: tagContext, table: categoryTable, currency: currency, today: today(), st: settings),
           fields: {'tx': txs.length}, warnMs: 150));
+
+  /// [projectOf]'s main-tag split as rows. Once per data version.
+  ProjectSplit projectSplit(String tagId) => memo(MemoKey('project.split', tagId), () {
+        final s = projectOf(tagId);
+        final parts = <ProjectPart>[for (final p in s.byMainTag.take(5)) ProjectPart(categoryTable.label(p.$1), p.$2, p.$2 > 0)];
+        if (s.byMainTag.length > 5) {
+          final rest = s.byMainTag.skip(5).fold<int>(0, (a, p) => a + p.$2);
+          parts.add(ProjectPart('Other', rest, rest > 0));
+        }
+        return ProjectSplit(parts, parts.where((p) => p.inBar).fold<int>(0, (a, p) => a + p.cents));
+      });
 
   /// Turns [tagId] on (Tag, Tag all) or off (Skip, Undo) for the payments [txIds]. An "off" link is what keeps a payment out of the
   /// project's "not tagged yet" list.

@@ -340,6 +340,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
     final c = context.c;
     final buckets = [for (final r in rows) r.bucket];
     final partial = [for (final r in rows) r.partial];
+    final notes = [for (final r in rows) partialNote(r, wc.today())];
     final series = [
       for (var i = 0; i < q.keys.length; i++)
         ChartSeries(wc.seriesLabel(q.keys[i]), seriesColor(c, i), [for (final r in rows) r.cents[q.keys[i]] ?? 0]),
@@ -364,7 +365,14 @@ class _ExploreScreenState extends State<ExploreScreen> {
       ]),
       if (!many)
         ExploreChart(
-            buckets: buckets, partial: partial, series: series, bucketText: bucketText, valueText: value, axisText: axis, spoken: spoken)
+            buckets: buckets,
+            partial: partial,
+            partialNotes: notes,
+            series: series,
+            bucketText: bucketText,
+            valueText: value,
+            axisText: axis,
+            spoken: spoken)
       else
         LayoutBuilder(
           builder: (context, box) {
@@ -380,6 +388,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                         key: ValueKey('multiple:${s.name}'),
                         buckets: buckets,
                         partial: partial,
+                        partialNotes: notes,
                         series: [s],
                         bucketText: bucketText,
                         valueText: value,
@@ -398,6 +407,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
   }
 
   // ---- table ----
+
+  String _note(QueryRow r) => partialNote(r, wc.today()) == null ? '' : ' · ${partialNote(r, wc.today())}';
 
   Widget _table(SeriesQuery q, List<QueryRow> rows, String cur) {
     final c = context.c;
@@ -439,8 +450,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                     width: first,
                     child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-                        child: Text('${exploreBucketLabel(r.bucket, q.bucket)}${r.partial ? ' · so far' : ''}',
-                            style: const TextStyle(fontSize: 13)))),
+                        child: Text('${exploreBucketLabel(r.bucket, q.bucket)}${_note(r)}', style: const TextStyle(fontSize: 13)))),
                 for (var i = 0; i < q.keys.length; i++)
                   cell(measureValue(_measure, r.cents[q.keys[i]] ?? 0, cur), col, key: ValueKey('exploreCell:${r.bucket.start}:$i')),
                 if (several)
@@ -469,7 +479,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
     for (final h in cells) {
       (byYear[h.year] ??= {})[h.month] = h;
     }
-    final sentence = topMonthSentence(cells, int.parse(wc.today().substring(0, 4)), _measure);
+    final first = wc.exploreIndex.first;
+    final sentence = topMonthSentence(cells, int.parse(wc.today().substring(0, 4)), _measure,
+        dataStartsMonth: first == null ? 1 : int.parse(first.substring(5, 7)));
     final pick = _heatPick;
     return Panel(key: const ValueKey('exploreHeat'), children: [
       Eyebrow('${wc.seriesLabel(key)} · month × year'),
@@ -509,12 +521,16 @@ class _ExploreScreenState extends State<ExploreScreen> {
         ]),
         maxEnd: 0.8,
       ),
-      Text(
-          pick == null
-              ? 'Tap a month for its exact amount.'
-              : '${monthYear(pick.year, pick.month)} · ${measureValue(_measure, pick.cents, cur)}',
-          key: const ValueKey('heatReadout'),
-          style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
+      // A live region: a screen reader announces the chosen month's value when it changes.
+      Semantics(
+        liveRegion: true,
+        child: Text(
+            pick == null
+                ? 'Tap a month for its exact amount.'
+                : '${monthYear(pick.year, pick.month)} · ${measureValue(_measure, pick.cents, cur)}',
+            key: const ValueKey('heatReadout'),
+            style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
+      ),
       if (sentence != null) Text(sentence, key: const ValueKey('heatSentence')),
     ]);
   }

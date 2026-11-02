@@ -159,12 +159,8 @@ extension OverviewData on WalletController {
 
   // ---------- pinned series ----------
 
-  /// The day index with the accounts, for saved queries (account series count the rows an account owns).
-  DayIndex get queryIndex => _cached(
-        const MemoKey('ov.queryIndex'),
-        () => timed('overview.queryIndex', () => DayIndex(txs, currency: currency, table: categoryTable, accounts: accountsAll()),
-            fields: {'tx': txs.length}, warnMs: 50),
-      );
+  /// The day index saved queries run on: the one every graph reads (it holds the accounts), once per data version.
+  DayIndex get queryIndex => dayIndex;
 
   List<SavedView> pinnedViews() => _cached(
       const MemoKey('ov.pinnedViews'),

@@ -56,12 +56,15 @@ String moveWords(MoveTogether? m) {
 }
 
 /// "December is your priciest month in 4 of 5 years." from [cells] (month x year), or null. A month counts for a year when it is that
-/// year's top one (a tie for the top counts for nobody); only complete years are looked at ([thisYear] is skipped). Needs the same month
+/// year's top one (a tie for the top counts for nobody); only complete years are looked at ([thisYear] is skipped, and the first year
+/// when the data starts after January: [dataStartsMonth]). Needs the same month
 /// on top in at least 3 years.
-String? topMonthSentence(List<HeatCell> cells, int thisYear, Measure m) {
+String? topMonthSentence(List<HeatCell> cells, int thisYear, Measure m, {int dataStartsMonth = 1}) {
   final byYear = <int, List<HeatCell>>{};
+  final firstYear = cells.isEmpty ? 0 : cells.first.year;
   for (final c in cells) {
-    if (c.year < thisYear) (byYear[c.year] ??= []).add(c);
+    // the first data year is skipped unless the data starts in January (its early months are empty, not low)
+    if (c.year < thisYear && !(c.year == firstYear && dataStartsMonth > 1)) (byYear[c.year] ??= []).add(c);
   }
   final wins = <int, int>{};
   var years = 0;
@@ -88,10 +91,6 @@ String? topMonthSentence(List<HeatCell> cells, int thisYear, Measure m) {
 /// "3.1 %" from permille.
 String permilleText(int p) => '${p ~/ 10}${numberStyle.decimal}${p % 10} %';
 
-/// Work time from tenths of an hour: "832 h", or "12.5 h" under 100 hours.
-String hoursText(int tenths) =>
-    tenths < 1000 ? '${tenths ~/ 10}${numberStyle.decimal}${tenths % 10} h' : '${groupInt((tenths + 5) ~/ 10)} h';
-
 /// "Mar 2023 → today" / "Mar 2023 → Oct 2025 · ended", then the length and the payment count.
 String projectSpanText(ProjectStats s) {
   String m(String d) => '${monthShort(d.substring(0, 7))} ${d.substring(0, 4)}';
@@ -103,3 +102,7 @@ String projectSpanText(ProjectStats s) {
   ].join(' ');
   return '$span${s.ended ? ' · ended' : ''} · $len · ${s.count} ${s.count == 1 ? 'payment' : 'payments'}';
 }
+
+/// What marks a running bucket: "so far" when it holds [today] (the last bucket), "partial" when the window cut it (the first one),
+/// null for a whole bucket.
+String? partialNote(QueryRow r, String today) => !r.partial ? null : (r.bucket.contains(today) ? 'so far' : 'partial');

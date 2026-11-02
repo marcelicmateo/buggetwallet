@@ -366,7 +366,7 @@ void main() {
     for (final x in newest.take(5)) {
       await wc.setPaymentTag(x.tx.id, tag, true);
     }
-    unawaited(openTag(tester.element(find.byType(Scaffold).first), wc, tag, DateRange(start: addDays(wc.today(), -45), end: wc.today())));
+    unawaited(openTag(tester.element(find.byType(Scaffold).first), wc, tag));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('projectTotal')), findsOneWidget);
     await binding.takeScreenshot('9-project');
