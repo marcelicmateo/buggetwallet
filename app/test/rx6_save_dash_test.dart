@@ -242,7 +242,23 @@ void main() {
       expect(_k('readyToDecide'), findsOneWidget);
       expect(_in('emptySection:Cooling off', 'Nothing cooling off'), findsOneWidget);
       expect(find.text('Wishlist is empty'), findsNothing);
+      expect(_k('emptySection:Wishlist'), findsNothing);
     });
+
+    for (final (status, hoursAgo) in [('waiting', 1), ('skipped', 100)]) {
+      testWidgets('only $status wishes: the one empty tile is absent', (tester) async {
+        final wc = _wallet();
+        final now = DateTime.now().millisecondsSinceEpoch;
+        wc.repo.applyRemote([
+          Op('wish', 'w-$status', {'name': 'Rain jacket', 'price': 8999, 'added': now - hoursAgo * 3600000, 'status': status, 'deleted': 0},
+              Hlc(now + 1000, 0, 'peer').toString()),
+        ]);
+        wc.reload();
+        await _pump(tester, wc);
+        expect(_k('emptySection:Wishlist'), findsNothing);
+        expect(find.text('None yet'), findsNothing);
+      });
+    }
 
     testWidgets('an empty wishlist says so once, in one tile', (tester) async {
       final wc = _wallet();

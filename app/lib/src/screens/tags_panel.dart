@@ -38,7 +38,7 @@ class TagsPanel extends StatelessWidget {
           wc,
           'tags',
           'Tags track what a payment was for, as deep as you like. A payment can have any number of them. They never change your budget: '
-              'its main tag does that.'),
+              'its main tag does that. Hide a tag to stop it showing in pickers.'),
       if (ids.isEmpty && dups.isEmpty)
         const Padding(
             padding: EdgeInsets.only(top: 6),

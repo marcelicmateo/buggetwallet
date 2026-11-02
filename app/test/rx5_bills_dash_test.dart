@@ -160,7 +160,10 @@ void main() {
       expect(_key('billsReviewPanel'), findsOneWidget);
       expect(t.widget<Tile>(_key('billsReviewPanel')).attention, isTrue);
       expect(_in('billsReviewPanel', find.text('TO REVIEW')), findsOneWidget);
-      expect(_in('billsReviewPanel', find.text('1')), findsOneWidget);
+      expect(find.descendant(of: _key('billsReviewPanel'), matching: find.widgetWithText(TileNote, '1')), findsOneWidget,
+          reason: 'the count is the tile note');
+      expect(find.textContaining('to check'), findsNothing);
+      expect(_key('billsScan'), findsNothing, reason: 'Scan bill is only in the Bills panel');
       expect(_in('billsReviewPanel', find.text('Synthetic Slip Shop')), findsOneWidget);
       expect(find.text('Synthetic Slip Shop'), findsOneWidget, reason: 'listed once');
     });
