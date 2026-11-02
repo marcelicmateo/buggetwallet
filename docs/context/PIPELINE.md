@@ -51,7 +51,7 @@ Theme waits for the owner's mockup pick; crypto rate by hand. Merge order A-core
 | UX-A-ui2 | currency picker + offer, account form by kind, editable built-ins | ui-builder | A-core merged | done 628323d + review fixes f58e959, merged 14dd257 |
 | UX-ACC | payments know their account (`SCHEMA21_SPEC.md`, folded into schema 20, ask once) | core (Cols), then ui | F1-core merged | core running (with UX-FX); **v2 not pushed until schema 20 is final** |
 | UX-FX | ECB daily rates per payment date (`UX_SPEC.md` UX-FX), in schema 20 | scout → core (Cols) + ui | F1-core merged, UX-A-ui2 merged | queued (owner yes 2026-11-01) |
-| UX-B | Plan window, Tags window, Settings = setup, Today tiles | ui-builder (+ core if needed) | UX-A | queued |
+| UX-B | Plan window, Tags window, Settings = setup, Today tiles | ui-builder (+ core if needed) | UX-A | running (2026-11-02, base 663ba27): A Plan+Settings, B Tags window (3rd Budget segment, Accept/Dismiss cards, one +), C Today tiles; no word suggestions unless owner asks |
 | UX-C2 | tightening pass over every screen | ui-builder | UX-B | queued |
 | F1 | field refactor pilot (Bill + Account), plan `FIELDS_PLAN.md` | scout → core + test-writer + ui | owner OK | F1-core 0416494 + review 56b7909 merged 06f728d; F1-ui running |
 | F2 | field refactor roll-out to the other entities | core + ui | F1, UX-B | planned |
