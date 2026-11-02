@@ -335,6 +335,9 @@ Bump nothing on CI; the owner starts `ci` by hand.
 4. "All" in Explore: the whole history as quarters/years beyond 5 years [yes].
 5. Keep the Candy Pop / Coin Jar "fun" bits (sticker badges, swipe cards) out [out; only §4.4 fun].
 
+**Owner answers (2026-11-02):** 1 → 40 h (default `workHoursPerWeek` = 40, so the hours switch shows once a salary is set; editable in Settings › Look). 2 → buying costs 6 %, loan **30** years. 3 → follow the system. 4 → yes, whole history (quarters/years past 5 years). 5 → out (default).
+**Lead decisions (2026-11-02):** "main tag" = the row's resolved category (T1 naming; top level of `CategoryTable`). `findings(..., reviewDates:)` takes the review dates so `milestone` stays pure. History window for aboveUsual/seasonality = calendar months, home currency, `spendingSeries` rules. `dismissedFindings` = one synced setting row (JSON list of ids, newest 500 kept). All thresholds as integer ratios, r via integer square root (BigInt), hours rounded once half away from zero.
+
 ## 9. Out of scope
 Net worth, investments, live bank links, AI/LLM explanations, notifications for findings (a later nudge could say
 "New findings" without amounts), sharing views with other people, iOS/macOS/Windows.
