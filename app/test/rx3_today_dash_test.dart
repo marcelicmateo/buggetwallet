@@ -273,10 +273,10 @@ void main() {
       }
     }
 
-    testWidgets('1280: the hero is one short row across all four columns, Recent shows eight rows', (tester) async {
+    testWidgets('1200: the hero is one short row across all four columns, Recent shows eight rows', (tester) async {
       final wc = demoWallet();
       addTearDown(wc.dispose);
-      await _pump(tester, wc, size: const Size(1280, 1000), now: wc.now);
+      await _pump(tester, wc, size: const Size(1200, 1000), now: wc.now);
       final hero = tester.getRect(_k('heroTile'));
       final left = tester.getRect(_k('leftTile'));
       expect(hero.width, greaterThan(left.width * 1.9), reason: 'a whole row, the other tiles are narrower');

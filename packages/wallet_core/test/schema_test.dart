@@ -21,7 +21,8 @@ CREATE TABLE IF NOT EXISTS tx(
 CREATE INDEX IF NOT EXISTS tx_date ON tx(date);
 CREATE INDEX IF NOT EXISTS tx_amount ON tx(amount);
 CREATE TABLE IF NOT EXISTS goals(id TEXT PRIMARY KEY, name TEXT, target INTEGER NOT NULL DEFAULT 0, saved INTEGER NOT NULL DEFAULT 0,
-  monthly INTEGER NOT NULL DEFAULT 0, sort INTEGER NOT NULL DEFAULT 0, deleted INTEGER NOT NULL DEFAULT 0);
+  monthly INTEGER NOT NULL DEFAULT 0, sort INTEGER NOT NULL DEFAULT 0, deleted INTEGER NOT NULL DEFAULT 0,
+  price INTEGER, deposit_permille INTEGER, costs_permille INTEGER, loan_rate_bp INTEGER, loan_months INTEGER, compare_line_id TEXT, bought_at TEXT, loan_id TEXT);
 CREATE TABLE IF NOT EXISTS wish(id TEXT PRIMARY KEY, name TEXT, price INTEGER NOT NULL DEFAULT 0, added INTEGER NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'waiting', decided INTEGER, deleted INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS settings(id TEXT PRIMARY KEY, value TEXT, deleted INTEGER NOT NULL DEFAULT 0);
@@ -64,6 +65,12 @@ CREATE TABLE IF NOT EXISTS reviews(id TEXT PRIMARY KEY, done TEXT NOT NULL DEFAU
 CREATE TABLE IF NOT EXISTS payee_aliases(id TEXT PRIMARY KEY, alias TEXT NOT NULL DEFAULT '', payee TEXT NOT NULL DEFAULT '',
   deleted INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS fx_days(id TEXT PRIMARY KEY, cur TEXT NOT NULL DEFAULT '', date TEXT NOT NULL DEFAULT '', per_eur INTEGER NOT NULL DEFAULT 0, source TEXT NOT NULL DEFAULT 'ecb', deleted INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS loans(id TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '', principal INTEGER, rate_bp INTEGER, months INTEGER, first_due TEXT, payment INTEGER, account_id TEXT, payee_key TEXT, reference TEXT, goal_id TEXT, tag_id TEXT, closed_at TEXT, deleted INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS loan_rates(id TEXT PRIMARY KEY, loan_id TEXT NOT NULL DEFAULT '', from_date TEXT NOT NULL DEFAULT '', rate_bp INTEGER NOT NULL DEFAULT 0, payment INTEGER, deleted INTEGER NOT NULL DEFAULT 0);
+CREATE INDEX IF NOT EXISTS loan_rates_loan ON loan_rates(loan_id);
+CREATE TABLE IF NOT EXISTS loan_checks(id TEXT PRIMARY KEY, loan_id TEXT NOT NULL DEFAULT '', date TEXT NOT NULL DEFAULT '', balance INTEGER NOT NULL DEFAULT 0, deleted INTEGER NOT NULL DEFAULT 0);
+CREATE INDEX IF NOT EXISTS loan_checks_loan ON loan_checks(loan_id);
+CREATE TABLE IF NOT EXISTS loan_pays(id TEXT PRIMARY KEY, loan_id TEXT NOT NULL DEFAULT '', tx TEXT NOT NULL DEFAULT '', state TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS views(id TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '', query TEXT NOT NULL DEFAULT '', pinned INTEGER NOT NULL DEFAULT 0, sort INTEGER, deleted INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS blob_cache(hash TEXT PRIMARY KEY, sealed BLOB NOT NULL, used_at INTEGER NOT NULL, bytes INTEGER NOT NULL, uploaded INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS ecb_rates(cur TEXT NOT NULL, date TEXT NOT NULL, per_eur INTEGER NOT NULL, PRIMARY KEY(cur, date));
@@ -96,8 +103,8 @@ void main() {
 
     test('every synced table has id TEXT PRIMARY KEY, a deleted flag (a tag link: its state) and no column twice', () {
       for (final e in entitySchema.values) {
-        if (e.table == 'tx_tags') {
-          // T1: a link is never deleted; removing it writes state `off`.
+        if (e.table == 'tx_tags' || e.table == 'loan_pays') {
+          // T1 (and ENG E6c loan payments): a link is never deleted; removing it writes state `off`.
           expect(e.column('deleted'), isNull);
           expect(e.column('state')?.type, ColumnType.text);
         } else {

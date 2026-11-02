@@ -71,6 +71,7 @@ void main() {
     seedDemoSplit(wc.repo);
     await seedDemoAccounts(wc.repo, wc.today());
     seedDemoIous(wc.repo, wc.today());
+    seedDemoPin(wc.repo, wc.today());
     wc.reload();
     await wc.importIcsFile('demo.ics', Uint8List.fromList(utf8.encode(demoIcs(wc.today()))));
 
@@ -101,6 +102,26 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('comingUpLine')));
     await tester.pumpAndSettle();
     await binding.takeScreenshot('1-upcoming');
+    await tester.tap(find.byTooltip('Close'));
+    await tester.pumpAndSettle();
+
+    // Overview (ENG E2): found and pinned, the hours switch, and the Findings screen (E3).
+    await tester.ensureVisible(find.byKey(const ValueKey('foundSection')));
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('1-overview-found');
+    await tester.ensureVisible(find.byKey(const ValueKey('amountsHours')));
+    await tester.tap(find.byKey(const ValueKey('amountsHours')));
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('1-overview-hours');
+    await tester.tap(find.byKey(const ValueKey('amountsMoney')));
+    await tester.pumpAndSettle();
+    await tester.drag(find.ancestor(of: find.byKey(const ValueKey('foundSection')), matching: find.byType(Scrollable)).first,
+        const Offset(0, 3000)); // back to the top
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('foundAll')));
+    await tester.tap(find.byKey(const ValueKey('foundAll')));
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('1-findings');
     await tester.tap(find.byTooltip('Close'));
     await tester.pumpAndSettle();
 

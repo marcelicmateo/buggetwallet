@@ -442,6 +442,12 @@ class Categorizer {
   /// while account balances (raw rows) still count it. A split on such a row is ignored, as on a transfer. Empty: none.
   final Set<String> iouTx;
 
+  /// Ids of the bank rows matched to a loan with a plan line (ENG E6, `WalletRepoLoans.loanLinkedTx`, read once): their
+  /// main tag is the fixed "Loan" (before any other rule; a row with the owner's own main tag or a split is here only
+  /// once the owner answered yes), so the row counts once, in the plan's loan line, never as flexible spending. Counted
+  /// whole: a split on it is shown broken. Empty: none.
+  final Set<String> loanTx;
+
   /// [patternRules] (P7, [WalletSettings.patternRules]) are the personal patterns with their match kind and range; when
   /// null, [patterns] (`[category, regex]` pairs, [WalletSettings.merchantPatterns]) are used as regex patterns.
   factory Categorizer(
@@ -453,6 +459,7 @@ class Categorizer {
       TagContext? tagContext,
       Map<String, List<SplitPart>> splits = const {},
       Set<String> iouTx = const {},
+      Set<String> loanTx = const {},
       Map<String, BuiltInRuleOverride> builtInOverrides = const {}}) {
     final t = table ?? CategoryTable.builtIn;
     final rules = patternRules ??
@@ -466,11 +473,12 @@ class Categorizer {
     ];
     // Counts only: merchant rules and patterns are personal.
     logEvent(_log, Level.FINE, 'categories.build', {'rules': merchantRules.length, 'patterns': rules.length, 'patternsUsed': used.length});
-    return Categorizer._(merchantRules, used, rentCashThreshold, t, tagContext, splits, iouTx, _effectiveBuiltIns(builtInOverrides, t));
+    return Categorizer._(
+        merchantRules, used, rentCashThreshold, t, tagContext, splits, iouTx, loanTx, _effectiveBuiltIns(builtInOverrides, t));
   }
 
-  Categorizer._(
-      this.merchantRules, this._patterns, this.rentCashThreshold, this.table, this.tagContext, this.splits, this.iouTx, this._builtIns)
+  Categorizer._(this.merchantRules, this._patterns, this.rentCashThreshold, this.table, this.tagContext, this.splits, this.iouTx,
+      this.loanTx, this._builtIns)
       : userPatterns = List.unmodifiable([for (final p in _patterns) (p.rule.category, p.rule)]);
 
   /// The built-in rules in use, in [builtInRules] order: (id, category, regex) after the owner's overrides.
@@ -633,6 +641,7 @@ class Categorizer {
   String? ruleFor(Tx t) => _decide(t).$2;
 
   (String, String?) _decide(Tx t) {
+    if (loanTx.contains(t.id)) return ('Loan', null);
     final o = t.category;
     if (o != null && table.isLive(o)) return (o, null);
     final auto = _auto(t);
@@ -681,6 +690,8 @@ class Categorizer {
     final stored = splits[t.id];
     if (stored == null || !t.live) return [categorize(t)];
     final whole = categorize(t);
+    // A loan payment counts whole (its split, made before the owner confirmed it, shows as broken).
+    if (loanTx.contains(t.id)) return [CategorizedTx(t, whole.category, whole.kind, tags: whole.tags, splitBroken: true, iou: whole.iou)];
     if (t.transferTo != null || whole.kind == BudgetKind.transfer) return [whole];
     final fallbackOk = table.isLive(whole.category) && whole.kind != BudgetKind.transfer;
     if (!splitFits(t.amount, stored) || (!fallbackOk && stored.any((p) => !table.isLive(p.category)))) {

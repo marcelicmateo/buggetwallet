@@ -276,8 +276,33 @@ abstract final class GoalCols {
   static const monthly = MoneyCol(entity, 'monthly', label: 'Monthly');
   static const sort = IntCol(entity, 'sort', label: 'Order');
   static const deleted = FlagCol(entity, 'deleted', label: 'Deleted');
+  // v21 (ENG E6, ENG_UI_SPEC §6.5): a big purchase's planner inputs (`goalPlan`) and what became of it; null = not set.
+  // No read defaults: the app fills them when the goal is made. Older builds ignore them.
+  static const price = MoneyCol(entity, 'price', label: 'Price', nullable: true);
+  static const depositPermille = IntCol(entity, 'deposit_permille', label: 'Deposit', nullable: true, min: 0, max: 1000);
+  static const costsPermille = IntCol(entity, 'costs_permille', label: 'Costs on top', nullable: true, min: 0, max: 1000);
+  static const loanRateBp = IntCol(entity, 'loan_rate_bp', label: 'Loan rate', nullable: true, min: 0, max: 10000);
+  static const loanMonths = IntCol(entity, 'loan_months', label: 'Loan length', nullable: true, min: 1, max: 600);
+  static const compareLineId = TextCol(entity, 'compare_line_id', label: 'Compare with', nullable: true, maxLength: 200);
+  static const boughtAt = DateCol(entity, 'bought_at', label: 'Bought on', nullable: true, notAfterToday: true);
+  static const loanId = RefCol(entity, 'loan_id', label: 'Loan', target: 'loan', nullable: true);
 
-  static const all = <Col>[name, target, saved, monthly, sort, deleted];
+  static const all = <Col>[
+    name,
+    target,
+    saved,
+    monthly,
+    sort,
+    deleted,
+    price,
+    depositPermille,
+    costsPermille,
+    loanRateBp,
+    loanMonths,
+    compareLineId,
+    boughtAt,
+    loanId,
+  ];
 }
 
 class Goal {
@@ -290,7 +315,28 @@ class Goal {
   final int saved;
   final int monthly;
   final int sort;
-  const Goal({required this.id, required this.name, this.target = 0, this.saved = 0, this.monthly = 0, this.sort = 0});
+
+  /// v21 (ENG E6) big-purchase fields ([GoalCols], `goalPlan`); null = not set. [depositPermille] null = paid in full.
+  final int? price, depositPermille, costsPermille, loanRateBp, loanMonths;
+
+  /// A plan line to compare the loan payment with (e.g. `rent`, `plan:<id>`), the date "I bought it" was confirmed, and
+  /// the loan the goal became.
+  final String? compareLineId, boughtAt, loanId;
+  const Goal(
+      {required this.id,
+      required this.name,
+      this.target = 0,
+      this.saved = 0,
+      this.monthly = 0,
+      this.sort = 0,
+      this.price,
+      this.depositPermille,
+      this.costsPermille,
+      this.loanRateBp,
+      this.loanMonths,
+      this.compareLineId,
+      this.boughtAt,
+      this.loanId});
 
   /// Largest saved total either way, in cents: 10 billion in major units (the importer's and the app's cap).
   static const maxSaved = 1000000000000;
@@ -305,9 +351,31 @@ class Goal {
         saved: GoalCols.saved.read(r) ?? 0,
         monthly: GoalCols.monthly.read(r) ?? 0,
         sort: GoalCols.sort.read(r) ?? 0,
+        price: GoalCols.price.read(r),
+        depositPermille: GoalCols.depositPermille.read(r),
+        costsPermille: GoalCols.costsPermille.read(r),
+        loanRateBp: GoalCols.loanRateBp.read(r),
+        loanMonths: GoalCols.loanMonths.read(r),
+        compareLineId: GoalCols.compareLineId.read(r),
+        boughtAt: GoalCols.boughtAt.read(r),
+        loanId: GoalCols.loanId.read(r),
       );
 
-  Goal withSaved(int saved) => Goal(id: id, name: name, target: target, saved: saved, monthly: monthly, sort: sort);
+  Goal withSaved(int saved) => Goal(
+      id: id,
+      name: name,
+      target: target,
+      saved: saved,
+      monthly: monthly,
+      sort: sort,
+      price: price,
+      depositPermille: depositPermille,
+      costsPermille: costsPermille,
+      loanRateBp: loanRateBp,
+      loanMonths: loanMonths,
+      compareLineId: compareLineId,
+      boughtAt: boughtAt,
+      loanId: loanId);
 }
 
 /// A goal's saved total: [base] (its stored `saved` column) plus [contributions]. Each contribution counts at most
@@ -1219,6 +1287,14 @@ class WalletSettings {
   /// `WalletRepo.settings()` fills it; [toMap] leaves it out.
   final EcbRates ecb;
 
+  /// ENG E6: each open loan's payment in force today (`loan` rows, `WalletRepo.settings()` fills it; id → cents). Not
+  /// a setting.
+  final Map<String, int> loanLines;
+
+  /// The loans' part of the fixed plan: the old single [loan] setting (0 once the owner moved it to a loan row,
+  /// `WalletRepoLoans.convertLegacyLoan`) plus Σ [loanLines].
+  int get loanPlan => loanLines.values.fold(loan, (s, v) => s + v);
+
   /// ENG §6.1: hours worked a week, for showing amounts as hours of work (`hoursTenths`). 1..[maxWorkHours].
   final int workHoursPerWeek;
 
@@ -1258,6 +1334,7 @@ class WalletSettings {
     this.csvMappings = const {},
     this.builtInRuleOverrides = const {},
     this.ecb = EcbRates.none,
+    this.loanLines = const {},
     this.workHoursPerWeek = defaultWorkHours,
     this.dismissedFindings = const [],
   });
@@ -1291,6 +1368,9 @@ class WalletSettings {
   /// The [toMap] key of [ecb] (in memory only: the repo never reads a stored settings row of that name).
   static const ecbKey = 'ecb';
 
+  /// The [toMap] key of [loanLines] (in memory only, like [ecbKey]).
+  static const loanLinesKey = 'loanLines';
+
   static const budgetPrefix = 'budget:', patternPrefix = 'pattern:', planPrefix = 'plan:', fxPrefix = 'fx:';
 
   /// An ISO 4217 code as the wallet currency and the rate rows use it.
@@ -1315,7 +1395,7 @@ class WalletSettings {
   /// bug, a damaged op) falls back to that setting's default alone, logged as `settings.invalid` with the key only
   /// (never the value), once per key and value ([logInvalidSetting]); the other settings are kept.
   /// [table] decides which category budgets are valid (live top-level spending categories); null = built-ins only.
-  static WalletSettings fromMap(Map<String, Object?> m, {CategoryTable? table, EcbRates ecb = EcbRates.none}) {
+  static WalletSettings fromMap(Map<String, Object?> m, {CategoryTable? table, EcbRates ecb = EcbRates.none, Map<String, int>? loanLines}) {
     final cats = table ?? CategoryTable.builtIn;
     T bad<T>(String k, T d) {
       logInvalidSetting(k, m[k]);
@@ -1443,6 +1523,14 @@ class WalletSettings {
       csvMappings: csvRows.isEmpty ? const {} : Map.unmodifiable(csvRows),
       builtInRuleOverrides: builtInRows.isEmpty ? const {} : Map.unmodifiable(builtInRows),
       ecb: ecb.isEmpty ? EcbRates.fromJson(m[ecbKey]) : ecb,
+      loanLines: loanLines ??
+          switch (m[loanLinesKey]) {
+            final Map<String, Object?> j => Map.unmodifiable({
+                for (final e in j.entries)
+                  if (e.value case final int v when v >= 0 && v <= maxAmount) e.key: v
+              }),
+            _ => const <String, int>{},
+          },
       workHoursPerWeek: i('workHoursPerWeek', defaultWorkHours, min: 1, max: maxWorkHours),
       dismissedFindings: switch (dismissed) {
         null => const [],
@@ -1602,5 +1690,6 @@ class WalletSettings {
         'dismissedFindings': dismissedFindings,
         // UX-FX: the wallet's ECB rates (`fx_day` rows, read by the repo), so fromMap(toMap()) keeps them.
         if (!ecb.isEmpty) ecbKey: ecb.toJson(),
+        if (loanLines.isNotEmpty) loanLinesKey: loanLines,
       };
 }

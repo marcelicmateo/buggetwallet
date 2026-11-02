@@ -493,14 +493,21 @@ class TxTile extends StatelessWidget {
       this.matchedPart,
       this.highlight,
       this.iouTag,
-      this.matched = false});
+      this.matched = false,
+      this.amountOf});
+
+  /// Writes the amount instead of `money` (Overview's hours of work). Gets cents and the row's currency.
+  final String Function(int cents, String currency)? amountOf;
 
   @override
   Widget build(BuildContext context) {
     final c = context.c;
     final inc = t.amount > 0;
     final src = switch (t.tx.source) { 'manual' => 'added', 'revolut' => 'Revolut', 'pbz' => 'PBZ', final s => s };
-    final amount = money(t.amount, t.tx.currency, decimals: 2, signed: true); // a row without a rate keeps its own currency
+    // A row without a rate keeps its own currency.
+    final amount = amountOf == null
+        ? money(t.amount, t.tx.currency, decimals: 2, signed: true)
+        : '${inc ? '+' : ''}${amountOf!(t.amount, t.tx.currency)}';
     final amountStyle = numStyle.copyWith(fontSize: BwType.amountSize, fontWeight: FontWeight.w500, color: inc ? c.good : c.ink);
     final columns = _columnsFit(context);
     final original = originalNote(t, fxRates);

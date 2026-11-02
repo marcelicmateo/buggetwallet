@@ -342,23 +342,26 @@ class _Windows {
   var approximate = false;
   for (final b in bills) {
     if (b.isIncome || !b.confirmed || b.finished) continue;
-    final ranged = b.hasRange;
-    final amount = ranged ? (b.minAmount! + b.maxAmount!) ~/ 2 : b.expectedAmount;
-    final days = b.intervalDays;
-    if (amount <= 0 || days < 1) continue;
-    if (ranged) approximate = true;
-    if (!b.isShort && !b.isLong) {
-      monthly += amount;
-      yearly += amount * 12;
-      continue;
-    }
-    final y = switch (RecurringPeriod.of(days)) {
-      RecurringPeriod.quarterly => amount * 4,
-      RecurringPeriod.yearly => amount,
-      _ => amount * 365 ~/ days,
-    };
-    yearly += y;
-    monthly += y ~/ 12;
+    final c = recurringCycleCost(b);
+    if (c == null) continue;
+    if (b.hasRange) approximate = true;
+    monthly += c.monthly;
+    yearly += c.yearly;
   }
   return (monthly: monthly, yearly: yearly, approximate: approximate);
+}
+
+/// One bill's or income's figures a month and a year by [recurringCost]'s rules, without its filter; null when its
+/// amount or interval is not positive.
+({int monthly, int yearly})? recurringCycleCost(RecurringBill b) {
+  final amount = b.hasRange ? (b.minAmount! + b.maxAmount!) ~/ 2 : b.expectedAmount;
+  final days = b.intervalDays;
+  if (amount <= 0 || days < 1) return null;
+  if (!b.isShort && days <= 31) return (monthly: amount, yearly: amount * 12); // a bill's !isLong, also for incomes
+  final y = switch (RecurringPeriod.of(days)) {
+    RecurringPeriod.quarterly => amount * 4,
+    RecurringPeriod.yearly => amount,
+    _ => amount * 365 ~/ days,
+  };
+  return (monthly: y ~/ 12, yearly: y);
 }
