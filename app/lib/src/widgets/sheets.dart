@@ -21,6 +21,8 @@ import 'common.dart';
 import 'split_sheet.dart';
 import 'tag_picker.dart';
 
+final _accLog = Logger('bw.accounts');
+
 /// The help text a dashboard tile keeps behind its (i): a title and a few plain lines (the sheet brings its own close button).
 Future<void> showInfoSheet(BuildContext context, String title, String text) =>
     showSheet<void>(context, InfoSheet(title: title, text: text));
@@ -520,6 +522,39 @@ class _TxSheetState extends State<TxSheet> {
         ]));
   }
 
+  /// UX-ACC: which account counts this bank payment. Only when the wallet has more than one account of its bank and currency (a
+  /// hand-added payment is never offered); a pick is written at once (`setTxAccount`), it is not part of Save.
+  Widget? _accountSection(BuildContext context) {
+    final t = row.tx;
+    final wc = widget.wc;
+    final options = wc.accountsForRow(t);
+    if (t.manual || !t.live || options.length < 2) return null;
+    final now = wc.accountOfRow(t);
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: DropdownButtonFormField<String>(
+        key: const ValueKey('txAccount'),
+        initialValue: now?.id,
+        isExpanded: true,
+        decoration: const InputDecoration(labelText: 'Account'),
+        items: [for (final a in options) DropdownMenuItem(value: a.id, key: ValueKey('txAccount:${a.id}'), child: Text(a.name))],
+        onChanged: (id) {
+          if (id == null || id == now?.id) return;
+          try {
+            wc.setTxAccount(t.id, id);
+            setState(() => accountError = null);
+          } on ArgumentError catch (e, st) {
+            logError(_accLog, 'accounts.moveRowRefused', e, st);
+            setState(() => accountError = e.message.toString());
+          }
+        },
+      ),
+    );
+  }
+
+  /// Core's refusal of an account move, shown inside the sheet.
+  String? accountError;
+
   /// Bank and hand-added payments can be split, transfers cannot (P6).
   bool get canSplit => row.kind != BudgetKind.transfer && row.tx.transferTo == null && row.tx.amount != 0 && row.tx.live;
 
@@ -616,7 +651,8 @@ class _TxSheetState extends State<TxSheet> {
         Padding(
           padding: const EdgeInsets.only(top: 2),
           child: Text(
-              'Counts as ${money(c.amount, c.tx.currency, decimals: 2, signed: true)} at ${rateText(widget.wc.settings.fxRates[t.currency]!.rate)}',
+              // UX-FX: the source of the rate that counts it, as core picks it (`fxUsed`).
+              'Counts as ${money(c.amount, c.tx.currency, decimals: 2, signed: true)}${widget.wc.fxBasisText(t)}',
               key: const ValueKey('txCounted'),
               textAlign: TextAlign.end,
               style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
@@ -634,6 +670,8 @@ class _TxSheetState extends State<TxSheet> {
         Padding(
             padding: const EdgeInsets.only(top: 8),
             child: SelectableText(t.description, style: const TextStyle(fontSize: BwType.metaSize))),
+      if (_accountSection(context) case final w?) w,
+      if (accountError != null) StatusLabel(key: const ValueKey('txAccountError'), good: false, text: accountError!),
       if (bill != null) ...[
         const SizedBox(height: 10),
         Align(

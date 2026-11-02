@@ -57,7 +57,8 @@ Mac, iPhone, Windows and web are out of scope for now (owner's decision): don't 
   The emulator, system image and AVD live in Podman volumes (`bw-emulator*`), set up once (~2 GB download, then a
   cold boot saved as a snapshot); runs boot that snapshot read-only in ~3 s. `tools/emulator.sh reset` starts over.
   Known emulator 37.x limits: renderer `lavapipe`, and Flutter runs with `--no-enable-impeller` (Impeller trips an
-  abort in the emulator's GLES decoder); real phones use Impeller.
+  abort in the emulator's GLES decoder); real phones use Impeller. Every `emulator test` drive has a 600 s default limit
+  (`BW_TIMEOUT_EMULATOR_DRIVE`, seconds, 0 = none), and a file whose tests all skip on Android (desktop-only) ends its drive at once.
 - **Linux desktop:** `tools/build.sh desktop-test [name…]` runs `app/integration_test/*_test.dart` on the Linux app under
   Xvfb in the build container (screenshots `dist/screens/linux/<test>/`, log `dist/logs/app-linux-<test>.log`; desktop
   screenshots come from `integration_test/flutter_test_config.dart`). Files run in parallel on `BW_JOBS` workers (default

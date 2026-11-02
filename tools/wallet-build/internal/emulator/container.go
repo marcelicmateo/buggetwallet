@@ -234,6 +234,13 @@ func (k *cont) sdk(stdin io.Reader, tool string, args ...string) int {
 
 // boot starts the emulator from the snapshot, read-only (nothing is saved back) and waits until Android is up.
 func (k *cont) boot(window bool) int {
+	if k.c.Getenv(ClearLockEnv) == "1" { // the host found no other emulator container running: a lock in the AVD is a leftover
+		// the emulator's lock files are bw.avd/*.lock (multiinstance.lock, snapshot.lock.lock, hardware-qemu.ini.lock)
+		locks, _ := filepath.Glob(filepath.Join(k.avd, "bw.avd", "*.lock"))
+		for _, l := range locks {
+			_ = os.RemoveAll(l)
+		}
+	}
 	args := []string{"-read-only", "-no-snapshot-save"}
 	if !window {
 		args = append(args, "-no-window")
@@ -393,10 +400,29 @@ func (k *cont) drive(suite, name string) int {
 	}
 	argv := append([]string{"flutter", "drive", "--driver=test_driver/integration_test.dart", "--target=integration_test/" + suite + "_test.dart", "-d", Serial}, driveArgs(c.Env)...)
 	t := c.Us()
-	out := c.Red.Writer(io.MultiWriter(f, &lockedOut{c: c}))
-	rc := c.R.Run(c.Ctx, sys.Cmd{Argv: argv, Dir: filepath.Join(c.Root, "app"), Env: k.env.With("BW_TEST_NAME", name), Stdout: out, Stderr: out})
+	// Two ways a drive can end without the test file's say: every test of the file skipped (a desktop-only file: the driver extension
+	// never comes up and `flutter drive` waits forever) and the time limit.
+	limit := DriveTimeout(c.Env)
+	dctx, cancel := context.WithCancel(c.Ctx)
+	defer cancel()
+	if limit > 0 {
+		var stop context.CancelFunc
+		dctx, stop = context.WithTimeout(dctx, limit)
+		defer stop()
+	}
+	sw := &skipWatch{cancel: cancel}
+	out := c.Red.Writer(io.MultiWriter(f, &lockedOut{c: c}, sw))
+	rc := c.R.Run(dctx, sys.Cmd{Argv: argv, Dir: filepath.Join(c.Root, "app"), Env: k.env.With("BW_TEST_NAME", name), Stdout: out, Stderr: out})
 	_ = out.Close()
 	_ = f.Close()
+	switch {
+	case sw.hit():
+		c.Printf("drive %s: all tests skipped on this device; ended the drive\n", suite)
+		rc = 0
+	case limit > 0 && dctx.Err() == context.DeadlineExceeded && c.Ctx.Err() == nil:
+		c.Printf("drive %s: timed out after %d s (BW_TIMEOUT_EMULATOR_DRIVE); ended the drive\n", suite, int(limit/time.Second))
+		rc = 124
+	}
 	total, _ := strconv.ParseFloat(c.SecsSince(t), 64) // flutter drive builds, installs and runs in one go: split the time with the durations it prints
 	build := lastMatch(logPath, reBuild)
 	install := lastMatch(logPath, reInstall)
@@ -419,6 +445,51 @@ func (k *cont) drive(suite, name string) int {
 	c.LogHistory(step, fmt.Sprintf("%.1f", total-b-instMS/1000), result, "false", "")
 	report.FromCtx(c, k.logs).Tests("drive", suite, []string{logPath})
 	return rc
+}
+
+// DefaultDriveTimeout is the limit of one `flutter drive` (build, install and test): three times the slowest file in the timing
+// history (2026-11-01: layout 87 s + build 61 s + install 1 s = 149 s), rounded up. BW_TIMEOUT_EMULATOR_DRIVE (seconds, 0 = none) or
+// BW_STEP_TIMEOUT overrides it.
+const DefaultDriveTimeout = 10 * time.Minute
+
+// DriveTimeout is the limit of one drive.
+func DriveTimeout(env sys.Env) time.Duration {
+	return run.StepTimeout(env, "emulator-drive", DefaultDriveTimeout)
+}
+
+// skipMarker is what the test reporter prints when every test of a file was skipped (a desktop-only file run on Android).
+const skipMarker = "All tests skipped."
+
+// skipWatch looks for skipMarker in the drive's output and calls cancel (ending `flutter drive`) once it appears.
+type skipWatch struct {
+	mu     sync.Mutex
+	tail   string
+	found  bool
+	cancel context.CancelFunc
+}
+
+func (w *skipWatch) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.found {
+		return len(p), nil
+	}
+	w.tail += string(p)
+	if strings.Contains(w.tail, skipMarker) {
+		w.found = true
+		w.cancel()
+		return len(p), nil
+	}
+	if n := len(w.tail) - len(skipMarker); n > 0 { // keep what could start a marker split across writes
+		w.tail = w.tail[n:]
+	}
+	return len(p), nil
+}
+
+func (w *skipWatch) hit() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.found
 }
 
 // lockedOut is the context's stdout as a writer.

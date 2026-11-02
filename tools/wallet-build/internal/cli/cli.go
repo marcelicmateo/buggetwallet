@@ -21,6 +21,7 @@ import (
 	"wallet-build/internal/live"
 	"wallet-build/internal/report"
 	"wallet-build/internal/run"
+	"wallet-build/internal/shellhelpers"
 	"wallet-build/internal/steps"
 	"wallet-build/internal/sys"
 )
@@ -38,6 +39,8 @@ type Deps struct {
 	Self string // path of this binary; "" = os.Executable
 	// Host overrides the host side's terminal/signal/download hooks (tests).
 	HostSetup func(h *host.Host)
+	// Stdin is what the hook and relay reset read; os.Stdin when nil (tests).
+	Stdin io.Reader
 }
 
 // BuildCommands are the commands tools/build.sh has (the host or container side runs them).
@@ -91,7 +94,7 @@ func Run(args []string, environ []string, out, errw io.Writer, d Deps) int {
 	// Quiet: nothing on stdout or stderr, ours or any child's (the logs are written by the steps). lsp, mcp and
 	// image-name use stdout as their result.
 	// `live` has no quiet mode (tools/live.sh has none: -q is a usage error there and BW_QUIET is ignored).
-	if quiet && cmd != "lsp" && cmd != "mcp" && cmd != "image-name" && cmd != "live" {
+	if quiet && cmd != "lsp" && cmd != "mcp" && cmd != "image-name" && cmd != "live" && cmd != "hook" { // hook: its exit code and stderr line are the result
 		c.SetQuiet()
 	}
 	usage := func() int {
@@ -150,6 +153,13 @@ func dispatch(c *run.Ctx, cmd string, rest []string, self string, usage func() i
 			return usage()
 		}
 		return steps.SmokeRun(c.Out, rest[0], n, c.Getenv("SMOKE_OUT"), c.Env)
+	// ---- GO4-A helpers (ported Python tools; one block, GO4-B adds its own) ----
+	case "fixtures", "token-usage", "log-summary", "lsp-query":
+		return helpersA(c, cmd, rest, self)
+	}
+	// GO4-B helpers (relay, web serve/shot, web-shot, relay-native-check, signing-key, hook): host or container, no run directory
+	if rc, ok := shellhelpers.Dispatch(c, cmd, rest, self, usage, shellhelpers.Deps{HostSetup: d.HostSetup, Stdin: d.Stdin}); ok {
+		return rc
 	}
 	native := c.Getenv("BW_NATIVE") == "1"
 	if native && cmd != "emulator" && cmd != "live" {
@@ -291,7 +301,7 @@ func timesCmd(c *run.Ctx, cmd string, args []string, usage func() int) int {
 			tmp.Close()
 			x := ci.New(c)
 			if _, rc := x.Capture("fetch", "-q", "origin", "ci-logs:refs/remotes/origin/ci-logs"); rc == 0 {
-				if text, rc := x.Capture("show", "origin/ci-logs:history.jsonl"); rc == 0 {
+				if text, rc := x.CaptureQuiet("show", "origin/ci-logs:history.jsonl"); rc == 0 { // 2>/dev/null as in the script; M6: rename with the scripts
 					_ = os.WriteFile(tmp.Name(), []byte(text+"\n"), 0o644)
 				} else {
 					c.Eprintf("no history.jsonl on ci-logs yet\n")

@@ -1,0 +1,99 @@
+{
+ "project": "PROJECT",
+ "cases": [
+  {
+   "name": "all",
+   "args": [],
+   "json": true,
+   "exit": 0,
+   "stdout": "\nPer day\n                                          requests      input     cache_wr       cache_rd      output          total\n                                                 1          0            0              0           0              0\n  2026-10-20                                     3         22        1,000        125,456       2,222        128,700\n  2026-10-21                                     4         15           15          1,027       1,078          2,135\n  2026-10-22                                     4  1,234,585   89,012,356    678,901,251   3,000,116    772,148,308\n  2026-10-23                                     1          0            0              0           1              1\n  2026-10-24                                     1          1            0              0           8              9\n\nPer session (main = lead, agent = subagents)\n                                          requests      input     cache_wr       cache_rd      output          total\n  0123abcd agent                                 3         24            3          1,000          99          1,126\n  0123abcd main                                  9  1,234,588   89,013,358    679,026,713   3,003,016    772,277,675\n  feedbeef main                                  2         11           10             21         310            352\n\nPer model\n                                          requests      input     cache_wr       cache_rd      output          total\n  claude-opus-x                                  5  1,234,583   89,013,355    678,903,254   3,001,758    772,152,950\n  claude-sonnet-x                                3         12            8        123,463       1,444        124,927\n  claude-haiku-x                                 4         24            0          1,001         210          1,235\n  claude-requested-x                             1          4            8             16          12             40\n  mödel-ünï-x                                    1          0            0              0           1              1\n\nTotal\n                                          requests      input     cache_wr       cache_rd      output          total\n  all                                           14  1,234,623   89,013,371    679,027,734   3,003,425    772,279,153\n\n  commits on this branch in ..2026-10-24: 0\n\n  wrote {JSON}\n",
+   "stderr": "",
+   "json_text": "{\n \"range\": [\n  \"\",\n  \"2026-10-24\"\n ],\n \"commits\": 0,\n \"total\": {\n  \"input\": 1234623,\n  \"cache_write\": 89013371,\n  \"cache_read\": 679027734,\n  \"output\": 3003425,\n  \"requests\": 14\n },\n \"per_day\": {\n  \"\": {\n   \"input\": 0,\n   \"cache_write\": 0,\n   \"cache_read\": 0,\n   \"output\": 0,\n   \"requests\": 1\n  },\n  \"2026-10-20\": {\n   \"input\": 22,\n   \"cache_write\": 1000,\n   \"cache_read\": 125456,\n   \"output\": 2222,\n   \"requests\": 3\n  },\n  \"2026-10-21\": {\n   \"input\": 15,\n   \"cache_write\": 15,\n   \"cache_read\": 1027,\n   \"output\": 1078,\n   \"requests\": 4\n  },\n  \"2026-10-22\": {\n   \"input\": 1234585,\n   \"cache_write\": 89012356,\n   \"cache_read\": 678901251,\n   \"output\": 3000116,\n   \"requests\": 4\n  },\n  \"2026-10-23\": {\n   \"input\": 0,\n   \"cache_write\": 0,\n   \"cache_read\": 0,\n   \"output\": 1,\n   \"requests\": 1\n  },\n  \"2026-10-24\": {\n   \"input\": 1,\n   \"cache_write\": 0,\n   \"cache_read\": 0,\n   \"output\": 8,\n   \"requests\": 1\n  }\n },\n \"per_session\": {\n  \"0123abcd agent\": {\n   \"input\": 24,\n   \"cache_write\": 3,\n   \"cache_read\": 1000,\n   \"output\": 99,\n   \"requests\": 3\n  },\n  \"0123abcd main\": {\n   \"input\": 1234588,\n   \"cache_write\": 89013358,\n   \"cache_read\": 679026713,\n   \"output\": 3003016,\n   \"requests\": 9\n  },\n  \"feedbeef main\": {\n   \"input\": 11,\n   \"cache_write\": 10,\n   \"cache_read\": 21,\n   \"output\": 310,\n   \"requests\": 2\n  }\n },\n \"per_model\": {\n  \"claude-opus-x\": {\n   \"input\": 1234583,\n   \"cache_write\": 89013355,\n   \"cache_read\": 678903254,\n   \"output\": 3001758,\n   \"requests\": 5\n  },\n  \"claude-sonnet-x\": {\n   \"input\": 12,\n   \"cache_write\": 8,\n   \"cache_read\": 123463,\n   \"output\": 1444,\n   \"requests\": 3\n  },\n  \"claude-haiku-x\": {\n   \"input\": 24,\n   \"cache_write\": 0,\n   \"cache_read\": 1001,\n   \"output\": 210,\n   \"requests\": 4\n  },\n  \"claude-requested-x\": {\n   \"input\": 4,\n   \"cache_write\": 8,\n   \"cache_read\": 16,\n   \"output\": 12,\n   \"requests\": 1\n  },\n  \"m\\u00f6del-\\u00fcn\\u00ef-x\": {\n   \"input\": 0,\n   \"cache_write\": 0,\n   \"cache_read\": 0,\n   \"output\": 1,\n   \"requests\": 1\n  }\n }\n}",
+   "git_args": [
+    "log",
+    "--oneline",
+    "--since= 00:00",
+    "--until=2026-10-24 23:59:59"
+   ],
+   "git_stdout": ""
+  },
+  {
+   "name": "window",
+   "args": [
+    "--since",
+    "2026-10-21",
+    "--until",
+    "2026-10-22"
+   ],
+   "json": true,
+   "exit": 0,
+   "stdout": "\nPer day\n                                          requests      input     cache_wr       cache_rd      output          total\n  2026-10-21                                     4         15           15          1,027       1,078          2,135\n  2026-10-22                                     4  1,234,585   89,012,356    678,901,251   3,000,116    772,148,308\n\nPer session (main = lead, agent = subagents)\n                                          requests      input     cache_wr       cache_rd      output          total\n  0123abcd agent                                 2         15            3          1,000          77          1,095\n  0123abcd main                                  4  1,234,574   89,012,358    678,901,257   3,000,807    772,148,996\n  feedbeef main                                  2         11           10             21         310            352\n\nPer model\n                                          requests      input     cache_wr       cache_rd      output          total\n  claude-opus-x                                  2  1,234,572   89,012,355    678,901,254   3,000,250    772,148,431\n  claude-sonnet-x                                2          9            8              7         744            768\n  claude-haiku-x                                 3         15            0          1,001         188          1,204\n  claude-requested-x                             1          4            8             16          12             40\n\nTotal\n                                          requests      input     cache_wr       cache_rd      output          total\n  all                                            8  1,234,600   89,012,371    678,902,278   3,001,194    772,150,443\n\n  commits on this branch in 2026-10-21..2026-10-22: 2\n  per commit: 386,075,221 tokens, 1,500,597 output, 4 requests\n\n  wrote {JSON}\n",
+   "stderr": "",
+   "json_text": "{\n \"range\": [\n  \"2026-10-21\",\n  \"2026-10-22\"\n ],\n \"commits\": 2,\n \"total\": {\n  \"input\": 1234600,\n  \"cache_write\": 89012371,\n  \"cache_read\": 678902278,\n  \"output\": 3001194,\n  \"requests\": 8\n },\n \"per_day\": {\n  \"2026-10-21\": {\n   \"input\": 15,\n   \"cache_write\": 15,\n   \"cache_read\": 1027,\n   \"output\": 1078,\n   \"requests\": 4\n  },\n  \"2026-10-22\": {\n   \"input\": 1234585,\n   \"cache_write\": 89012356,\n   \"cache_read\": 678901251,\n   \"output\": 3000116,\n   \"requests\": 4\n  }\n },\n \"per_session\": {\n  \"0123abcd agent\": {\n   \"input\": 15,\n   \"cache_write\": 3,\n   \"cache_read\": 1000,\n   \"output\": 77,\n   \"requests\": 2\n  },\n  \"0123abcd main\": {\n   \"input\": 1234574,\n   \"cache_write\": 89012358,\n   \"cache_read\": 678901257,\n   \"output\": 3000807,\n   \"requests\": 4\n  },\n  \"feedbeef main\": {\n   \"input\": 11,\n   \"cache_write\": 10,\n   \"cache_read\": 21,\n   \"output\": 310,\n   \"requests\": 2\n  }\n },\n \"per_model\": {\n  \"claude-sonnet-x\": {\n   \"input\": 9,\n   \"cache_write\": 8,\n   \"cache_read\": 7,\n   \"output\": 744,\n   \"requests\": 2\n  },\n  \"claude-haiku-x\": {\n   \"input\": 15,\n   \"cache_write\": 0,\n   \"cache_read\": 1001,\n   \"output\": 188,\n   \"requests\": 3\n  },\n  \"claude-requested-x\": {\n   \"input\": 4,\n   \"cache_write\": 8,\n   \"cache_read\": 16,\n   \"output\": 12,\n   \"requests\": 1\n  },\n  \"claude-opus-x\": {\n   \"input\": 1234572,\n   \"cache_write\": 89012355,\n   \"cache_read\": 678901254,\n   \"output\": 3000250,\n   \"requests\": 2\n  }\n }\n}",
+   "git_args": [
+    "log",
+    "--oneline",
+    "--since=2026-10-21 00:00",
+    "--until=2026-10-22 23:59:59"
+   ],
+   "git_stdout": "6dc184d c3\n47a3632 c2\n"
+  },
+  {
+   "name": "since-only",
+   "args": [
+    "--since",
+    "2026-10-22"
+   ],
+   "json": false,
+   "exit": 0,
+   "stdout": "\nPer day\n                                          requests      input     cache_wr       cache_rd      output          total\n  2026-10-22                                     4  1,234,585   89,012,356    678,901,251   3,000,116    772,148,308\n  2026-10-23                                     1          0            0              0           1              1\n  2026-10-24                                     1          1            0              0           8              9\n\nPer session (main = lead, agent = subagents)\n                                          requests      input     cache_wr       cache_rd      output          total\n  0123abcd agent                                 1          8            3              0          44             55\n  0123abcd main                                  4  1,234,572   89,012,353    678,901,250   3,000,021    772,148,196\n  feedbeef main                                  1          6            0              1          60             67\n\nPer model\n                                          requests      input     cache_wr       cache_rd      output          total\n  claude-opus-x                                  2  1,234,568   89,012,345    678,901,234   3,000,008    772,148,155\n  claude-haiku-x                                 1          6            0              1          60             67\n  claude-sonnet-x                                1          8            3              0          44             55\n  claude-requested-x                             1          4            8             16          12             40\n  mödel-ünï-x                                    1          0            0              0           1              1\n\nTotal\n                                          requests      input     cache_wr       cache_rd      output          total\n  all                                            6  1,234,586   89,012,356    678,901,251   3,000,125    772,148,318\n\n  commits on this branch in 2026-10-22..2026-10-24: 1\n  per commit: 772,148,318 tokens, 3,000,125 output, 6 requests\n",
+   "stderr": "",
+   "git_args": [
+    "log",
+    "--oneline",
+    "--since=2026-10-22 00:00",
+    "--until=2026-10-24 23:59:59"
+   ],
+   "git_stdout": "32c27d0 c4\n"
+  },
+  {
+   "name": "until-only",
+   "args": [
+    "--until",
+    "2026-10-20"
+   ],
+   "json": true,
+   "exit": 0,
+   "stdout": "\nPer day\n                                          requests      input     cache_wr       cache_rd      output          total\n                                                 1          0            0              0           0              0\n  2026-10-20                                     3         22        1,000        125,456       2,222        128,700\n\nPer session (main = lead, agent = subagents)\n                                          requests      input     cache_wr       cache_rd      output          total\n  0123abcd agent                                 1          9            0              0          22             31\n  0123abcd main                                  3         13        1,000        125,456       2,200        128,669\n\nPer model\n                                          requests      input     cache_wr       cache_rd      output          total\n  claude-opus-x                                  2         10        1,000          2,000       1,500          4,510\n  claude-sonnet-x                                1          3            0        123,456         700        124,159\n  claude-haiku-x                                 1          9            0              0          22             31\n\nTotal\n                                          requests      input     cache_wr       cache_rd      output          total\n  all                                            4         22        1,000        125,456       2,222        128,700\n\n  commits on this branch in ..2026-10-20: 0\n\n  wrote {JSON}\n",
+   "stderr": "",
+   "json_text": "{\n \"range\": [\n  \"\",\n  \"2026-10-20\"\n ],\n \"commits\": 0,\n \"total\": {\n  \"input\": 22,\n  \"cache_write\": 1000,\n  \"cache_read\": 125456,\n  \"output\": 2222,\n  \"requests\": 4\n },\n \"per_day\": {\n  \"\": {\n   \"input\": 0,\n   \"cache_write\": 0,\n   \"cache_read\": 0,\n   \"output\": 0,\n   \"requests\": 1\n  },\n  \"2026-10-20\": {\n   \"input\": 22,\n   \"cache_write\": 1000,\n   \"cache_read\": 125456,\n   \"output\": 2222,\n   \"requests\": 3\n  }\n },\n \"per_session\": {\n  \"0123abcd agent\": {\n   \"input\": 9,\n   \"cache_write\": 0,\n   \"cache_read\": 0,\n   \"output\": 22,\n   \"requests\": 1\n  },\n  \"0123abcd main\": {\n   \"input\": 13,\n   \"cache_write\": 1000,\n   \"cache_read\": 125456,\n   \"output\": 2200,\n   \"requests\": 3\n  }\n },\n \"per_model\": {\n  \"claude-opus-x\": {\n   \"input\": 10,\n   \"cache_write\": 1000,\n   \"cache_read\": 2000,\n   \"output\": 1500,\n   \"requests\": 2\n  },\n  \"claude-sonnet-x\": {\n   \"input\": 3,\n   \"cache_write\": 0,\n   \"cache_read\": 123456,\n   \"output\": 700,\n   \"requests\": 1\n  },\n  \"claude-haiku-x\": {\n   \"input\": 9,\n   \"cache_write\": 0,\n   \"cache_read\": 0,\n   \"output\": 22,\n   \"requests\": 1\n  }\n }\n}",
+   "git_args": [
+    "log",
+    "--oneline",
+    "--since= 00:00",
+    "--until=2026-10-20 23:59:59"
+   ],
+   "git_stdout": ""
+  },
+  {
+   "name": "empty-range",
+   "args": [
+    "--since",
+    "2030-01-01"
+   ],
+   "json": true,
+   "exit": 0,
+   "stdout": "\nPer day\n                                          requests      input     cache_wr       cache_rd      output          total\n\nPer session (main = lead, agent = subagents)\n                                          requests      input     cache_wr       cache_rd      output          total\n\nPer model\n                                          requests      input     cache_wr       cache_rd      output          total\n\nTotal\n                                          requests      input     cache_wr       cache_rd      output          total\n  all                                            0          0            0              0           0              0\n\n  commits on this branch in -..-: 0\n\n  wrote {JSON}\n",
+   "stderr": "",
+   "json_text": "{\n \"range\": [],\n \"commits\": 0,\n \"total\": {},\n \"per_day\": {},\n \"per_session\": {},\n \"per_model\": {}\n}"
+  },
+  {
+   "name": "no-transcripts",
+   "args": [],
+   "json": false,
+   "exit": 1,
+   "stdout": "",
+   "stderr": "no transcripts in {HOME}/.claude/projects/{MANGLED}\n"
+  }
+ ]
+}

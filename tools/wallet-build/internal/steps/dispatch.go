@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"wallet-build/internal/mutate"
 	"wallet-build/internal/run"
 	"wallet-build/internal/sys"
 )
@@ -145,7 +146,7 @@ func Container(c *run.Ctx, args []string, self string, usage func() int) int {
 			s.Step(run.Spec{Name: "go-check", Fn: GoCheck})
 		}
 	}
-	lint := func() []run.Spec { return lintSpecs(c) }
+	lint := func() []run.Spec { return lintSpecs(c, self) }
 	switch cmd {
 	case "format":
 		if pub() {
@@ -179,9 +180,18 @@ func Container(c *run.Ctx, args []string, self string, usage func() int) int {
 		if len(rest) < 2 {
 			return usage()
 		}
+		mo, help, err := mutate.ParseArgs(rest)
+		if help {
+			c.Printf("%s", mutate.Usage)
+			return 0
+		}
+		if err != nil { // argparse's exit 2, before any step
+			c.Eprintf("usage: mutate <importer|core|sync> <lib file>... [--max N] [--seed S] [--tests <test file>...] [--timeout SECS] [--list]\nmutate: error: %v\n", err)
+			return 2
+		}
 		if pub() {
 			s.Step(run.Spec{Name: "mutate", Fn: func(sc *run.StepCtx) int {
-				return sc.Cmd("", append([]string{"python3", "-I", filepath.Join(c.Root, "tools", "mutate.py")}, rest...)...)
+				return mutate.Run(sc.Ctx, mutate.Env{Root: c.Root, R: c.R, Env: sc.Env, Out: sc.Out, Err: sc.Out}, mo)
 			}})
 		}
 	case "apk":

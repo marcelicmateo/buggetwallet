@@ -155,6 +155,15 @@ void main() {
     testWidgets('1 Import: files go through the import flow, the result shows, no "Looks right?" sheet; Next goes on', (t) async {
       final wc = setupWallet();
       wc.repo.setLocalValue('setupWizard', 'pending');
+      // The file names its pocket ("Current"): an account already claims it, so "Which account is this?" (UX-ACC) is not asked.
+      await t.runAsync(() async => wc.repo.addAccount(
+          name: 'Revolut',
+          source: 'revolut',
+          currency: 'EUR',
+          opening: 0,
+          openingDate: '2026-09-01',
+          matchKey: await accountMatchKey(wc.key!, 'Current')));
+      wc.reload();
       final before = wc.setupSummary().payments;
       await openWizard(t, wc, chooser: _Chooser());
       expect(onStep(1), isTrue);

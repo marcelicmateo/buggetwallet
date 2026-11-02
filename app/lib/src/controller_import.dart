@@ -208,6 +208,76 @@ extension ImportAndBackup on WalletController {
     logEvent(_import, Level.INFO, 'import.layoutSaved', {'columns': need.shape.headers.length, 'removed': removed.length});
   }
 
+  // ---------- which account is this (UX-ACC) ----------
+
+  /// [batch] with each row's export account fingerprinted ([withAccountKeys]); as it is without a wallet key (a test) or on a failure.
+  Future<ImportBatch> _withAccountKeys(ImportBatch batch) async {
+    final k = key;
+    if (k == null) return batch;
+    try {
+      return await withAccountKeys(k, batch);
+    } catch (e, st) {
+      logError(_import, 'import.accountKeys.failed', e, st); // the rows then count for the main account, as before
+      return batch;
+    }
+  }
+
+  /// Asks [ask] about every export account of [batch] no account claims yet. Null = the owner cancelled (nothing is written). Otherwise
+  /// the answers, in order, for [_writeAccountAnswers] to write just before the file is imported (after the preview is confirmed), so
+  /// a Cancel at any question or in the preview leaves no key and no account behind. Logs counts only, never the account, the IBAN or
+  /// the names.
+  Future<List<(ImportAccountQuestion, AccountAnswer)>?> _askAccounts(ImportBatch batch, AskAccount ask, Map<String, Object?> f) async {
+    final unknown = repo.unknownImportAccounts(batch);
+    if (unknown.isEmpty) return const [];
+    logEvent(_import, Level.INFO, 'import.accountQuestion', {...f, 'accounts': unknown.length});
+    final answers = <(ImportAccountQuestion, AccountAnswer)>[];
+    pendingClaimed.clear();
+    try {
+      for (final q in unknown) {
+        // The day of its first row: a new account's balance starts the day before, so these rows count in it.
+        String? first;
+        for (final t in batch.transactions) {
+          if (t.accountKey == q.accountKey && t.source == q.source && t.currency == q.currency) {
+            if (first == null || t.date.compareTo(first) < 0) first = t.date;
+          }
+        }
+        final a = await ask(first == null ? q : FileAccountQuestion(q, first));
+        if (a == null) {
+          logEvent(_import, Level.INFO, 'import.accountCancelled', f);
+          return null;
+        }
+        final id = a.accountId;
+        if (id != null) pendingClaimed.add(id);
+        answers.add((q, a));
+        logEvent(_import, Level.INFO, 'import.accountAnswered', {'new': a.created, 'rows': q.rows});
+      }
+    } finally {
+      pendingClaimed.clear();
+    }
+    return answers;
+  }
+
+  /// Writes what the owner answered: a pick gets its export account's match key, a new account is added with it. Called once, right
+  /// before the rows are imported.
+  Future<void> _writeAccountAnswers(List<(ImportAccountQuestion, AccountAnswer)> answers) async {
+    for (final (q, a) in answers) {
+      final id = a.accountId, d = a.draft;
+      if (id != null) {
+        await updateAccount(id, matchKey: q.accountKey);
+      } else if (d != null) {
+        await addAccount(
+            name: d.name,
+            kind: d.kind,
+            source: d.source,
+            institution: d.institution,
+            currency: d.currency,
+            opening: d.opening,
+            openingDate: d.openingDate,
+            matchKey: q.accountKey);
+      }
+    }
+  }
+
   // ---------- bank balance after an import (Q5) ----------
 
   /// The result-line text for the balances a file stated: "PBZ matches the bank" / "PBZ is off by 12 €: see rows since 3 Oct" (payments may
@@ -252,7 +322,7 @@ extension ImportAndBackup on WalletController {
         final last = repo.lastBankCheck(a.id);
         if (last != null && last.date.compareTo(e.value) >= 0) continue;
         if (e.value.compareTo(a.openingDate) <= 0) continue;
-        final c = checkBankBalance(a, rows, date: e.value, bankCents: 0);
+        final c = checkBankBalance(a, rows, date: e.value, bankCents: 0, accounts: accountsAll());
         out.add(BankQuestion(accountId: a.id, name: a.name, currency: a.currency, date: e.value, appCents: c.appCents));
       }
     }

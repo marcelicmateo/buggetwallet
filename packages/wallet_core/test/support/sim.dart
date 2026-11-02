@@ -33,7 +33,8 @@ const entityTables = {
       'seen_bank',
       'kind_hint',
       'transfer_to',
-      'match_off'
+      'match_off',
+      'account'
     ]
   ),
   'goal': ('goals', ['name', 'target', 'saved', 'monthly', 'sort', 'deleted']),
@@ -57,7 +58,7 @@ const entityTables = {
       'attached_tx', 'return_reminder_days', 'warranty_reminder_days',
     ]
   ),
-  'account': ('accounts', ['name', 'source', 'currency', 'opening', 'opening_date', 'deleted', 'kind', 'institution']),
+  'account': ('accounts', ['name', 'source', 'currency', 'opening', 'opening_date', 'deleted', 'kind', 'institution', 'match_key']),
   'category': ('categories', ['name', 'kind', 'parent', 'position', 'hidden', 'deleted']),
   'tag': ('tags', ['name', 'position', 'hidden', 'deleted']),
   'txtag': ('tx_tags', ['tx', 'tag', 'state']),
@@ -67,6 +68,7 @@ const entityTables = {
   'iou_part': ('iou_parts', ['iou_id', 'amount', 'date', 'tx', 'deleted']),
   'review': ('reviews', ['done', 'deleted']),
   'payee_alias': ('payee_aliases', ['alias', 'payee', 'deleted']),
+  'fx_day': ('fx_days', ['cur', 'date', 'per_eur', 'source', 'deleted']),
 };
 
 const dataTables = [
@@ -88,7 +90,8 @@ const dataTables = [
   'ious',
   'iou_parts',
   'reviews',
-  'payee_aliases'
+  'payee_aliases',
+  'fx_days'
 ];
 
 /// Every row of the data tables (and the field clocks), in a stable order, as plain maps.

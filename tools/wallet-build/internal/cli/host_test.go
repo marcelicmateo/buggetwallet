@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -276,7 +277,9 @@ func TestHostMutateRefusesLeftoverMutant(t *testing.T) {
 		}
 		return 0
 	}
-	r := runCLI(t, opts{handle: h}, "mutate", "core", "lib/x.dart")
+	root := mkRepo(t)
+	write(t, filepath.Join(root, "packages/wallet_core/lib/x.dart"), "int f() => 1;\n")
+	r := runCLI(t, opts{handle: h, root: root}, "mutate", "core", "lib/x.dart")
 	if r.code != 1 || !strings.Contains(r.err, "mutate: lib files differ from HEAD") || len(podmanRuns(r)) != 0 {
 		t.Errorf("code %d err %q", r.code, r.err)
 	}
@@ -388,15 +391,28 @@ func TestHostStage(t *testing.T) {
 }
 
 func TestHostRelayNativeTest(t *testing.T) {
-	r := runCLI(t, opts{}, "relay-native-test", "debian")
+	root := mkRepo(t)
+	bin := filepath.Join(root, "dist", "relay", "relay-linux-x64")
+	write(t, bin, "relay")
+	os.Chmod(bin, 0o755)
+	sum := sha256.Sum256([]byte("relay"))
+	write(t, bin+".sha256", hex.EncodeToString(sum[:])+"  relay-linux-x64\n")
+	r := runCLI(t, opts{root: root}, "relay-native-test", "debian")
 	var seq []string
 	for _, c := range r.fake.Calls {
-		if c.Argv[0] == "/x/wallet-build" || strings.HasSuffix(c.Argv[0], "relay-native-test.sh") {
+		switch {
+		case c.Argv[0] == "/x/wallet-build":
 			seq = append(seq, strings.Join(c.Argv, " "))
+		case c.Argv[0] == "podman" && len(c.Argv) > 1 && (c.Argv[1] == "build" || c.Argv[1] == "run" || c.Argv[1] == "exec"):
+			seq = append(seq, "podman "+c.Argv[1])
+		case strings.HasSuffix(c.Argv[0], "relay-deploy.sh"):
+			seq = append(seq, "relay-deploy.sh "+c.Argv[2])
 		}
 	}
-	if len(seq) != 2 || seq[0] != "/x/wallet-build relay-bin x64" || seq[1] != r.root+"/tools/relay-native-test.sh debian" {
-		t.Errorf("sequence %v", seq)
+	want := []string{"/x/wallet-build relay-bin x64", "relay-deploy.sh remote_native_place", "relay-deploy.sh remote_native_upgrade", "podman build", "podman run",
+		"podman exec", "podman exec"}
+	if strings.Join(seq, "|") != strings.Join(want, "|") {
+		t.Errorf("sequence %v, want %v", seq, want)
 	}
 	for _, c := range r.fake.Calls {
 		if c.Argv[0] == "/x/wallet-build" && c.Env.Get("BW_RUN_DIR") == "" {
@@ -404,8 +420,9 @@ func TestHostRelayNativeTest(t *testing.T) {
 		}
 	}
 	dir := runDirs(t, r)[0]
-	if _, err := os.Stat(filepath.Join(dir, "relay-native-test.log")); err != nil {
-		t.Error("no relay-native-test.log")
+	log := file(t, filepath.Join(dir, "relay-native-test.log"))
+	if !strings.Contains(log, "relay-native-test: all ok") {
+		t.Errorf("log %q", log)
 	}
 	if r.code != 0 {
 		t.Errorf("code %d", r.code)

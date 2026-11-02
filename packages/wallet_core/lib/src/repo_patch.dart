@@ -105,9 +105,12 @@ extension WalletRepoPatch on WalletRepo {
     final src = has(AccountCols.source) ? v[AccountCols.source] as String? : stored.source;
     final kind = k ?? (src == null ? AccountKind.cash : AccountKind.bank);
     final inst = has(AccountCols.institution) ? v[AccountCols.institution] as String? : stored.institution;
-    if (kind != stored.kind || src != stored.source) {
+    final mk = has(AccountCols.matchKey) ? v[AccountCols.matchKey] as String? : stored.matchKey;
+    if (kind != stored.kind || src != stored.source || mk != stored.matchKey) {
       _checkShape(kind, src, stored.currency);
-      if (!stored.deleted) _checkUnique(src, stored.currency, exceptId: id, kind: kind);
+      // UX-ACC: only a new key is checked (shape, bank account); a kept one has no effect once the source is cleared.
+      if (mk != stored.matchKey) WalletRepoAccounts._checkMatchKey(mk, src, kind);
+      if (!stored.deleted) _checkUnique(src, stored.currency, exceptId: id, kind: kind, matchKey: mk);
     }
     final pair = has(AccountCols.opening) || has(AccountCols.openingDate);
     final fields = {
@@ -118,6 +121,7 @@ extension WalletRepoPatch on WalletRepo {
       if (kind != stored.kind || src != stored.source) 'kind': kind.name,
       if (src != stored.source) 'source': src,
       if (inst != stored.institution) 'institution': inst,
+      if (mk != stored.matchKey) 'match_key': mk,
     };
     if (fields.isEmpty) return 0;
     _write([('account', id, fields)]);

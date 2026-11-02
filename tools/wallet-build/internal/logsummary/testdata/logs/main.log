@@ -1,0 +1,98 @@
+2026-10-16T19:00:01.037+02:00 INFO bw.app app.info {"version":"2.0.1","build":57,"debug":true,"nothing":null,"ratio":0.25,"list":[1,"two",null,{"k":"v"}],"obj":{"a":1,"b":[]},"empty":{},"q":"it's","dq":"say \"hi\"","uni":"čć€"}
+2026-10-16T19:00:02.074+02:00 INFO bw.app app.info {}
+2026-10-16T19:00:03.111+02:00 DEBUG bw.app app.start {"phase":"logs","ms":3}
+2026-10-16T19:00:04.148+02:00 DEBUG bw.app app.start {"phase":"db","ms":41.5,"rows":120}
+2026-10-16T19:00:05.185+02:00 DEBUG bw.app app.start {"phase":"ui","ms":12.0,"cold":true}
+2026-10-16T19:00:06.222+02:00 DEBUG bw.app app.start {"phase":"db","ms":9}
+2026-10-16T19:00:07.259+02:00 DEBUG bw.app app.start {"phase":"ui"}
+2026-10-16T19:00:08.296+02:00 DEBUG bw.app app.start {"phase":"logs","ms":"slow"}
+2026-10-16T19:00:09.333+02:00 DEBUG bw.app app.start {"ms":7}
+2026-10-16T19:00:10.370+02:00 DEBUG bw.perf repo.load {"ms":12}
+2026-10-16T19:00:11.407+02:00 DEBUG bw.perf repo.load {"ms":15}
+2026-10-16T19:00:12.444+02:00 DEBUG bw.perf repo.load {"ms":900}
+2026-10-16T19:00:13.481+02:00 DEBUG bw.perf repo.load {"ms":14}
+2026-10-16T19:00:14.518+02:00 DEBUG bw.perf repo.load {"ms":13}
+2026-10-16T19:00:15.555+02:00 WARNING bw.perf repo.load {"ms":2500}
+2026-10-16T19:00:16.592+02:00 DEBUG bw.perf repo.load {"ms":11}
+2026-10-16T19:00:17.629+02:00 DEBUG bw.perf repo.load {"ms":12}
+2026-10-16T19:00:18.666+02:00 DEBUG bw.perf repo.load {"ms":16}
+2026-10-16T19:00:19.703+02:00 DEBUG bw.perf repo.load {"ms":18}
+2026-10-16T19:00:20.740+02:00 DEBUG bw.perf chart.build {"ms":1.5}
+2026-10-16T19:00:21.777+02:00 DEBUG bw.perf chart.build {"ms":2.25}
+2026-10-16T19:00:22.814+02:00 DEBUG bw.perf chart.build {"ms":3}
+2026-10-16T19:00:23.851+02:00 DEBUG bw.perf chart.build {"ms":0.4}
+2026-10-16T19:00:24.888+02:00 DEBUG bw.perf chart.build {"ms":100.75}
+2026-10-16T19:00:25.925+02:00 DEBUG bw.perf import.done {"rows":312,"dupes":4,"ms":41}
+2026-10-16T19:00:26.962+02:00 DEBUG bw.perf import.done {"rows":10,"dupes":0,"ms":true}
+2026-10-16T19:00:27.999+02:00 DEBUG bw.perf bogus {"ms":"12"}
+2026-10-16T19:00:28.036+02:00 DEBUG bw.perf tie.a {"ms":10}
+2026-10-16T19:00:29.073+02:00 DEBUG bw.perf tie.b {"ms":10}
+2026-10-16T19:00:30.110+02:00 INFO bw.import import.start
+2026-10-16T19:00:31.147+02:00 INFO bw.import import.done {"rows":312,"dupes":4,"ms":41}
+2026-10-16T19:00:32.184+02:00 WARNING bw.sync sync.retry {"attempt":3,"why":"timeout","name":"čć","n":1.0,"big":12345678901234567890}
+  error: SocketException
+  #0 a
+  #1 b
+  #2 c
+  #3 d
+  #4 e
+  #5 f
+2026-10-16T19:00:33.221+02:00 SEVERE bw.db db.fail {"code":-1,"dup":1,"dup":2}
+  error: boom
+2026-10-16T19:00:34.258+02:00 SHOUT bw.db db.shout
+2026-10-16T19:00:35.295+02:00 FINE bw.db fine.thing
+2026-10-16T19:00:36.332+02:00 MYLEVEL bw.zzz weird
+2026-10-16T19:00:37.369+02:00 DEBUG bw.frames frames.window {"tab":"spending","frames":100,"janky":0,"build_p99_ms":10,"raster_p99_ms":8.5,"build_max_ms":20,"raster_max_ms":33.5}
+2026-10-16T19:00:38.406+02:00 DEBUG bw.frames frames.window {"tab":"spending","frames":101,"janky":1,"build_p99_ms":11,"raster_p99_ms":8.5,"build_max_ms":20,"raster_max_ms":33.5}
+2026-10-16T19:00:39.443+02:00 DEBUG bw.frames frames.window {"tab":"spending","frames":102,"janky":2,"build_p99_ms":12,"raster_p99_ms":8.5,"build_max_ms":20,"raster_max_ms":33.5}
+2026-10-16T19:00:40.480+02:00 DEBUG bw.frames frames.window {"tab":"spending","frames":103,"janky":3,"build_p99_ms":13,"raster_p99_ms":8.5,"build_max_ms":20,"raster_max_ms":33.5}
+2026-10-16T19:00:41.517+02:00 DEBUG bw.frames frames.window {"tab":"spending","frames":104,"janky":4,"build_p99_ms":14,"raster_p99_ms":8.5,"build_max_ms":20,"raster_max_ms":33.5}
+2026-10-16T19:00:42.554+02:00 DEBUG bw.frames frames.window {"tab":"spending","frames":105,"janky":5,"build_p99_ms":15,"raster_p99_ms":8.5,"build_max_ms":20,"raster_max_ms":33.5}
+2026-10-16T19:00:43.591+02:00 DEBUG bw.frames frames.window {"tab":"insights","frames":50,"janky":0,"build_p99_ms":4,"raster_p99_ms":3}
+2026-10-16T19:00:44.628+02:00 DEBUG bw.frames frames.window {"frames":0,"janky":0}
+2026-10-16T19:00:45.665+02:00 WARNING bw.frames frames.slow {"ms":101,"tab":"spending"}
+2026-10-16T19:00:46.702+02:00 WARNING bw.frames frames.slow {"ms":102,"tab":"spending"}
+2026-10-16T19:00:47.739+02:00 WARNING bw.frames frames.slow {"ms":103,"tab":"spending"}
+2026-10-16T19:00:48.776+02:00 WARNING bw.frames frames.slow {"ms":104,"tab":"spending"}
+2026-10-16T19:00:49.813+02:00 WARNING bw.frames frames.slow {"ms":105,"tab":"spending"}
+2026-10-16T19:00:50.850+02:00 WARNING bw.frames frames.slow {"ms":106,"tab":"spending"}
+2026-10-16T19:00:51.887+02:00 WARNING bw.frames frames.slow {"ms":107,"tab":"spending"}
+2026-10-16T19:00:52.924+02:00 WARNING bw.frames frames.slow {"ms":108,"tab":"spending"}
+2026-10-16T19:00:53.961+02:00 WARNING bw.frames frames.slow {"ms":109,"tab":"spending"}
+2026-10-16T19:00:54.998+02:00 WARNING bw.frames frames.slow {"ms":110,"tab":"spending"}
+2026-10-16T19:00:55.035+02:00 WARNING bw.frames frames.slow {"ms":111,"tab":"spending"}
+2026-10-16T19:00:56.072+02:00 WARNING bw.frames frames.slow {"ms":112,"tab":"spending"}
+2026-10-16T19:00:57.109+02:00 DEBUG bw.mem mem {"rss_mb":120,"max_rss_mb":150}
+2026-10-16T19:00:58.146+02:00 DEBUG bw.mem mem {"rss_mb":125.5,"max_rss_mb":150}
+2026-10-16T19:00:59.183+02:00 DEBUG bw.mem mem {"rss_mb":118,"max_rss_mb":151.25}
+2026-10-16T19:01:00.220+02:00 DEBUG bw.mem mem {"rss_mb":"x"}
+2026-10-16T19:01:01.257+02:00 INFO bw.app lifecycle {"state":"resumed"}
+2026-10-16T19:01:02.294+02:00 INFO bw.app lifecycle {"state":"inactive"}
+2026-10-16T19:01:03.331+02:00 INFO bw.app lifecycle {"state":"paused"}
+2026-10-16T19:01:04.368+02:00 INFO bw.app lifecycle {"state":"resumed"}
+2026-10-16T19:01:05.405+02:00 INFO bw.app lifecycle {"state":"inactive"}
+2026-10-16T19:01:06.442+02:00 INFO bw.app lifecycle {"state":"paused"}
+2026-10-16T19:01:07.479+02:00 INFO bw.app lifecycle {"state":"resumed"}
+2026-10-16T19:01:08.516+02:00 INFO bw.app lifecycle {"state":"inactive"}
+2026-10-16T19:01:09.553+02:00 INFO bw.app lifecycle {"state":"paused"}
+2026-10-16T19:01:10.590+02:00 INFO bw.app lifecycle {"state":"resumed"}
+2026-10-16T19:01:11.627+02:00 INFO bw.app lifecycle {"state":"inactive"}
+2026-10-16T19:01:12.664+02:00 INFO bw.app lifecycle {"state":"paused"}
+2026-10-16T19:01:13.701+02:00 INFO bw.app lifecycle {"state":"resumed"}
+2026-10-16T19:01:14.738+02:00 INFO bw.app lifecycle {"state":"inactive"}
+2026-10-16T19:01:15.775+02:00 INFO bw.app lifecycle {"state":"paused"}
+2026-10-16T19:01:16.812+02:00 INFO bw.app lifecycle {"state":"resumed"}
+2026-10-16T19:01:17.849+02:00 INFO bw.app lifecycle {"state":"inactive"}
+2026-10-16T19:01:18.886+02:00 INFO bw.app lifecycle {"state":"paused"}
+2026-10-16T19:01:19.923+02:00 INFO bw.app lifecycle {"state":"resumed"}
+2026-10-16T19:01:20.960+02:00 INFO bw.app lifecycle {"state":"inactive"}
+2026-10-16T19:01:21.997+02:00 INFO bw.app lifecycle {"state":"paused"}
+2026-10-16T19:01:22.034+02:00 INFO bw.app lifecycle {"state":"resumed"}
+2026-10-16T19:01:23.071+02:00 INFO bw.app lifecycle {"state":"inactive"}
+2026-10-16T19:01:24.108+02:00 INFO bw.app lifecycle {"state":"paused"}
+2026-10-16T19:01:25.145+02:00 INFO bw.app lifecycle {"state":"resumed"}
+2026-10-16T19:01:26.182+02:00 INFO bw.app lifecycle
+garbage line that is not a record
+
+   
+2026-10-16T19:01:27.219+02:00 DEBUG bw.app no.fields.here {"broken":

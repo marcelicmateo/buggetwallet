@@ -169,16 +169,18 @@ List<BalanceWarning> balanceWarnings({
       if (!a.deleted) a.id
   };
   final byId = {for (final r in rows) r.id: r};
+  final owners = RowAccounts(accounts);
   bool paidFrom(RecurringBill b, Account a) {
     final r = b.lastPaidTx == null ? null : byId[b.lastPaidTx];
-    return r != null && !r.manual && r.source == a.source && r.currency == a.currency;
+    // UX-ACC: the account that counts the paying row (its own account, else the main one of its bank and currency).
+    return r != null && !r.manual && r.source == a.source && r.currency == a.currency && owners.accountOf(r) == a.id;
   }
 
   final out = <BalanceWarning>[];
   for (final ab in balances) {
     final a = ab.account;
     if (a.deleted || !live.contains(a.id) || a.isCash || ab.duplicateOf != null || a.currency != currency) continue;
-    if (!balanceTrusted(a, today: today, last: checks[a.id], rows: rows)) {
+    if (!balanceTrusted(a, today: today, last: checks[a.id], rows: rows, accounts: accounts)) {
       out.add(BalanceWarning(account: a, kind: BalanceWarningKind.checkBalance));
       continue;
     }

@@ -108,7 +108,7 @@ def parse_reporter_json(path):
     return tests, total
 
 
-DRIVE_LINE = re.compile(r"I/flutter \(\s*\d+\): (\d+):(\d+) \+(\d+)(?: ~\d+)?(?: -(\d+))?: (.*)$")
+DRIVE_LINE = re.compile(r"I/flutter \(\s*\d+\): (\d+):(\d+) \+(\d+)(?: ~(\d+))?(?: -(\d+))?: (.*)$")
 
 
 def parse_drive_log(path):
@@ -118,12 +118,13 @@ def parse_drive_log(path):
         for line in f:
             m = DRIVE_LINE.search(line.rstrip())
             if m:
-                events.append((int(m[1]) * 60 + int(m[2]), int(m[3]), int(m[4] or 0), m[5]))
+                events.append((int(m[1]) * 60 + int(m[2]), int(m[3]), int(m[5] or 0), m[6], int(m[4] or 0)))
     tests = []
-    for (sec, ok, bad, name), nxt in zip(events, events[1:]):
-        if name.startswith("(") or "tests passed" in name or "tests failed" in name:
+    for (sec, ok, bad, name, skip), nxt in zip(events, events[1:]):
+        if name.startswith("(") or "tests passed" in name or "tests failed" in name or "tests skipped" in name:
             continue
-        result = "success" if nxt[1] > ok else ("failure" if nxt[2] > bad else "?")
+        # the next line's counters tell how this test ended: passed (+N), failed (-N) or skipped (~N, e.g. "All tests skipped.")
+        result = "success" if nxt[1] > ok else ("failure" if nxt[2] > bad else ("skipped" if nxt[4] > skip else "?"))
         tests.append((name, (nxt[0] - sec) * 1000, result))
     total = events[-1][0] * 1000 if events else None
     return tests, total

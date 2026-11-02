@@ -12,6 +12,7 @@ import 'categories.dart';
 import 'changes.dart';
 import 'cols.dart';
 import 'dates.dart';
+import 'ecb.dart';
 import 'hlc.dart';
 import 'import_preview.dart';
 import 'logs.dart';
@@ -30,6 +31,7 @@ import 'transfers.dart';
 
 part 'repo_accounts.dart';
 part 'repo_bills.dart';
+part 'repo_fx.dart';
 part 'repo_categories.dart';
 part 'repo_changes.dart';
 part 'repo_blobs.dart';
@@ -79,8 +81,17 @@ class ImportSummary {
   /// (`ImportBatch.bankBalances`) that has a live bank account of its source and currency.
   final Map<String, BalanceCheck> bankChecks;
 
+  /// UX-ACC: rows given their app account ([Tx.account]) by this import: new rows whose `accountKey` matched a live
+  /// account, and known rows without one that a re-import filled.
+  final int accountsAssigned;
+
   const ImportSummary(this.added, this.duplicates, this.matched, this.skipped,
-      {this.transfers = 0, this.collisions = 0, this.tooLarge = 0, this.skippedByOwner = 0, this.bankChecks = const {}});
+      {this.transfers = 0,
+      this.collisions = 0,
+      this.tooLarge = 0,
+      this.skippedByOwner = 0,
+      this.bankChecks = const {},
+      this.accountsAssigned = 0});
 }
 
 final _log = Logger('bw.repo');
@@ -185,7 +196,10 @@ class WalletRepo {
   /// entity); no data migration. Version 20 (UX-A): `accounts` gains `kind` and `institution` (an older row's kind is
   /// read from its source), `bills` gains `return_reminder_days` and `warranty_reminder_days`, and per-rule settings rows
   /// `builtInRule:<slug>`; no data migration. Amounts keep their stored scale (`storageDigitsOf`: hundredths for every
-  /// fiat currency, as always; BTC satoshis, new in 20).
+  /// fiat currency, as always; BTC satoshis, new in 20). Also in 20 (UX-ACC, UX-FX; SCHEMA21_SPEC.md, folded in):
+  /// `tx` gains `account` (the app account of a bank row), `accounts` gains `match_key` (keyed fingerprint of the
+  /// export account), the synced entity `fx_day` (table `fx_days`, ECB rates the wallet needs) and the device-local,
+  /// never-synced cache table `ecb_rates`; no data migration.
   static const schemaVersion = 20;
 
   /// Device-local, set once by the schema-15 migration ([_migrateBlobTables]): the next sync runs PUT every cached file
@@ -259,6 +273,9 @@ class WalletRepo {
 
   /// [stateDigest]'s last result and the [dataVersion] it was computed at; how many real computations ran.
   (int, String)? _digestCache;
+
+  /// [WalletRepoFx.ecbRates]'s last result and the [dataVersion] it was read at (UX-FX).
+  (int, EcbRates)? _ecbCache;
   int _digestRuns = 0;
 
   /// The database file and its key when opened by [open] (native): [WalletRepoSyncApply.stateDigestAsync] reads it on
@@ -277,6 +294,37 @@ class WalletRepo {
   /// Set by [_apply] when a field was written in the open transaction; [_tx] turns it into a [dataVersion] step on
   /// commit and drops it on rollback.
   bool _dataPending = false;
+
+  /// UX-FX: set by [_apply] when a committed field can add or answer an ECB need ([_fxRelevant]); [_tx] then runs
+  /// [WalletRepoFx._fillFxAfterChange] once after the commit. [_fxFilling]: that fill is running.
+  bool _fxPending = false, _fxFilling = false;
+  int _fxCacheReads = 0, _fxAutoFills = 0;
+
+  /// The wallet currency as [_fxRelevant] knows it (read once; dropped when a `currency` setting applies and when a
+  /// transaction rolls back, as it may have read an uncommitted value).
+  String? _fxHome;
+
+  static const _fxFields = {'currency', 'date', 'due_date', 'opening_date'};
+
+  /// Whether the [accepted] fields of [op] can add or answer an ECB need ([WalletRepoFx.walletFxNeeds]): the wallet
+  /// currency or a hand rate; a payment, bill, IOU or account's currency, date or undelete, unless the op says its
+  /// currency is the wallet's (a home-currency row never needs a rate). A deletion only removes needs.
+  bool _fxRelevant(Op op, Map<String, Object?> accepted) {
+    switch (op.entity) {
+      case 'setting':
+        if (op.id == 'currency') {
+          _fxHome = null;
+          return true;
+        }
+        return op.id.startsWith(WalletSettings.fxPrefix);
+      case 'tx' || 'bill' || 'iou' || 'account':
+        if (!accepted.keys.any(_fxFields.contains) && accepted['deleted'] != 0) return false;
+        final c = accepted['currency'];
+        return c is! String || c != (_fxHome ??= _readSettings(db).currency);
+      default:
+        return false;
+    }
+  }
 
   /// Goes up by one on every committed transaction that wrote wallet data: a local write ([_write]) or ops applied from
   /// another device or a backup ([applyRemote], snapshots, restore and merge), whatever their clocks. Never on sync
@@ -342,9 +390,15 @@ class WalletRepo {
       db.execute('COMMIT');
       if (_dataPending) _dataVersion++;
       _dataPending = false;
+      if (_fxPending) {
+        _fxPending = false;
+        _fillFxAfterChange();
+      }
       return r;
     } catch (e, st) {
       _dataPending = false;
+      _fxPending = false;
+      _fxHome = null;
       // Marked first: on SQLITE_FULL / IOERR / NOMEM / BUSY SQLite may have rolled back already, and the original error is
       // what the app must see (a ROLLBACK error would replace it).
       if (e is SqliteException) _writeErrors[e] = true;
@@ -510,8 +564,9 @@ class WalletRepo {
           r,
       ], (cz, r) => cz.resolveStored(r['category'] as String?, text: '${r['title'] ?? ''}'), PlannedCost.fromRow);
 
-  /// The stored settings ([_readSettings]: per-key budget and pattern rows, legacy maps only as a fallback).
-  WalletSettings settings() => _readSettings(db, table: categoryTable());
+  /// The stored settings ([_readSettings]: per-key budget and pattern rows, legacy maps only as a fallback), with the
+  /// wallet's ECB rates ([WalletSettings.ecb], `ecbRates`) for the money paths.
+  WalletSettings settings() => _readSettings(db, table: categoryTable(), ecb: ecbRates());
 
   /// Built-ins plus the stored category rows ([categoryRows], deleted ones included: a row pointing at one falls back).
   CategoryTable categoryTable() => CategoryTable.from(categoryRows(includeDeleted: true));
@@ -540,6 +595,13 @@ class WalletRepo {
   void updateSettings(Map<String, Object?> changes) => _write(_settingChanges(changes));
 
   /// Imports a normalized batch. Already-known ids are skipped; `kindHint` is stored (`kind_hint`), `account` never is.
+  /// UX-ACC: a row's `accountKey` (`withAccountKeys`) that matches a live account of its source and currency
+  /// ([Account.matchKey]) gives the new row that account ([Tx.account], in its creation op); no match → none (the main
+  /// account counts it; `unknownImportAccounts` lists what to ask, before this call: rows imported before the answer
+  /// stay on the main account until the file is imported again). A known row whose account was never written (no clock:
+  /// an older build's row, or one imported before the question was answered) gets it; a written account is never
+  /// overwritten, not even the owner's move back to the main account (`setTxAccount(id, null)`)
+  /// ([ImportSummary.accountsAssigned]).
   /// A known id whose stored row has another amount or description is an id collision ([ImportSummary.collisions]):
   /// skipped all the same (never overwritten) and logged as `repo.idCollision` with the count only.
   /// Then own-account transfers are paired across sources ([planTransfers]) and hand-added expenses with the same
@@ -564,11 +626,32 @@ class WalletRepo {
     if (tooLarge > 0) logEvent(_log, Level.WARNING, 'repo.tooLarge', {'source': sourceLogKey(batch.source), 'count': tooLarge});
     final changes = <(String, String, Map<String, Object?>)>[];
     final revived = <String>[];
-    var fresh = 0;
+    var fresh = 0, assigned = 0;
+    // UX-ACC: a row whose accountKey matches a live account of its source and currency belongs to it; a known row
+    // whose account was never written gets it (filled once, never overwritten), so re-importing old files assigns old rows.
+    final owners = batch.transactions.any((n) => n.accountKey != null) ? RowAccounts(accounts()) : null;
+    String? accountFor(NormalizedTransaction n) => switch ((owners, n.accountKey)) {
+          (final o?, final k?) => o.keyedOf(n.source, n.currency, k),
+          _ => null,
+        };
+    final unassigned = owners == null
+        ? const <String>{}
+        : {
+            // Only rows whose account was never written: an owner's move to the main account (a written null) stays.
+            for (final r in db.select('SELECT id FROM tx WHERE manual = 0 AND account IS NULL AND NOT EXISTS '
+                "(SELECT 1 FROM clocks WHERE clocks.entity = 'tx' AND clocks.id = tx.id AND clocks.field = 'account')"))
+              r['id'] as String
+          };
     for (final (i, n) in batch.transactions.indexed) {
+      final acc = accountFor(n);
       switch (c.fates[i]) {
+        case _RowFate.duplicate || _RowFate.revived when acc != null && unassigned.remove(n.id):
+          assigned++;
+          changes.add(('tx', n.id, {TxCols.account.column: acc}));
+          if (c.fates[i] == _RowFate.revived) revived.add(n.id);
         case _RowFate.fresh:
           fresh++;
+          if (acc != null) assigned++;
           changes.add((
             'tx',
             n.id,
@@ -579,8 +662,9 @@ class WalletRepo {
               'currency': n.currency,
               'bank_type': n.bankType,
               'description': n.description,
-              if (n.kindHint case final k?) 'kind_hint': k.name, // never `account`: it names the owner's account
+              if (n.kindHint case final k?) 'kind_hint': k.name, // never `n.account`: it names the owner's account
               'manual': 0,
+              if (acc != null) TxCols.account.column: acc, // UX-ACC: the app account, never the export's name
               // Never 'deleted': a new row is live through the column default, and writing deleted: 0 here with a
               // fresh HLC would undo a delete made on another device that this one has not synced yet. Only
               // deleteTransaction (and a future undelete) write that field.
@@ -601,7 +685,12 @@ class WalletRepo {
     final checks = _recordBankChecks(batch);
     final added = fresh + revived.length;
     final s = ImportSummary(added, batch.transactions.length - added - tooLarge - skipped, matched, batch.skipped,
-        transfers: transfers, collisions: collisions, tooLarge: tooLarge, skippedByOwner: skipped, bankChecks: checks);
+        transfers: transfers,
+        collisions: collisions,
+        tooLarge: tooLarge,
+        skippedByOwner: skipped,
+        bankChecks: checks,
+        accountsAssigned: assigned);
     t.done({
       'source': sourceLogKey(batch.source), // `csv` for a mapped CSV: the shape id is a hash of header names
       'rows': batch.transactions.length,
@@ -615,6 +704,7 @@ class WalletRepo {
       if (tooLarge > 0) 'tooLarge': tooLarge,
       if (skipped > 0) 'ownerSkipped': skipped,
       if (checks.isNotEmpty) 'bankChecks': checks.length,
+      if (assigned > 0) 'accounts': assigned,
     });
     return s;
   }

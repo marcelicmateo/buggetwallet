@@ -1,0 +1,3 @@
+2026-10-16T19:16:41.037+02:00 INFO bw.app app.info {"version":"2.0.2"}
+2026-10-16T19:16:42.074+02:00 DEBUG bw.perf repo.load {"ms":20}
+2026-10-16T19:16:43.111+02:00 ERROR bw.app x {"a":{"b":{"c":[1,2,{"d":null}]}}}

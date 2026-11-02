@@ -12,6 +12,15 @@ export 'package:wallet_importer/wallet_importer.dart' show BillItem, BillSource,
 
 export 'src/accounts.dart' show AccountBalance, accountBalances, accountSourceLabel, balanceInHome, balanceTotals;
 export 'src/accounts.dart' show BalanceCheck, BankCheck, balanceTrusted, bankCheckTrustDays, checkBankBalance;
+export 'src/accounts.dart'
+    show
+        accountMatchKey,
+        accountMatchKeyInfo,
+        ImportAccountQuestion,
+        isAccountMatchKey,
+        normalizeExportAccount,
+        RowAccounts,
+        withAccountKeys;
 export 'src/backup.dart'
     show
         backupBlobBytesDefault,
@@ -145,6 +154,29 @@ export 'src/dates.dart'
         nextPayday,
         parseIso,
         requireIsoDate;
+export 'src/ecb.dart'
+    show
+        EcbCacheInfo,
+        ecbConvert,
+        ecbDamagedMessage,
+        EcbFile,
+        ecbFirstDay,
+        EcbHistory,
+        ecbHistoryUrl,
+        EcbImport,
+        ecbMaxGapDays,
+        ecbNotRatesMessage,
+        EcbPair,
+        ecbPrecisionMessage,
+        EcbRates,
+        ecbRecentUrl,
+        ecbScale,
+        FxDay,
+        FxDayCols,
+        fxDayId,
+        FxNeed,
+        fxNeeds,
+        parseEcbRates;
 export 'src/export.dart'
     show
         centsToDecimal,
@@ -157,7 +189,7 @@ export 'src/export.dart'
         transactionsCsvTagsHeader;
 export 'src/forecast.dart'
     show BalanceWarning, BalanceWarningKind, balanceWarnings, ForecastPoint, forecastAfterAllowance, forecastToPayday;
-export 'src/fx.dart' show convertMinor, homeAmount, inHomeCurrency;
+export 'src/fx.dart' show convertMinor, FxUsed, fxUsed, homeAmount, inHomeCurrency;
 export 'src/hlc.dart' show ClockBehindException, Hlc, HlcClock, maxClockDrift;
 export 'src/ics.dart' show CalendarEvent, calendarEventRef, calendarRef, IcsParseResult, legacyCalendarEventRef, parseIcs, plannedIcs;
 export 'src/import_preview.dart' show ImportPreview, PreviewRow, PreviewStatus;
@@ -233,6 +265,7 @@ export 'src/models.dart'
         ReviewState,
         ReviewStep,
         Tx,
+        TxCols,
         WalletSettings,
         wholePayments,
         WishItem;
@@ -265,6 +298,7 @@ export 'src/repo.dart'
         WalletRepoChanges,
         WalletRepoBills,
         WalletRepoBlobs,
+        WalletRepoFx,
         WalletRepoImport,
         WalletRepoIou,
         WalletRepoMatch,

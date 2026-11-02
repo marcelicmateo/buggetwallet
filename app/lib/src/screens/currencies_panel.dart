@@ -40,9 +40,60 @@ class CurrenciesPanel extends StatelessWidget {
               label: const Text('Add a rate'),
               onPressed: () => addFxRate(context, wc))),
       Explainer(wc, 'currencies',
-          'Payments in another currency count in your budget at a rate you set. Without a rate they are not counted. Your payments are not changed.'),
+          'A payment in another currency counts at the ECB rate of its own day. A rate you set yourself wins. Without either it is not counted. Your payments are not changed.'),
+      _RatesStatus(wc),
       Rows(children: [for (final r in rows) _CurrencyRow(wc, r)]),
     ]);
+  }
+}
+
+/// What the ECB rates on this device hold, the last failed download, and "Get rates now" (allowed on a metered network: the owner asked).
+class _RatesStatus extends StatelessWidget {
+  final WalletController wc;
+  const _RatesStatus(this.wc);
+
+  @override
+  Widget build(BuildContext context) {
+    final info = wc.ecbCacheInfo(), fail = wc.ecbLastFailure(), newest = info.newest, missing = wc.fxMissingCount();
+    return Padding(
+      key: const ValueKey('ecbStatus'),
+      padding: const EdgeInsets.only(top: 4, bottom: 4),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Text(newest == null ? 'No ECB rates on this device yet.' : 'ECB rates up to ${shortDateOrRaw(newest)}.',
+            key: const ValueKey('ecbCache'), style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
+        if (missing > 0)
+          Text(missing == 1 ? '1 amount has no rate yet.' : '$missing amounts have no rate yet.',
+              key: const ValueKey('ecbMissing'), style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
+        if (wc.ecbFetching)
+          Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text('Getting rates…',
+                  key: const ValueKey('ecbBusy'), style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)))
+        else if (fail != null)
+          Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: StatusLabel(
+                  key: const ValueKey('ecbFailure'), good: false, text: "Couldn't get rates: ${fail.why} (${shortDateOrRaw(fail.date)}).")),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+              key: const ValueKey('ecbGetNow'),
+              style: TextButton.styleFrom(minimumSize: const Size(0, touchMin)),
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Get rates now'),
+              onPressed: wc.ecbFetching
+                  ? null
+                  : () async {
+                      logNav('fx.getNow');
+                      final messenger = ScaffoldMessenger.of(context);
+                      final wide = layoutOf(context) != LayoutSize.compact, accessible = MediaQuery.accessibleNavigationOf(context);
+                      final ok = await wc.getRatesNow();
+                      // A failure shows on this panel (above), not as a toast.
+                      if (ok) toastOn(messenger, 'Rates updated', wide: wide, accessible: accessible);
+                    }),
+        ),
+      ]),
+    );
   }
 }
 
@@ -63,7 +114,15 @@ class _CurrencyRow extends StatelessWidget {
         if (r != null) ...[
           Text('$code — ${rateSentence(code, r.rate, wc.currency)}, set ${shortDateOrRaw(r.date)}',
               key: ValueKey('fxLine:$code'), style: const TextStyle(fontWeight: FontWeight.w500)),
-          Text(rows, style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
+          Text('your rate · $rows', key: ValueKey('fxSource:$code'), style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
+        ] else if (row.ecb case final u?) ...[
+          Row(key: ValueKey('fxLine:$code'), children: [
+            Icon(Icons.public, size: 16, color: context.c.muted),
+            const SizedBox(width: 6),
+            Expanded(child: Text('$code — counted at the ECB rate of each day', style: const TextStyle(fontWeight: FontWeight.w500))),
+          ]),
+          Text('${wc.fxSourceText(u)} · $rows',
+              key: ValueKey('fxSource:$code'), style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
         ] else ...[
           Row(key: ValueKey('fxLine:$code'), children: [
             Icon(Icons.block, size: 16, color: context.c.muted),
@@ -73,6 +132,9 @@ class _CurrencyRow extends StatelessWidget {
           if (row.stale?.home case final h?)
             Text('Rate was set for $h (set it again)',
                 key: ValueKey('fxStale:$code'), style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
+          if (currencyInfo(code)?.crypto ?? false)
+            Text('Coins have no ECB rate: you set it by hand.',
+                key: ValueKey('fxCoin:$code'), style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
           Text(rows, style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
         ],
         const SizedBox(height: 4),

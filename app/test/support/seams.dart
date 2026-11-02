@@ -9,6 +9,7 @@ import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/controller_deps.dart';
 import 'package:budget_wallet/src/device_relay.dart';
 import 'package:budget_wallet/src/home_widget.dart';
+import 'package:budget_wallet/src/network_state.dart' show noEcbFetch;
 import 'package:budget_wallet/src/nudges.dart';
 import 'package:budget_wallet/src/pdf_parse.dart';
 import 'package:budget_wallet/src/wallet_db.dart';
@@ -43,6 +44,8 @@ class TestSeams {
         clipboardWrite = base.clipboardWrite,
         clipboardRead = base.clipboardRead,
         icsFetcher = base.icsFetcher,
+        ecbFetcher = base.ecbFetcher,
+        isMetered = base.isMetered,
         pdfParser = base.pdfParser,
         billCategorySuggester = null,
         backupBytesReader = null,
@@ -72,6 +75,8 @@ class TestSeams {
   Future<void> Function(String text) clipboardWrite;
   Future<String?> Function() clipboardRead;
   Future<String> Function(Uri url) icsFetcher;
+  Future<List<int>> Function(EcbFile f) ecbFetcher;
+  Future<bool> Function() isMetered;
   PdfParser pdfParser;
 
   /// null = the controller's own suggestion (not forwarded).
@@ -112,6 +117,8 @@ class TestSeams {
         clipboardWrite: (text) => clipboardWrite(text),
         clipboardRead: () => clipboardRead(),
         icsFetcher: (url) => icsFetcher(url),
+        ecbFetcher: (f) => ecbFetcher(f),
+        isMetered: () => isMetered(),
         pdfParser: (pdf) => pdfParser(pdf),
         // Forwarded only when a test set them; otherwise the controller's own (production) path runs.
         billCategorySuggester: (b, builtIn) => billCategorySuggester != null ? billCategorySuggester!(b) : builtIn(),
@@ -123,7 +130,11 @@ class TestSeams {
 }
 
 WalletControllerDeps _inert() => WalletControllerDeps.platform(
-    nudges: const NoNudges(), calendars: const NoCalendars(), homeWidget: const NoHomeWidget(), billInputs: const BillInputs.none());
+    ecbFetcher: noEcbFetch,
+    nudges: const NoNudges(),
+    calendars: const NoCalendars(),
+    homeWidget: const NoHomeWidget(),
+    billInputs: const BillInputs.none());
 
 /// [WalletController.forTest] with deps that forward to a [TestSeams] (reachable as `wc.seams`).
 WalletController seamedController(WalletRepo repo,

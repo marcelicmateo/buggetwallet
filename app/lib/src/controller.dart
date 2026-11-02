@@ -17,7 +17,7 @@ import 'conflict_text.dart';
 import 'controller_deps.dart';
 import 'device_list.dart';
 import 'device_relay.dart';
-import 'format.dart' show NumberStyle, money, moneyExact, numberStyle, shortDateOrRaw, walletCurrencyCode;
+import 'format.dart' show NumberStyle, money, moneyExact, numberStyle, rateText, shortDateOrRaw, walletCurrencyCode;
 import 'hero.dart';
 import 'home_widget.dart';
 import 'ics_fetch.dart';
@@ -25,6 +25,7 @@ import 'insights_api.dart' show InsightRange, WalletInsights, insightGraphs;
 import 'key_store.dart';
 import 'logging.dart';
 import 'memo_key.dart';
+import 'network_state.dart' show noEcbFetch;
 import 'nudges.dart';
 import 'platform.dart' show isWeb;
 import 'sub_state.dart';
@@ -44,6 +45,7 @@ part 'controller_future.dart';
 part 'controller_home.dart';
 part 'controller_splits.dart';
 part 'controller_fx.dart';
+part 'controller_ecb.dart';
 part 'controller_sync.dart';
 part 'controller_devices.dart';
 part 'controller_import.dart';
@@ -174,6 +176,56 @@ typedef ConfirmRemoval = Future<bool> Function(int payments);
 /// Cancel, nothing is written. [canSkip] is false when per-row Skip cannot be offered honestly.
 typedef ConfirmPreview = Future<Set<String>?> Function(ImportPreview preview, String bank);
 
+/// A new account the owner described in "Which account is this?" (UX-ACC). Nothing is written when the form closes: the controller adds it
+/// just before the file is imported, after the preview is confirmed, so a Cancel anywhere leaves no account behind.
+class NewAccountDraft {
+  final String name;
+  final AccountKind kind;
+  final String? institution;
+  final String? source;
+  final String currency;
+  final int opening;
+  final String openingDate;
+  const NewAccountDraft(
+      {required this.name,
+      required this.kind,
+      required this.institution,
+      required this.source,
+      required this.currency,
+      required this.opening,
+      required this.openingDate});
+}
+
+/// The question [ImportAccountQuestion] with the day of the first row of that export account in the file: the new account's opening
+/// date starts the day before it, so the file's rows count in its balance.
+class FileAccountQuestion extends ImportAccountQuestion {
+  final String firstDate;
+  FileAccountQuestion(ImportAccountQuestion q, this.firstDate)
+      : super(
+            source: q.source,
+            currency: q.currency,
+            accountKey: q.accountKey,
+            exportAccount: q.exportAccount,
+            rows: q.rows,
+            candidates: q.candidates);
+}
+
+/// The owner's answer to "Which account is this?" (UX-ACC) for one export account of a file. Nothing is written by the answer itself.
+class AccountAnswer {
+  /// The existing account that counts this export account (its match key is set when the file is imported); null when [created].
+  final String? accountId;
+
+  /// The new account the owner described (added with the match key when the file is imported); null for a pick.
+  final NewAccountDraft? draft;
+  bool get created => draft != null;
+  const AccountAnswer.existing(String this.accountId) : draft = null;
+  const AccountAnswer.created(NewAccountDraft this.draft) : accountId = null;
+}
+
+/// Asked once per export account of a file that no account claims yet (`unknownImportAccounts`), before anything is written: null =
+/// Cancel, the file is not imported. The answer is kept as the account's match key, so the next file of that export account is not asked.
+typedef AskAccount = Future<AccountAnswer?> Function(ImportAccountQuestion question);
+
 /// Everything the Spending tab shows for one month, worked out in [WalletController.spending].
 class SpendingView {
   final String month;
@@ -286,6 +338,15 @@ class WalletController extends ChangeNotifier {
   final Map<MemoKey, Object?> _memo = {};
 
   bool _disposed = false;
+
+  /// An ECB download is running (UX-FX, `controller_ecb.dart`): one at a time; the Currencies panel shows it.
+  bool ecbFetching = false;
+
+  /// "Get rates now" was asked while the automatic fetch ran: it runs as a forced fetch after it unless that one brought the rates.
+  bool ecbGetNowQueued = false;
+
+  /// Accounts the owner picked in the question of the file being read (not written yet): they are no longer free for the next question.
+  final Set<String> pendingClaimed = {};
 
   /// The day [_memo] was filled for: a new day drops every cached value (old days would only pile up).
   String? _memoDay;
@@ -601,6 +662,7 @@ class WalletController extends ChangeNotifier {
     logEvent(_log, Level.INFO, 'app.start',
         {'phase': 'reload', 'ms': sw.elapsedMilliseconds, 'tx': c.wholeTxs.length, 'relay': c.relayUrl != null, 'logLevel': c.logLevel});
     c._startAutoSync();
+    scheduleMicrotask(() => c.fetchRatesAuto(trigger: 'start'));
     c.refreshRecurring();
     scheduleMicrotask(c.rescheduleNudges);
     scheduleMicrotask(() => c.readCalendars(trigger: 'start'));
@@ -707,6 +769,7 @@ class WalletController extends ChangeNotifier {
       WalletController._(repo, key,
           deps: (deps ??
                   WalletControllerDeps.platform(
+                      ecbFetcher: noEcbFetch, // a test never reaches the ECB; it injects its own
                       nudges: const NoNudges(),
                       calendars: const NoCalendars(),
                       homeWidget: const NoHomeWidget(),
@@ -1207,6 +1270,7 @@ class WalletController extends ChangeNotifier {
         'devices': r.devices.length,
       });
       if (r.received > 0 || r.sent > 0) reload();
+      if (r.received > 0) scheduleMicrotask(() => fetchRatesAuto(trigger: 'sync')); // rows from another device may need rates
     } catch (e, st) {
       logError(_sync, 'sync.failed', e, st, fields: {'trigger': trigger});
       if (relay != relayUrl) return; // the old relay's failure: not shown for the new address
@@ -1294,7 +1358,7 @@ class WalletController extends ChangeNotifier {
   /// A CSV no bank profile knows is read with its saved layout, else [askMapping] opens the Map columns sheet (null = the
   /// message "map its columns"); the chosen layout is saved, then the file is read with it.
   Future<List<ImportLine>> importFiles(List<(String, Uint8List)> files,
-      {AskMapping? askMapping, ConfirmRemoval? confirmRemoval, ConfirmPreview? confirmPreview}) async {
+      {AskMapping? askMapping, ConfirmRemoval? confirmRemoval, ConfirmPreview? confirmPreview, AskAccount? askAccount}) async {
     final all = PerfTimer('import.files', warnMs: 3000);
     final lines = <ImportLine>[];
     for (final (i, (name, bytes)) in files.indexed) {
@@ -1309,7 +1373,16 @@ class WalletController extends ChangeNotifier {
           lines.add(ImportLine(name, 'Not imported. Map its columns to read it.', false));
           continue;
         }
-        final batch = read.batch, usedMapping = read.mapping;
+        final usedMapping = read.mapping;
+        // UX-ACC: each row names its export account by a keyed fingerprint (never the IBAN itself); an unknown one is asked about now,
+        // before anything is written, because rows imported before the answer would stay on the main account.
+        final batch = await _withAccountKeys(read.batch);
+        final answers = askAccount == null ? const <(ImportAccountQuestion, AccountAnswer)>[] : await _askAccounts(batch, askAccount, f);
+        if (answers == null) {
+          read.revert?.call();
+          lines.add(ImportLine(name, 'Not imported. You skipped this file.', false));
+          continue;
+        }
         final mapped = usedMapping != null;
         // Payments a forced layout edit removed come back exactly once when the same file is read the new way (`csvRevive:<shape id>`).
         final reviveKey = batch.source.startsWith(csvSourcePrefix) ? batch.source.substring(csvSourcePrefix.length) : null;
@@ -1337,6 +1410,7 @@ class WalletController extends ChangeNotifier {
           skip = chosen;
         }
         read.commit?.call(); // a new column layout is saved only now
+        await _writeAccountAnswers(answers); // and the answers to "Which account is this?", the last thing before the rows
         final s = repo.importBatch(batch, revive: revive.toSet(), skip: skip); // logs repo.importBatch
         if (revive.isNotEmpty) {
           // Only the ids this file read are done; the rest wait for their own files (January's and February's rows both come back).
@@ -1396,6 +1470,7 @@ class WalletController extends ChangeNotifier {
     lastImport = lines;
     refreshRecurring();
     _changed();
+    if (lines.any((l) => l.ok && l.added > 0)) scheduleMicrotask(() => fetchRatesAuto(trigger: 'import')); // new foreign rows need rates
     return lines;
   }
 

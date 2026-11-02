@@ -2,8 +2,10 @@ package cli
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -89,6 +91,7 @@ type opts struct {
 	env    []string
 	handle func(c sys.Cmd) int
 	setup  func(h *host.Host)
+	stdin  io.Reader
 	root   string
 }
 
@@ -102,7 +105,7 @@ func runCLI(t *testing.T, o opts, args ...string) result {
 	fake := &sys.Fake{Handle: o.handle}
 	var out, errb bytes.Buffer
 	env := append([]string{"PATH=/usr/bin", "HOME=" + t.TempDir(), "BW_DATA_DIR=" + data, "BW_COMMIT=abc1234", "BW_SOURCE=local", "BW_WORKTREE=wt", "BW_JOBS=1"}, o.env...)
-	code := Run(args, env, &out, &errb, Deps{R: fake, Root: root, Self: "/x/wallet-build", HostSetup: o.setup})
+	code := Run(args, env, &out, &errb, Deps{R: fake, Root: root, Self: "/x/wallet-build", HostSetup: o.setup, Stdin: o.stdin})
 	r := result{code: code, out: out.String(), err: errb.String(), root: root, data: data, fake: fake}
 	r.calls = calls(fake, root)
 	for _, e := range fake.Execs {
@@ -110,6 +113,21 @@ func runCLI(t *testing.T, o opts, args ...string) result {
 	}
 	r.logs = filepath.Join(root, "dist", "logs")
 	return r
+}
+
+// BW_QUIET=1 in the session env must not swallow the hook's verdict: a block still says why, on stderr.
+func TestHookIsExemptFromQuiet(t *testing.T) {
+	block := `{"tool_input":{"command":"until x; do sleep 1; done"}}`
+	for _, args := range [][]string{{"hook", "no-poll"}, {"-q", "hook", "no-poll"}} {
+		r := runCLI(t, opts{env: []string{"BW_QUIET=1"}, stdin: strings.NewReader(block)}, args...)
+		if r.code != 2 || !strings.HasPrefix(r.err, "Blocked: no sleep/until/while poll loops") {
+			t.Errorf("%v: code %d, stderr %q", args, r.code, r.err)
+		}
+	}
+	r := runCLI(t, opts{env: []string{"BW_QUIET=1"}, stdin: strings.NewReader(`{"tool_input":{"command":"make test"}}`)}, "hook", "no-poll")
+	if r.code != 0 || r.err != "" || r.out != "" {
+		t.Errorf("pass: code %d out %q err %q", r.code, r.out, r.err)
+	}
 }
 
 // native runs a command the way the container (or CI) does: BW_NATIVE=1 with a run directory.
@@ -156,8 +174,9 @@ func TestGoldenArgvLint(t *testing.T) {
 		"$ shellcheck tools/a.sh dev/b.sh dev/install-lint-tools.sh .github/scripts/c.sh",
 		"$ actionlint",
 		"$ tools/no-poll-hook.sh --self-test",
+		"$ /x/wallet-build hook no-poll --self-test", // the Go port of the hook runs next to the bash one (GO4-B)
 		"$ tools/relay-deploy.sh --self-test",
-		"$ tools/relay-native-check.sh",
+		"$ /x/wallet-build relay-native-check",
 	})
 	if r.code != 0 {
 		t.Errorf("code %d\n%s", r.code, r.err)
@@ -202,9 +221,6 @@ func TestGoldenArgvPackages(t *testing.T) {
 		{[]string{"outdated"}, func(r result) []string {
 			return []string{"packages/wallet_importer$ dart pub outdated", "packages/wallet_core$ dart pub outdated", "packages/sync$ dart pub outdated",
 				"relay$ dart pub outdated", "app$ flutter pub outdated"}
-		}},
-		{[]string{"mutate", "core", "lib/x.dart", "--max", "5"}, func(r result) []string {
-			return []string{"$ python3 -I " + r.root + "/tools/mutate.py core lib/x.dart --max 5"}
 		}},
 		{[]string{"linux"}, func(r result) []string {
 			return []string{"app$ flutter build linux --release", "app$ tar -C build/linux/x64/release -czf ../dist/BudgetWallet-linux-x64.tar.gz bundle"}
@@ -273,8 +289,20 @@ func TestDesktopTestParallelShards(t *testing.T) {
 	if shards != 5 {
 		t.Errorf("layout shards: %d", shards)
 	}
-	if !displays["101"] || !displays["102"] || len(displays) > 2 {
-		t.Errorf("each worker needs its own display (101, 102): %v", displays)
+	// Which workers get units depends on scheduling (one fast worker may claim every unit), so check per call:
+	// worker N (app copy dist/desktop-test/wN) must use display 100+N, never another worker's.
+	for _, c := range r.fake.Calls {
+		argv := strings.Join(c.Argv, " ")
+		if !strings.Contains(argv, "flutter test integration_test/") {
+			continue
+		}
+		m := regexp.MustCompile(`dist/desktop-test/w(\d+)(/|$)`).FindStringSubmatch(c.Dir)
+		if m == nil || !strings.Contains(argv, "xvfb-run -n 10"+m[1]+" ") {
+			t.Errorf("worker needs its own display 10N: dir %s argv %s", c.Dir, argv)
+		}
+	}
+	if len(displays) == 0 || len(displays) > 2 {
+		t.Errorf("displays: %v", displays)
 	}
 	// each worker works in its own copy of app/
 	for _, c := range r.fake.Calls {
@@ -518,7 +546,7 @@ func TestUsageTextIsBuildShHeader(t *testing.T) {
 
 func TestUsageErrorsInsideContainerStillCreateRunDir(t *testing.T) {
 	// bash: run_begin happens on the host before the container sees the bad arguments
-	for _, args := range [][]string{{"mutate"}, {"relay-bin", "badarch"}} {
+	for _, args := range [][]string{{"relay-bin", "badarch"}} { // mutate checks its arguments on the host (TestMutateUsageErrorsNeverTouchPodman)
 		r := runCLI(t, opts{handle: func(c sys.Cmd) int { // the container prints the usage and exits 2
 			if len(c.Argv) > 1 && c.Argv[0] == "podman" && c.Argv[1] == "run" {
 				return 2

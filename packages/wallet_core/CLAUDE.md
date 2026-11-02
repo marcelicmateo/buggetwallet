@@ -320,6 +320,25 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   converted one by one (rate, or the bank amount's proportional share), remainder to the last only when all earlier
   parts are in the list; no rates → the same list). Whole-payment paths keep raw rows: `computePeriod(matchRows:)`
   matches bills and incomes on the raw list. Tests: `test/p15_fx_test.dart`.
+- `ecb.dart` + `repo_fx.dart` — UX-FX (schema 20, `docs/context/UX_SPEC.md` "UX-FX"): ECB reference rates per payment
+  date. Synced entity `fx_day` (`FxDayCols`, table `fx_days`, id `<CUR>:<YYYY-MM-DD>`, `per_eur` = units per EUR × 1e6,
+  `source` 'ecb'), written only for what the wallet needs (`fxNeeds` pure / repo `walletFxNeeds`: foreign fiat payments,
+  bills, IOUs, openings without a hand rate) by `fillFxDays` from the device-local cache `ecb_rates` (never synced or
+  backed up; `importEcbHistory(bytes)` fills it from `parseEcbRates`: zip (CRC checked by us: archive 4.5's `verify:` is a no-op) / CSV / XML, exact decimals ≤ 6,
+  any damage = `FormatException`, nothing written). `EcbRates` (`WalletSettings.ecb`, filled by `settings()`, cached per
+  `dataVersion`): `rateOn` / `pairOn` = latest ECB day ≤ date within `ecbMaxGapDays` 7 having both currencies.
+  `homeAmount`/`inHomeCurrency`: hand rate (`fxRates`) wins, else `ecbConvert` (BigInt, half away from zero once);
+  `fxUsed` says which. `balanceInHome` (owner 2026-11-01): hand rate on the whole balance, else the opening at its date
+  + each counted row (`AccountBalance.rows`) at its own date; any part without a rate → null. `fillFxDays` also
+  replaces an older day by a newer cached one (an early fetch), and runs by itself after every commit that can add a
+  need: a row/bill/IOU/account currency, date or undelete not in the wallet currency, the wallet currency or a hand
+  rate (`_fxRelevant` → `_tx`; local or from a sync; never after a dry run), so the app needs no fill rule. One cache
+  read per fill (the open needs' range, days looked up in memory); `fxCacheReads`/`fxAutoFills` pin the cost in tests. `WalletSettings.toMap` carries `ecb` (`EcbRates.toJson`); a
+  stored settings row `ecb` is ignored. Core never fetches: `ecbFetchPlan()` → `EcbFile` (`history` zip / `recent`
+  90-day XML, once a day via `noteEcbAttempt`, only for a missing need a download could answer or a date newer than the
+  cache answered by an older day; dates after today never; `force:` for "Get rates now"); app order `ecbFetchPlan` →
+  `noteEcbAttempt` → `fetchEcbFile` (wallet_sync) → `importEcbHistory`. `ecbCacheInfo`, `ecbCacheHas(currencies, date)` (the switch dialog's check), `fxMissing` (dates up to
+  today). Tests: `test/ux_fx_test.dart`.
 - `splits.dart` + `repo_splits.dart` — split transactions (P6, schema 13, spec `docs/context/P6_SPEC.md`). Entity
   `split` (table `tx_splits`, id = the tx id, `parts` = one JSON field `[{a, c, t, n?}]`, so LWW keeps a whole split).
   `setSplit`/`removeSplit`/`splitOf`/`splits`; rules (2–20 parts, payment's sign, exact sum, live non-transfer main
@@ -530,7 +549,17 @@ Nothing reachable from the barrel may import `dart:io`, `dart:ffi` or `package:s
   replaced rows never count.
 - Accounts and plan suggestions (N2, spec `docs/context/N2_SPEC.md`). `repo_accounts.dart` (`WalletRepoAccounts`):
   `addAccount`/`updateAccount`/`correctBalance`/`deleteAccount`/`undeleteAccount`/`accounts()`; one live account per
-  (source, currency), cash = `source` null; dates not after the repo clock's today. `accounts.dart` (pure):
+  (source, currency, `match_key`), cash = `source` null; dates not after the repo clock's today. UX-ACC (schema 20,
+  `docs/context/SCHEMA21_SPEC.md`): `tx.account` (`TxCols.account`) + `accounts.match_key` (`ak:` + 16 hex,
+  `accountMatchKey(VaultKey, exportAccount)` keyed HMAC, never logged, IBAN never stored; `withAccountKeys(key, batch)`
+  sets `NormalizedTransaction.accountKey`); `RowAccounts` = the counting rule (named live account of the row's
+  source/currency, else the main account: null key, else smallest id); `importBatch` writes the account in the creation
+  op and on re-import fills only a row whose `account` was never written (no clock; the owner's `setTxAccount(id, null)`
+  stays); `unknownImportAccounts(batch)` → `ImportAccountQuestion`s (ask once). **Ask "Which account is this?" before
+  `importBatch`**: rows imported before the answer stay on the main account until that file is imported again. A wallet
+  key change makes stored match keys stale (a new key hashes the same IBAN differently), so the question is asked again.
+  `checkBankBalance`/`balanceTrusted` take every account (`accounts:` required). Q5 checks per export account. Tests:
+  `test/ux_acc_test.dart`. `accounts.dart` (pure):
   `accountBalances` = opening + rows after `openingDate` (bank: its source's imported rows, every kind; cash: hand-added
   rows not matched or pending; ATM never adds to cash); a sync duplicate (same key, larger id) gets `duplicateOf`, its
   opening only, and `balanceTotals` (per currency) skips it. `suggest.dart` (pure): `suggestPlan(txs, st, today,

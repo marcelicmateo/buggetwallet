@@ -1,8 +1,12 @@
-import 'package:wallet_importer/wallet_importer.dart' show CsvMapping, bankProfiles, csvSourcePrefix;
+import 'dart:convert' show utf8;
+
+import 'package:cryptography/cryptography.dart' show Hmac, SecretKey;
+import 'package:wallet_importer/wallet_importer.dart' show CsvMapping, ImportBatch, bankProfiles, csvSourcePrefix;
 
 import 'dates.dart';
 import 'fx.dart' show homeAmount;
 import 'models.dart';
+import 'vault.dart' show VaultKey, deriveKey;
 
 /// What an account or import `source` is called: `Cash` for null, a bank profile's label, a saved CSV layout's name
 /// for `csv:<shapeId>` (P12, from [csvMappings] = [WalletSettings.csvMappings]; `CSV file` once the layout is
@@ -31,63 +35,156 @@ class AccountBalance {
   /// synced): that one counts the rows, so this one shows its opening only and is left out of [balanceTotals].
   final String? duplicateOf;
 
-  const AccountBalance({required this.account, required this.balance, required this.rowsCounted, this.lastRowDate, this.duplicateOf});
+  /// The rows counted in [balance] (UX-FX: [balanceInHome] converts each at its own date). Empty for a duplicate.
+  final List<Tx> rows;
+
+  const AccountBalance(
+      {required this.account, required this.balance, required this.rowsCounted, this.lastRowDate, this.duplicateOf, this.rows = const []});
+}
+
+/// UX-ACC: which live account counts each row (the counting rule of [accountBalances], [checkBankBalance],
+/// [balanceTrusted] and `balanceWarnings`). A bank row's account is
+/// 1. [Tx.account] when it names a live account of the row's source and currency (of several live accounts with that
+///    account's key, the smallest id: the others are sync duplicates);
+/// 2. else the **main account** of (source, currency): the live one without a [Account.matchKey] (smallest id), or
+///    when every live one has a key, the smallest id.
+/// So a row whose account was deleted, or that an older build imported, goes back to the main account and is never
+/// lost from the balances. A hand-added row belongs to the cash account of its currency (whether it counts there is
+/// [_counts]'s rule). Accounts that count no rows ([Account.countsRows] false) never own one. Pure.
+class RowAccounts {
+  /// (source or null for cash, currency, match key) -> the counting account's id (smallest).
+  final Map<(String?, String, String?), String> _byKey = {};
+
+  /// (source or null for cash, currency) -> the main account's id.
+  final Map<(String?, String), String> _main = {};
+  final Map<String, Account> _live = {};
+
+  /// From [accounts] (deleted ones are left out).
+  RowAccounts(Iterable<Account> accounts) {
+    for (final a in accounts) {
+      final k = _rowKey(a);
+      if (a.deleted || k == null) continue;
+      _live[a.id] = a;
+      final have = _byKey[k];
+      if (have == null || a.id.compareTo(have) < 0) _byKey[k] = a.id;
+    }
+    final keyed = <(String?, String), String>{};
+    for (final MapEntry(key: (src, cur, mk), value: id) in _byKey.entries) {
+      if (mk == null) {
+        _main[(src, cur)] = id;
+        continue;
+      }
+      final have = keyed[(src, cur)];
+      if (have == null || id.compareTo(have) < 0) keyed[(src, cur)] = id;
+    }
+    for (final MapEntry(:key, :value) in keyed.entries) {
+      _main.putIfAbsent(key, () => value);
+    }
+  }
+
+  /// The id of the live account that counts [row] (null: none does, e.g. no live account of its bank and currency).
+  /// Dates, deletion and the cash match rules are not looked at here ([accountBalances] applies them).
+  String? accountOf(Tx row) {
+    if (row.manual) return _main[(null, row.currency)];
+    final named = row.account == null ? null : _live[row.account];
+    if (named != null && !named.isCash && named.source == row.source && named.currency == row.currency) {
+      return _byKey[_rowKey(named)];
+    }
+    return _main[(row.source, row.currency)];
+  }
+
+  /// The main account of ([source], [currency]) (null = cash), or null when there is no live one.
+  String? mainOf(String? source, String currency) => _main[(source, currency)];
+
+  /// The live bank account of [source] and [currency] whose [Account.matchKey] is [matchKey] (smallest id), or null.
+  String? keyedOf(String source, String currency, String matchKey) => _byKey[(source, currency, matchKey)];
+
+  /// The id that counts the rows of [a]'s key ([a] itself unless it is a sync duplicate); null for an account that
+  /// counts no rows or is not live.
+  String? countingOf(Account a) => switch (_rowKey(a)) { final k? when _live.containsKey(a.id) => _byKey[k], _ => null };
 }
 
 /// Whether [row] counts for [a]: not deleted, in the account's currency, after its opening date (the opening is the
-/// balance at the end of that day), and the account's own: a bank account's imported rows from its source (every
-/// kind: spending, income, fees, ATM, own transfers, exchanges), or for cash the hand-added rows not matched (or
+/// balance at the end of that day), and the account's own ([RowAccounts.accountOf]): a bank account's imported rows
+/// (every kind: spending, income, fees, ATM, own transfers, exchanges), or for cash the hand-added rows not matched (or
 /// pending a match) to a bank row, which the bank account already counts. ATM withdrawals are not added to cash.
 /// An account without a source that is not cash (investment, crypto, other; UX-A) counts no rows: its balance is the
 /// opening the owner sets ([WalletRepo.correctBalance]).
-bool _counts(Account a, Tx row) {
+bool _counts(Account a, Tx row, RowAccounts owners) {
   if (!a.countsRows || row.deleted || row.currency != a.currency || row.date.compareTo(a.openingDate) <= 0) return false;
-  if (a.isCash) return row.manual && row.matchedTo == null && !row.matchPending;
-  return !row.manual && row.source == a.source;
+  if (a.isCash) return row.manual && row.matchedTo == null && !row.matchPending && owners.accountOf(row) == a.id;
+  return !row.manual && row.source == a.source && owners.accountOf(row) == a.id;
 }
 
-/// The key under which [a] counts rows: (null, currency) for cash, (source, currency) for an account with a source;
-/// null for one that counts none (never a duplicate of another).
-(String?, String)? _rowKey(Account a) => !a.countsRows ? null : (a.isCash ? null : a.source, a.currency);
+/// The key under which [a] counts rows: (null, currency, null) for cash, (source, currency, match key) for an account
+/// with a source; null for one that counts none (never a duplicate of another).
+(String?, String, String?)? _rowKey(Account a) =>
+    !a.countsRows ? null : (a.isCash ? (null, a.currency, null) : (a.source, a.currency, a.matchKey));
 
 /// The balance of each live account in [accounts] (input order; deleted accounts are skipped) from [rows]: opening +
-/// the amounts of the rows that count for it ([_counts]). Exact cents, one currency per account. Each (source,
-/// currency) is counted once: of several live accounts with one key (added on two devices before a sync) the
-/// smallest id counts the rows; the others get [AccountBalance.duplicateOf], their opening as balance and no rows.
+/// the amounts of the rows that count for it ([_counts], [RowAccounts]). Exact cents, one currency per account. Each
+/// (source, currency, match key) is counted once: of several live accounts with one key (added on two devices before
+/// a sync) the smallest id counts the rows; the others get [AccountBalance.duplicateOf], their opening as balance and
+/// no rows.
 List<AccountBalance> accountBalances(List<Account> accounts, List<Tx> rows) {
-  final owner = <(String?, String), String>{}; // (source, currency) -> the counted account's id
-  for (final a in accounts) {
-    if (a.deleted) continue;
-    final k = _rowKey(a);
-    if (k == null) continue;
-    final have = owner[k];
-    if (have == null || a.id.compareTo(have) < 0) owner[k] = a.id;
-  }
+  final owners = RowAccounts(accounts);
   final out = <AccountBalance>[];
   for (final a in accounts) {
     if (a.deleted) continue;
-    final counted = switch (_rowKey(a)) { final k? => owner[k]!, null => a.id };
+    final counted = owners.countingOf(a) ?? a.id;
     if (counted != a.id) {
       out.add(AccountBalance(account: a, balance: a.opening, rowsCounted: 0, duplicateOf: counted));
       continue;
     }
-    var sum = a.opening, n = 0;
+    var sum = a.opening;
     String? last;
+    final mine = <Tx>[];
     for (final r in rows) {
-      if (!_counts(a, r)) continue;
+      if (!_counts(a, r, owners)) continue;
       sum += r.amount;
-      n++;
+      mine.add(r);
       if (last == null || r.date.compareTo(last) > 0) last = r.date;
     }
-    out.add(AccountBalance(account: a, balance: sum, rowsCounted: n, lastRowDate: last));
+    out.add(AccountBalance(account: a, balance: sum, rowsCounted: mine.length, lastRowDate: last, rows: List.unmodifiable(mine)));
   }
   return out;
 }
 
-/// [b]'s balance in the wallet currency of [st] (UX-A): itself when the account is in it, else at the owner's rate
-/// (`homeAmount`: each currency's own minor digits; a crypto account's coins at the hand-set rate); null without a rate.
-int? balanceInHome(AccountBalance b, WalletSettings st) =>
-    homeAmount(Tx(id: '', source: '', date: '', amount: b.balance, currency: b.account.currency, description: ''), st);
+/// The attribution [checkBankBalance] and [balanceTrusted] use: every account of [accounts] (plus [a] when missing),
+/// with [a] taken as live (a check on a deleted account still counts its rows).
+RowAccounts _ownersFor(Account a, List<Account> accounts) => RowAccounts([
+      for (final x in accounts)
+        if (x.id != a.id) x,
+      if (a.deleted) Account.fromRow({...a.row, 'deleted': 0}) else a,
+    ]);
+
+/// [b]'s balance in the wallet currency of [st] (UX-A): itself when the account is in it; else at the owner's rate for
+/// the whole balance when one is set (`homeAmount`: each currency's own minor digits; a crypto account's coins at the
+/// hand-set rate); else (UX-FX, owner 2026-11-01 "the day of the said transaction") the opening converted at the
+/// opening date plus each counted row ([AccountBalance.rows]) converted at its own date (`homeAmount`: the bank's own
+/// amount, else the ECB rate of that day). Null when any part has no rate (shown as missing, never a partial sum), the
+/// sum is past [WalletSettings.maxAmount], or [b]'s rows do not add up to its balance (built by hand). A zero part
+/// needs no rate. The dates are among `walletFxNeeds` (every live foreign row and opening).
+int? balanceInHome(AccountBalance b, WalletSettings st) {
+  final a = b.account;
+  Tx at(String date, int amount) => Tx(id: '', source: '', date: date, amount: amount, currency: a.currency);
+  if (a.currency == st.currency || st.fxRates.containsKey(a.currency)) {
+    return homeAmount(at(b.lastRowDate ?? a.openingDate, b.balance), st);
+  }
+  var parts = a.opening;
+  for (final r in b.rows) {
+    parts += r.amount;
+  }
+  if (parts != b.balance) return null;
+  int? part(Tx t) => t.amount == 0 ? 0 : homeAmount(t, st);
+  var sum = part(at(a.openingDate, a.opening));
+  for (final r in b.rows) {
+    if (sum == null) return null;
+    final h = part(r);
+    sum = h == null ? null : sum + h;
+  }
+  return sum == null || sum.abs() > WalletSettings.maxAmount ? null : sum;
+}
 
 /// The balances summed per currency (never mixed), keys sorted. Duplicates ([AccountBalance.duplicateOf]) are left out.
 Map<String, int> balanceTotals(List<AccountBalance> b) {
@@ -126,11 +223,14 @@ class BalanceCheck {
 /// The bank's balance [bankCents] at the end of [date] compared with the app's: `a.opening` + the rows that count for
 /// [a] (the same rule as [accountBalances]: not deleted, the account's currency, after its opening date, its own
 /// source's imported rows, or for cash the unmatched hand-added ones) dated up to and including [date]. Pass the
-/// account that counts its (source, currency) (not one with [AccountBalance.duplicateOf]). Exact cents; never writes.
-BalanceCheck checkBankBalance(Account a, List<Tx> rows, {required String date, required int bankCents}) {
+/// account that counts its (source, currency) (not one with [AccountBalance.duplicateOf]). UX-ACC: [accounts] is every
+/// account of the wallet (`WalletRepo.accounts()`; required, so no caller counts another account's rows by leaving it
+/// out): rows another account of the same bank claims ([RowAccounts]) are left out. Exact cents; never writes.
+BalanceCheck checkBankBalance(Account a, List<Tx> rows, {required String date, required int bankCents, required List<Account> accounts}) {
+  final owners = _ownersFor(a, accounts);
   var sum = a.opening, n = 0;
   for (final r in rows) {
-    if (!_counts(a, r) || r.date.compareTo(date) > 0) continue;
+    if (!_counts(a, r, owners) || r.date.compareTo(date) > 0) continue;
     sum += r.amount;
     n++;
   }
@@ -167,10 +267,86 @@ class BankCheck {
 /// moves it, so a check the owner then corrected counts from the correction) or [last] when the bank's balance still
 /// matches the app's: decided now from [rows] ([checkBankBalance] at `last.date` against `last.bankCents`), never from
 /// the stored [BankCheck.appCents] (a row deleted later, here or by a sync, makes a stored match stale). A check that is
-/// off now, or dated before the opening, never counts. A date after [today] counts as recent.
-bool balanceTrusted(Account a, {required String today, BankCheck? last, required List<Tx> rows}) {
+/// off now, or dated before the opening, never counts. A date after [today] counts as recent. [accounts]: as in
+/// [checkBankBalance].
+bool balanceTrusted(Account a, {required String today, BankCheck? last, required List<Tx> rows, required List<Account> accounts}) {
   bool recent(String d) => isIsoDate(d) && isIsoDate(today) && daysBetween(d, today) <= bankCheckTrustDays;
   if (recent(a.openingDate)) return true;
   if (last == null || !recent(last.date) || last.date.compareTo(a.openingDate) < 0) return false;
-  return checkBankBalance(a, rows, date: last.date, bankCents: last.bankCents).matches;
+  return checkBankBalance(a, rows, date: last.date, bankCents: last.bankCents, accounts: accounts).matches;
+}
+
+// ---------- export accounts (UX-ACC) ----------
+
+/// The HKDF info of the key [accountMatchKey] uses (`deriveKey`).
+const accountMatchKeyInfo = 'bw-account-match-v1';
+
+final _matchKeyShape = RegExp(r'^ak:[0-9a-f]{16}$');
+
+/// Whether [s] has the shape of an [accountMatchKey] result (`ak:` + 16 lower-case hex).
+bool isAccountMatchKey(String s) => _matchKeyShape.hasMatch(s);
+
+/// [exportAccount] (an IBAN or product name as the export names it) in the form [accountMatchKey] hashes: upper case,
+/// spaces and dashes removed.
+String normalizeExportAccount(String exportAccount) => exportAccount.toUpperCase().replaceAll(RegExp(r'[\s-]'), '');
+
+/// The keyed fingerprint of the export account [exportAccount] ([Account.matchKey], the `accountKey` of an import
+/// batch's rows): `ak:` + the first 16 hex of HMAC-SHA256 of [normalizeExportAccount] with
+/// `deriveKey(key, accountMatchKeyInfo)`. Keyed by the wallet key, so a database or backup without the key does not
+/// reveal the IBAN through a word list. Never logged; the IBAN itself is never stored. A blank account: [ArgumentError].
+Future<String> accountMatchKey(VaultKey key, String exportAccount) async =>
+    _matchKeyWith(await deriveKey(key, accountMatchKeyInfo), exportAccount);
+
+Future<String> _matchKeyWith(List<int> k, String exportAccount) async {
+  final n = normalizeExportAccount(exportAccount);
+  if (n.isEmpty) throw ArgumentError('No account name.');
+  final mac = await Hmac.sha256().calculateMac(utf8.encode(n), secretKey: SecretKey(k));
+  return 'ak:${mac.bytes.take(8).map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+}
+
+/// [batch] with every row that names its account (`NormalizedTransaction.account`) given its
+/// `NormalizedTransaction.accountKey` ([accountMatchKey], the key derived once). What the app passes to
+/// `WalletRepo.unknownImportAccounts` and `importBatch`. Rows without an account are kept as they are.
+Future<ImportBatch> withAccountKeys(VaultKey key, ImportBatch batch) async {
+  if (!batch.transactions.any((t) => t.account != null && normalizeExportAccount(t.account!).isNotEmpty)) return batch;
+  final k = await deriveKey(key, accountMatchKeyInfo);
+  final keys = <String, String>{};
+  for (final t in batch.transactions) {
+    final a = t.account;
+    if (a == null || keys.containsKey(a) || normalizeExportAccount(a).isEmpty) continue;
+    keys[a] = await _matchKeyWith(k, a);
+  }
+  return batch.withRows([
+    for (final t in batch.transactions)
+      if (keys[t.account] case final ak?) t.withAccountKey(ak) else t
+  ]);
+}
+
+/// An export account of an import batch that no live account of its bank and currency claims yet
+/// (`WalletRepo.unknownImportAccounts`): the app asks once "Which account is this?" and then sets [accountKey] as the
+/// chosen account's [Account.matchKey] (`updateAccount(matchKey:)`) or adds a new account with it
+/// (`addAccount(matchKey:)`). Until then its rows count for the main account ([RowAccounts]).
+class ImportAccountQuestion {
+  final String source;
+  final String currency;
+  final String accountKey;
+
+  /// The account as the file names it (an IBAN or product name), for the question only: in memory, never stored or
+  /// logged. The first spelling met in the file.
+  final String exportAccount;
+
+  /// How many of the batch's rows name it.
+  final int rows;
+
+  /// The live accounts of [source] and [currency] that count rows (by name, then id): where its rows could go. Empty
+  /// when the wallet has no account for that bank and currency yet.
+  final List<Account> candidates;
+
+  const ImportAccountQuestion(
+      {required this.source,
+      required this.currency,
+      required this.accountKey,
+      required this.exportAccount,
+      required this.rows,
+      required this.candidates});
 }

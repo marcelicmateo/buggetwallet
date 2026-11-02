@@ -7,6 +7,7 @@ import 'package:budget_wallet/main.dart';
 import 'package:budget_wallet/src/bill_inputs.dart';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/logging.dart';
+import 'package:budget_wallet/src/screens/account_question.dart' show askWhichAccount;
 import 'package:budget_wallet/src/screens/accounts_panel.dart' show askBankBalance;
 import 'package:budget_wallet/src/screens/bill_sheet.dart';
 import 'package:budget_wallet/src/screens/bills_tab.dart';
@@ -383,6 +384,34 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tapAt(const Offset(5, 5));
     await tester.pumpAndSettle();
+    // UX-ACC: "Which account is this?" for a pocket no account claims yet.
+    final usd = wc.accountsAll().firstWhere((a) => a.currency == 'USD');
+    final unknown = wc.repo.unknownImportAccounts(ImportBatch(source: 'revolut', transactions: [
+      NormalizedTransaction(
+          id: 'demo-pocket-1',
+          source: 'revolut',
+          date: wc.today(),
+          amountMinor: -500,
+          currency: 'USD',
+          bankType: 'Card Payment',
+          description: 'DEMO POCKET SHOP',
+          account: 'Pocket 2',
+          accountKey: 'ak:0123456789abcdef'),
+    ]));
+    unawaited(askWhichAccount(tester.element(find.byType(Scaffold).first), wc, unknown.single));
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('11-account-question');
+    await tester.tap(find.byKey(const ValueKey('accountPickCancel')));
+    await tester.pumpAndSettle();
+    // UX-FX: ECB rates came in (a hand rate for yen wins), then a download failed: the panel says so plainly.
+    final ecbCsv = 'Date,USD,JPY,\n${[for (var i = 0; i < 40; i++) '${addDays(wc.today(), -i)},1.0900,160.00,'].join('\n')}\n';
+    wc.seams.ecbFetcher = (_) async => utf8.encode(ecbCsv);
+    await wc.getRatesNow();
+    wc.setFxRate('JPY', 6000);
+    wc.seams.ecbFetcher = (_) async => throw const EcbFetchException(EcbFetchFailure.unreachable, 'x');
+    await wc.getRatesNow();
+    await settings(SettingsSection.accounts, find.byKey(const ValueKey('ecbGetNow')), '11-settings-currencies');
+    await settings(SettingsSection.accounts, find.byKey(ValueKey('accountHome:${usd.id}')), '11-account-foreign');
     await settings(SettingsSection.rules, find.byKey(const ValueKey('builtInToggle')), '10-settings-rules');
     await tester.tap(find.byKey(const ValueKey('builtInToggle')));
     await tester.pumpAndSettle();

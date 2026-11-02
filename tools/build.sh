@@ -44,8 +44,14 @@
 #   tools/build.sh importer|core|sync|relay|app <test file or dir>…   only those tests (paths relative to the package or the repo root),
 #                           no analyze; step name <pkg>:one, so the full-suite medians stay clean
 #   tools/build.sh mutate <importer|core|sync> <lib file>… [--max N] [--seed S] [--tests <test file>…] [--timeout SECS] [--list]
-#                           mutation testing (tools/mutate.py): seeded sample of simple mutants per lib file, each run against the
-#                           package tests (one at a time, file restored after each), survivors listed; dist/mutation/<pkg>-<file>.json
+#                           mutation testing (wallet-build, in the container): seeded sample of simple mutants per lib file, each run
+#                           against the package tests (one at a time, in a copy under dist/mutation/work), survivors listed;
+#                           dist/mutation/<pkg>-<file>.json
+#   GO4-A helpers (no container; also make fixtures | fixtures-embed | token-usage | log-summary | lsp-query):
+#   wallet-build fixtures <out_dir> [all|banks|bills|generic]   synthetic importer fixtures (seeded, byte-identical; the two Excel
+#                           files are frozen); fixtures embed writes app/integration_test/support/fixtures.dart from the bank files
+#   wallet-build token-usage [--since D] [--until D] [--json F]   Claude Code tokens per day/session/model/commit (local transcripts)
+#   wallet-build log-summary <log>…   summary of an app log     wallet-build lsp-query refs|def <path:line:col>…   symbol lookup
 #   tools/build.sh shell    interactive shell in the container;  shell -c '<command>' runs one command non-interactively
 #   tools/build.sh image    (re)build the container image (first build ~15 min)
 #   tools/build.sh lsp      Dart language server on stdin/stdout, for editors (repo mounted at its host path)
@@ -74,9 +80,9 @@ cmd_=${1:-}
 case "$cmd_" in -q|--quiet) cmd_=${2:-} ;; esac
 case "$impl:${cmd_:-test}" in
   # auto list (M3, 2026-11-01): the commands whose parity case passed (tools/wallet-build/parity). Still bash: format,
-  # outdated, perf, web, all, mutate, image, mcp, relay-native-test, stage (no parity case yet, or not soaked).
+  # outdated, perf, web, all, image, mcp, relay-native-test, stage (no parity case yet, or not soaked).
   go:*|auto:test|auto:lint|auto:analyze|auto:importer|auto:core|auto:sync|auto:relay|auto:app|auto:shell|auto:image-name|\
-  auto:lsp|auto:relay-bin|auto:linux|auto:desktop-smoke|auto:apk|auto:web-test|auto:desktop-test)
+  auto:lsp|auto:relay-bin|auto:linux|auto:desktop-smoke|auto:apk|auto:web-test|auto:desktop-test|auto:mutate)
     mkdir -p "$ROOT/dist/bin"
     if ! (cd "$ROOT/tools/wallet-build" && GOTOOLCHAIN=local CGO_ENABLED=0 go build -trimpath -o "$ROOT/dist/bin/wallet-build" .) \
       > "$ROOT/dist/wallet-build-build.log" 2>&1; then
@@ -179,7 +185,8 @@ if [[ "${BW_NATIVE:-}" != 1 ]]; then
   case "$CMD" in
     image) build_image; exit ;;
     image-name) podman image exists "$IMAGE" || build_image; echo "$IMAGE"; exit ;;
-    test|lint|apk|linux|all|importer|core|sync|relay|app|mutate|desktop-test|desktop-smoke|perf|web|web-test|analyze|outdated|relay-bin) run_begin "$CMD" ;;
+    mutate) (($# > 2)) || usage; run_begin "$CMD" ;;  # usage errors before the run dir, as wallet-build does
+    test|lint|apk|linux|all|importer|core|sync|relay|app|desktop-test|desktop-smoke|perf|web|web-test|analyze|outdated|relay-bin) run_begin "$CMD" ;;
     stage) host_stage; exit ;;
     relay-native-test)
       run_begin "$CMD"
@@ -414,15 +421,17 @@ steps() {
   done
 }
 
+# The Go port (wallet-build hook no-poll, relay-native-check; GO4-B) runs when dist/bin/wallet-build exists (the host builds it in
+# go-check before the container); without it (CI before GO3) native-units falls back to the old script.
 # Packages are resolved first (pub_ready, sequentially: they share the pub cache), so the checks skip their own
 # implicit `pub get` (--no-pub) and all run in parallel.
 LINT=(format format_check
       shellcheck 'shellcheck tools/*.sh dev/*.sh .github/scripts/*.sh'
       actionlint actionlint
-      hook-selftest 'tools/no-poll-hook.sh --self-test'
+      hook-selftest 'tools/no-poll-hook.sh --self-test && { [[ ! -x dist/bin/wallet-build ]] || dist/bin/wallet-build hook no-poll --self-test; }'
       env-selftest env_selftest
       deploy-selftest 'tools/relay-deploy.sh --self-test'
-      native-units 'tools/relay-native-check.sh')
+      native-units 'if [[ -x dist/bin/wallet-build ]]; then dist/bin/wallet-build relay-native-check; else tools/relay-native-check.sh; fi')
 declare -A SUITE=(
   [importer]='suite importer packages/wallet_importer "dart analyze --fatal-infos" dart test --timeout 60s'
   [core]='suite core packages/wallet_core "dart analyze --fatal-infos" dart test --timeout 60s'

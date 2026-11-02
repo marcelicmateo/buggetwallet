@@ -230,7 +230,7 @@ func ParseReporter(path string) (tests []Test, total *int64, err error) {
 	return
 }
 
-var driveLine = regexp.MustCompile(`I/flutter \(\s*\d+\): (\d+):(\d+) \+(\d+)(?: ~\d+)?(?: -(\d+))?: (.*)$`)
+var driveLine = regexp.MustCompile(`I/flutter \(\s*\d+\): (\d+):(\d+) \+(\d+)(?: ~(\d+))?(?: -(\d+))?: (.*)$`)
 
 // ParseDrive is parse_drive_log: per-test durations from the compact reporter lines `flutter drive` relays (1 s resolution).
 func ParseDrive(path string) (tests []Test, total *int64, err error) {
@@ -239,8 +239,8 @@ func ParseDrive(path string) (tests []Test, total *int64, err error) {
 		return nil, nil, err
 	}
 	type ev struct {
-		sec, ok, bad int
-		name         string
+		sec, ok, bad, skip int
+		name               string
 	}
 	var events []ev
 	for _, line := range strings.Split(strings.ToValidUTF8(string(b), "�"), "\n") {
@@ -252,12 +252,13 @@ func ParseDrive(path string) (tests []Test, total *int64, err error) {
 		mi, _ := strconv.Atoi(m[1])
 		s, _ := strconv.Atoi(m[2])
 		ok, _ := strconv.Atoi(m[3])
-		bad, _ := strconv.Atoi(m[4])
-		events = append(events, ev{mi*60 + s, ok, bad, m[5]})
+		skip, _ := strconv.Atoi(m[4])
+		bad, _ := strconv.Atoi(m[5])
+		events = append(events, ev{mi*60 + s, ok, bad, skip, m[6]})
 	}
 	for i := 0; i+1 < len(events); i++ {
 		e, nxt := events[i], events[i+1]
-		if strings.HasPrefix(e.name, "(") || strings.Contains(e.name, "tests passed") || strings.Contains(e.name, "tests failed") {
+		if strings.HasPrefix(e.name, "(") || strings.Contains(e.name, "tests passed") || strings.Contains(e.name, "tests failed") || strings.Contains(e.name, "tests skipped") {
 			continue
 		}
 		res := "?"
@@ -265,6 +266,8 @@ func ParseDrive(path string) (tests []Test, total *int64, err error) {
 			res = "success"
 		} else if nxt.bad > e.bad {
 			res = "failure"
+		} else if nxt.skip > e.skip { // "All tests skipped." and skipped tests: the ~N counter went up
+			res = "skipped"
 		}
 		tests = append(tests, Test{e.name, int64(nxt.sec-e.sec) * 1000, res})
 	}

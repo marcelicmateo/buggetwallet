@@ -7,6 +7,7 @@ import 'categories.dart';
 import 'cols.dart';
 import 'currencies.dart' show currencyInfo;
 import 'dates.dart';
+import 'ecb.dart' show EcbRates;
 import 'logs.dart';
 import 'rules.dart' show MerchantPattern, merchantPatternId;
 
@@ -34,6 +35,17 @@ int? _int(Object? v) => v is int ? v : null;
 
 /// A stored `kind_hint` as a [TxKind]; a name this build does not know (a newer importer) reads as null.
 TxKind? _kind(Object? v) => v is String ? TxKind.values.asNameMap()[v] : null;
+
+/// The typed columns of the synced entity `tx` added since F1 ([Col]; the older columns stay `ColumnDef`s in
+/// `entitySchema` until F2).
+abstract final class TxCols {
+  static const entity = 'tx';
+
+  /// v20 (UX-ACC): the app account (`accounts.id`) this bank row belongs to, written by `importBatch` (the row's
+  /// `accountKey` matched an account's [AccountCols.matchKey]) or by the owner (`setTxAccount`); null = the main account
+  /// of its (source, currency) (`RowAccounts`). Never set on hand-added rows.
+  static const account = RefCol(entity, 'account', label: 'Account', target: 'account', nullable: true);
+}
 
 /// A transaction as stored in the wallet database. Amounts are in minor units (cents).
 class Tx {
@@ -66,6 +78,9 @@ class Tx {
   /// (no export the importer reads does yet). Not stored; always null for now. `homeAmount` prefers it over a rate.
   final int? homeAmount;
 
+  /// UX-ACC: the app account this bank row belongs to ([TxCols.account]); null = its (source, currency)'s main account.
+  final String? account;
+
   const Tx({
     required this.id,
     required this.source,
@@ -83,6 +98,7 @@ class Tx {
     this.transferTo,
     this.matchPending = false,
     this.homeAmount,
+    this.account,
   });
 
   /// This row in [currency] with [amount] (P15 `inHomeCurrency`); id and every other field kept, [homeAmount] dropped.
@@ -102,6 +118,7 @@ class Tx {
         kindHint: kindHint,
         transferTo: transferTo,
         matchPending: matchPending,
+        account: account,
       );
 
   /// Counts toward totals: not deleted and not replaced by a bank row that is here (see [matchPending]).
@@ -125,6 +142,7 @@ class Tx {
         kindHint: _kind(r['kind_hint']),
         transferTo: _str(r['transfer_to']),
         matchPending: r['match_pending'] == 1,
+        account: TxCols.account.read(r),
       );
 }
 
@@ -613,8 +631,11 @@ abstract final class AccountCols {
   static const kind = EnumCol(entity, 'kind', label: 'Kind', values: AccountKind.values, nullable: true);
   static const institution =
       TextCol(entity, 'institution', label: 'Institution', nullable: true, searchable: true, maxLength: Account.maxName);
+  // v20 (UX-ACC): `ak:` + 16 hex, the keyed fingerprint of the bank account an export names (`accountMatchKey`); null =
+  // the main account of its (source, currency). Never the IBAN itself.
+  static const matchKey = TextCol(entity, 'match_key', label: 'Bank account', nullable: true);
 
-  static const all = <Col>[name, source, currency, opening, openingDate, deleted, kind, institution];
+  static const all = <Col>[name, source, currency, opening, openingDate, deleted, kind, institution, matchKey];
 }
 
 /// One of the owner's accounts (N2, synced entity `account`, table `accounts`): its [kind] (UX-A), an optional
@@ -637,6 +658,7 @@ class Account extends RowModel {
     bool deleted = false,
     AccountKind? kind,
     String? institution,
+    String? matchKey,
   }) =>
       Account._({
         'id': id,
@@ -648,6 +670,7 @@ class Account extends RowModel {
         'deleted': deleted ? 1 : 0,
         'kind': kind?.name,
         'institution': institution,
+        'match_key': matchKey,
       });
 
   /// A stored row (a map as `SELECT *` gives it); copied into the read-only [row].
@@ -667,6 +690,10 @@ class Account extends RowModel {
   /// [source]: none → cash, any → bank.
   late final AccountKind kind = AccountCols.kind.read(row) ?? (source == null ? AccountKind.cash : AccountKind.bank);
   late final String? institution = AccountCols.institution.read(row);
+
+  /// UX-ACC: the fingerprint of the export account whose rows this account counts ([AccountCols.matchKey]); null = the
+  /// main account of its (source, currency): it counts that bank's rows no other account claims.
+  late final String? matchKey = AccountCols.matchKey.read(row);
 
   /// Longest accepted name and institution (characters, after trimming).
   static const maxName = 60;
@@ -1031,6 +1058,11 @@ class WalletSettings {
   /// A row for a rule this build does not know (a newer or older build's) is kept here and matches nothing.
   final Map<String, BuiltInRuleOverride> builtInRuleOverrides;
 
+  /// UX-FX: the ECB reference rates the wallet holds (synced `fx_day` rows, `WalletRepo.ecbRates`), used for a
+  /// currency without a hand-set rate ([fxRates] wins) at each payment's own date (`homeAmount`). Not a setting:
+  /// `WalletRepo.settings()` fills it; [toMap] leaves it out.
+  final EcbRates ecb;
+
   const WalletSettings({
     this.salary = 0,
     this.rent = 0,
@@ -1062,6 +1094,7 @@ class WalletSettings {
     this.syncFolder,
     this.csvMappings = const {},
     this.builtInRuleOverrides = const {},
+    this.ecb = EcbRates.none,
   });
 
   /// Largest accepted amount (minor units) and wait (hours: a year) in a stored or synced value.
@@ -1087,6 +1120,9 @@ class WalletSettings {
   /// Plan line rows (P1, [planLines]): `plan:<custom category id>`, value = whole cents (JSON int, 0..[maxAmount]).
   /// Exchange rate rows (P15, [fxRates]): `fx:<CODE>`, value = JSON `{"rate": int, "date": "YYYY-MM-DD", "home": "EUR"}`
   /// ([FxRate]).
+  /// The [toMap] key of [ecb] (in memory only: the repo never reads a stored settings row of that name).
+  static const ecbKey = 'ecb';
+
   static const budgetPrefix = 'budget:', patternPrefix = 'pattern:', planPrefix = 'plan:', fxPrefix = 'fx:';
 
   /// An ISO 4217 code as the wallet currency and the rate rows use it.
@@ -1111,7 +1147,7 @@ class WalletSettings {
   /// bug, a damaged op) falls back to that setting's default alone, logged as `settings.invalid` with the key only
   /// (never the value), once per key and value ([logInvalidSetting]); the other settings are kept.
   /// [table] decides which category budgets are valid (live top-level spending categories); null = built-ins only.
-  static WalletSettings fromMap(Map<String, Object?> m, {CategoryTable? table}) {
+  static WalletSettings fromMap(Map<String, Object?> m, {CategoryTable? table, EcbRates ecb = EcbRates.none}) {
     final cats = table ?? CategoryTable.builtIn;
     T bad<T>(String k, T d) {
       logInvalidSetting(k, m[k]);
@@ -1237,6 +1273,7 @@ class WalletSettings {
       warrantyReminderDays: i('warrantyReminderDays', defaultWarrantyReminderDays, max: maxWarrantyReminderDays),
       csvMappings: csvRows.isEmpty ? const {} : Map.unmodifiable(csvRows),
       builtInRuleOverrides: builtInRows.isEmpty ? const {} : Map.unmodifiable(builtInRows),
+      ecb: ecb.isEmpty ? EcbRates.fromJson(m[ecbKey]) : ecb,
     );
   }
 
@@ -1385,5 +1422,7 @@ class WalletSettings {
         'headsUpDays': headsUpDays,
         'returnReminderDays': returnReminderDays,
         'warrantyReminderDays': warrantyReminderDays,
+        // UX-FX: the wallet's ECB rates (`fx_day` rows, read by the repo), so fromMap(toMap()) keeps them.
+        if (!ecb.isEmpty) ecbKey: ecb.toJson(),
       };
 }

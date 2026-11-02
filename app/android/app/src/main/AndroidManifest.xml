@@ -1,6 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Sync with the relay on the home server: https:// through the reverse proxy from anywhere, plain http:// on the home network. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Exchange rates (UX-FX): only to ask whether the network is metered (a normal permission, no dialog); the rates are not
+         downloaded on their own over a metered network. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <!-- Reminders (Plan > Nudges): permission to show them (asked when the switch is turned on, Android 13+), and to
          schedule them again after a reboot. Inexact alarms only: no exact-alarm permission. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>

@@ -40,6 +40,9 @@ func (x *CI) gitQuiet(args ...string) (string, int) {
 // Capture runs the version control tool with args in the repository (for `times --ci`).
 func (x *CI) Capture(args ...string) (string, int) { return x.git(args...) }
 
+// CaptureQuiet is Capture with the command's stderr thrown away (2>/dev/null).
+func (x *CI) CaptureQuiet(args ...string) (string, int) { return x.gitQuiet(args...) }
+
 // ShowLog is the text of <name>.txt on the ci-logs branch.
 func (x *CI) ShowLog(name string) (string, int) { return x.showLog(name, x.git) }
 
@@ -93,6 +96,17 @@ var (
 	reSkip = regexp.MustCompile(`(?i)continue-on-error|0 errors`)
 )
 
+// anyFailed: a completed check run whose conclusion is not success, skipped or neutral.
+func anyFailed(table string) bool {
+	for _, l := range strings.Split(table, "\n") {
+		f := strings.Split(l, "\t")
+		if len(f) == 3 && f[1] == "completed" && f[2] != "success" && f[2] != "skipped" && f[2] != "neutral" {
+			return true
+		}
+	}
+	return false
+}
+
 func hasCheck(table, name string) bool {
 	for _, l := range strings.Split(table, "\n") {
 		if strings.HasPrefix(l, name+"\t") {
@@ -128,6 +142,9 @@ func line3(log string) string {
 func (x *CI) Status(args []string) int {
 	c := x.C
 	wait := false
+	if len(args) > 0 && args[0] == "--log" { // tools/ci-status.sh --log [name]
+		return x.Log(args[1:])
+	}
 	if len(args) > 0 && args[0] == "--wait" {
 		wait, args = true, args[1:]
 	}
@@ -162,7 +179,8 @@ func (x *CI) Status(args []string) int {
 		if !hasCheck(table, "log") {
 			pending++
 		}
-		if !wait || (table != "" && pending == 0) || elapsed >= waitLimit {
+		// a failed check ends the wait at once (the verdict is already 1), whether or not the "log" run exists yet
+		if !wait || (table != "" && pending == 0) || anyFailed(table) || elapsed >= waitLimit {
 			break
 		}
 		x.Sleep(pollEvery)
@@ -185,7 +203,7 @@ func (x *CI) Status(args []string) int {
 	if failed > 0 {
 		c.Printf("\n")
 		if match {
-			c.Printf("%s\n--- failing lines (full log: wallet-build ci log) ---\n", line3(latest))
+			c.Printf("%s\n--- failing lines (full log: tools/ci-status.sh --log) ---\n", line3(latest)) // M6: rename with the scripts
 			n := 0
 			for i, l := range strings.Split(latest, "\n") {
 				if reFail.MatchString(l) && !reSkip.MatchString(l) && n < 40 {
@@ -194,7 +212,7 @@ func (x *CI) Status(args []string) int {
 				}
 			}
 		} else {
-			c.Printf("ci-logs/latest.txt is for another commit; see wallet-build ci log\n")
+			c.Printf("ci-logs/latest.txt is for another commit; see tools/ci-status.sh --log\n") // M6: rename with the scripts
 		}
 		return 1
 	}

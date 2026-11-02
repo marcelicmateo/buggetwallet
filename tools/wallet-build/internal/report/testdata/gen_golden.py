@@ -75,6 +75,14 @@ I/flutter ( 4242): 01:03 +2 ~1 -1: Some tests failed.
 """
 w("drive.log", drive)
 
+# a desktop-only file run on Android: every test skips, the reporter ends with "All tests skipped." (no pass, no failure)
+drive_skipped = """\
+I/flutter ( 4333): Skip: a resized phone view hangs the screenshot
+I/flutter ( 4333): 00:00 +0: chart_dpr: desktop windows only
+I/flutter ( 4333): 00:00 +0 ~1: All tests skipped.
+"""
+w("drive-skipped.log", drive_skipped)
+
 perf = [
     {"time": "2026-10-19T14:45:00", "commit": "abc1234", "action": "spending_scroll", "frame_count": 189, "build_p90_ms": 1.362,
      "build_max_ms": 11.365, "raster_p90_ms": 13.28, "raster_max_ms": 17.686, "missed_build_frames": 0, "missed_raster_frames": 4,
@@ -172,6 +180,12 @@ golden("drive.stdout", py(["build_log.py", "drive", "screens", os.path.join(OUT,
 golden("drive.summary", read(d, "run/tests-screens-summary.txt"))
 golden("drive.steps", read(d, "history/steps.jsonl"))
 golden("drive.tests", read(d, "history/tests.jsonl"))
+
+d = fresh()
+golden("drive-skipped.stdout", py(["build_log.py", "drive", "chart_dpr", os.path.join(OUT, "drive-skipped.log")], envs(d)))
+golden("drive-skipped.summary", read(d, "run/tests-chart_dpr-summary.txt"))
+golden("drive-skipped.steps", read(d, "history/steps.jsonl"))
+golden("drive-skipped.tests", read(d, "history/tests.jsonl"))
 
 d = fresh()
 golden("perf.stdout", py(["build_log.py", "perf", os.path.join(OUT, "perf-records.jsonl")], envs(d)))

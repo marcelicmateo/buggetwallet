@@ -1,6 +1,6 @@
 // Stage Q5 spec tests (core half): checkBankBalance, balanceTrusted, automatic checks from ImportBatch.bankBalances, and
 // the rule that no balance changes without correctBalance. Written from docs/context/STAGE_Q_PLAN.md Q5 only. SYNTHETIC data.
-// API: accounts.dart (checkBankBalance, balanceTrusted(a, today:, last:, rows:), BankCheck), ImportBatch.bankBalances (List<BankBalance>),
+// API: accounts.dart (checkBankBalance, balanceTrusted(a, accounts: [a], today:, last:, rows:), BankCheck), ImportBatch.bankBalances (List<BankBalance>),
 // ImportSummary.bankChecks (account id -> BalanceCheck). The batch's bankBalances come from the rows' balanceAfter.
 import 'package:test/test.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -27,27 +27,27 @@ void main() {
     final rows = [n2Tx('2026-01-05', -2000), n2Tx('2026-01-10', -3000), n2Tx('2026-01-12', -1000)];
 
     test('counts rows up to and including the date; later rows are only "since"', () {
-      final c = checkBankBalance(_acc, rows, date: '2026-01-10', bankCents: 95000);
+      final c = checkBankBalance(_acc, accounts: [_acc], rows, date: '2026-01-10', bankCents: 95000);
       expect(c.appCents, 95000);
       expect(c.diff, 0);
       expect(_rowsSince(c), 2, reason: 'rows counted from the opening up to and including the date: 01-05 and 01-10');
     });
     test('a row on the day before is in, a row on the day after is out', () {
-      expect(checkBankBalance(_acc, rows, date: '2026-01-09', bankCents: 98000).appCents, 98000);
-      expect(checkBankBalance(_acc, rows, date: '2026-01-11', bankCents: 95000).appCents, 95000);
+      expect(checkBankBalance(_acc, accounts: [_acc], rows, date: '2026-01-09', bankCents: 98000).appCents, 98000);
+      expect(checkBankBalance(_acc, accounts: [_acc], rows, date: '2026-01-11', bankCents: 95000).appCents, 95000);
     });
     test('a difference is reported with its size, opposite signs for opposite errors', () {
-      final low = checkBankBalance(_acc, rows, date: '2026-01-10', bankCents: 94000);
-      final high = checkBankBalance(_acc, rows, date: '2026-01-10', bankCents: 96000);
+      final low = checkBankBalance(_acc, accounts: [_acc], rows, date: '2026-01-10', bankCents: 94000);
+      final high = checkBankBalance(_acc, accounts: [_acc], rows, date: '2026-01-10', bankCents: 96000);
       expect(low.diff.abs(), 1000);
       expect(high.diff.abs(), 1000);
       expect(low.diff, -high.diff);
-      expect(checkBankBalance(_acc, rows, date: '2026-01-10', bankCents: 96500).diff.abs(), 1500);
+      expect(checkBankBalance(_acc, accounts: [_acc], rows, date: '2026-01-10', bankCents: 96500).diff.abs(), 1500);
     });
     test('equals accountBalances when the date is on or after the newest row', () {
       final all = accountBalances([_acc], rows).single.balance;
-      expect(checkBankBalance(_acc, rows, date: '2026-01-12', bankCents: all).appCents, all);
-      final late = checkBankBalance(_acc, rows, date: '2026-06-30', bankCents: all);
+      expect(checkBankBalance(_acc, accounts: [_acc], rows, date: '2026-01-12', bankCents: all).appCents, all);
+      final late = checkBankBalance(_acc, accounts: [_acc], rows, date: '2026-06-30', bankCents: all);
       expect(late.appCents, all);
       expect(_rowsSince(late), 3);
     });
@@ -59,19 +59,19 @@ void main() {
         n2Tx('2026-01-06', -7777, currency: 'USD'),
         n2Tx('2026-01-01', -6666), // the opening day: the opening already holds it
       ];
-      final c = checkBankBalance(_acc, mixed, date: '2026-01-31', bankCents: 98000);
+      final c = checkBankBalance(_acc, accounts: [_acc], mixed, date: '2026-01-31', bankCents: 98000);
       expect(c.appCents, 98000);
       expect(c.appCents, accountBalances([_acc], mixed).single.balance);
     });
     test('a date before the opening date gives the opening; a negative bank balance is fine', () {
-      expect(checkBankBalance(_acc, rows, date: '2025-12-01', bankCents: 100000).appCents, 100000);
-      final c = checkBankBalance(_acc, [n2Tx('2026-01-05', -150000)], date: '2026-01-31', bankCents: -50000);
+      expect(checkBankBalance(_acc, accounts: [_acc], rows, date: '2025-12-01', bankCents: 100000).appCents, 100000);
+      final c = checkBankBalance(_acc, accounts: [_acc], [n2Tx('2026-01-05', -150000)], date: '2026-01-31', bankCents: -50000);
       expect(c.appCents, -50000);
       expect(c.diff, 0);
     });
     test('is pure: rows and account are unchanged however far off the bank is', () {
       final before = [for (final t in rows) t.amount];
-      checkBankBalance(_acc, rows, date: '2026-01-10', bankCents: 1);
+      checkBankBalance(_acc, accounts: [_acc], rows, date: '2026-01-10', bankCents: 1);
       expect([for (final t in rows) t.amount], before);
       expect(_acc.opening, 100000);
     });
@@ -80,7 +80,8 @@ void main() {
   group('balanceTrusted (recomputed from the rows, never from the stored numbers)', () {
     final rows = [n2Tx('2026-01-05', -2000), n2Tx('2026-01-10', -3000), n2Tx('2026-01-12', -1000)];
     const ok = BankCheck(date: '2026-01-10', bankCents: 95000, appCents: 95000);
-    bool trusted(String today, {BankCheck? last = ok, List<Tx>? r}) => balanceTrusted(_acc, today: today, last: last, rows: r ?? rows);
+    bool trusted(String today, {BankCheck? last = ok, List<Tx>? r}) =>
+        balanceTrusted(_acc, accounts: [_acc], today: today, last: last, rows: r ?? rows);
 
     test('a matching check is trusted 35 days after it, not on the 36th', () {
       expect(trusted('2026-02-14'), isTrue); // 35 days
@@ -93,11 +94,11 @@ void main() {
     test('the 35-day edge holds across a year boundary and a 28-day February', () {
       const dec = BankCheck(date: '2025-12-28', bankCents: 100000, appCents: 100000);
       final acc = Account(id: 'a1', name: 'Main', source: 'pbz', currency: 'EUR', opening: 100000, openingDate: '2025-06-01');
-      expect(balanceTrusted(acc, today: '2026-02-01', last: dec, rows: const []), isTrue); // 35 days
-      expect(balanceTrusted(acc, today: '2026-02-02', last: dec, rows: const []), isFalse); // 36 days
+      expect(balanceTrusted(acc, accounts: [acc], today: '2026-02-01', last: dec, rows: const []), isTrue); // 35 days
+      expect(balanceTrusted(acc, accounts: [acc], today: '2026-02-02', last: dec, rows: const []), isFalse); // 36 days
       const feb = BankCheck(date: '2026-02-01', bankCents: 100000, appCents: 100000);
-      expect(balanceTrusted(acc, today: '2026-03-08', last: feb, rows: const []), isTrue);
-      expect(balanceTrusted(acc, today: '2026-03-09', last: feb, rows: const []), isFalse);
+      expect(balanceTrusted(acc, accounts: [acc], today: '2026-03-08', last: feb, rows: const []), isTrue);
+      expect(balanceTrusted(acc, accounts: [acc], today: '2026-03-09', last: feb, rows: const []), isFalse);
     });
     test('a check that does not match the rows is not trusted, however recent', () {
       expect(trusted('2026-02-12', last: const BankCheck(date: '2026-01-10', bankCents: 94000, appCents: 95000)), isFalse);

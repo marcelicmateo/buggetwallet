@@ -212,3 +212,19 @@ Facts: CI does not use Podman today (`BW_NATIVE=1` on flutter-action; the apk jo
 9. **No scheduled CI** (manual only).
 10. **release.yml stays separate and reuses ci.yml** (`workflow_call`); Windows/Apple jobs left as they are.
 11. **Step timeouts on** with the defaults in §2, env overrides `BW_STEP_TIMEOUT` / `BW_TIMEOUT_<STEP>`.
+
+**GO4 owner answers (2026-11-01 evening):**
+12. `make_fixtures.py` → Go: JSON/XML/CSV fixtures byte-identical (CPython MT19937 + `randrange`/`uniform`/`getrandbits`
+    reproduced); the PDFs are regenerated once with Go's zlib (same decoded content, the importer tests prove it); the two
+    Excel fixtures (`pbz_synthetic.xls`, `revolut_synthetic.xlsx`) stay committed as they are and are no longer generated.
+13. `no-poll-hook.sh` → `wallet-build hook no-poll` (same pattern, same `--self-test`); the lead points
+    `.claude/settings.json` at it once the Go self-test passes.
+
+**GO4 command names (fixed for builders and tests):** `fixtures <out_dir> [all|banks|bills|generic]`,
+`mutate …` (container side replaces mutate.py; same flags), `token-usage [--since D] [--until D] [--json F]`,
+`log-summary <file>…`, `lsp-query refs|def <path:line:col>…` (`lsp` stays the server), `web-shot <url> <out.png> <W>x<H>
+[wait]` (container side), `relay start|stop|status|logs [-f]|reset|image`, `web serve [port]|stop|status|shot <path>
+<out.png> [WxH]`, `relay-native-test [fedora|debian]` (port of the script body), `relay-native-check`, `signing-key
+[--upload]`, `times …`/`trend …` (build-times.sh flags incl. `--ci`), `ci status [--wait] [sha]` / `ci log [name]`
+(ci-status.sh, incl. `--log`), `hook no-poll [--self-test]`; test_quiet.sh becomes a Go parity test. The old scripts stay
+until M6 (deleted after the green go3 CI); `timing.sh` stays while build.sh's bash body and the run_test oracle use it.

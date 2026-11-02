@@ -212,7 +212,7 @@ func TestScreensArgvAndFiles(t *testing.T) {
 	wantScreens := "podman run --rm --init --name wallet-build-wt-" + id + "-screens --device /dev/kvm --shm-size=2g -e BW_DRIVE_ARGS -v " + r.root + ":/work:z " +
 		"-v bw-pub-cache:/cache/pub -v bw-gradle-cache:/cache/gradle -v bw-android-user:/cache/android -e BW_NATIVE=1 -w /work " +
 		"-v bw-emulator:/opt/android-sdk/emulator:ro -v bw-emulator-image:/opt/android-sdk/system-images:ro -v bw-emulator-avd:/opt/avd " +
-		"-v " + r.data + ":" + r.data + ":z " + runEnvFlags + " " + emu + " dist/bin/wallet-build emulator screens"
+		"-v " + r.data + ":" + r.data + ":z " + runEnvFlags + " -e BW_CLEAR_AVD_LOCK=1 " + emu + " dist/bin/wallet-build emulator screens"
 	if runs[1] != wantScreens {
 		t.Errorf("screens argv\n got %s\nwant %s", runs[1], wantScreens)
 	}
@@ -459,7 +459,7 @@ func TestStartWindow(t *testing.T) {
 	}
 	got := r.podmanRuns("run")[1]
 	win := "-e DISPLAY=:7 -e QT_QPA_PLATFORM=xcb -v /tmp/.X11-unix:/tmp/.X11-unix:ro -e XAUTHORITY=/tmp/xauth -v /home/u/.Xauthority:/tmp/xauth:ro --security-opt label=disable "
-	if !strings.Contains(got, runEnvFlags+" "+win+devOrEmu(got)) || !strings.HasSuffix(got, " dist/bin/wallet-build emulator boot window") {
+	if !strings.Contains(got, runEnvFlags+" -e BW_CLEAR_AVD_LOCK=1 "+win+devOrEmu(got)) || !strings.HasSuffix(got, " dist/bin/wallet-build emulator boot window") {
 		t.Errorf("window argv %s", got)
 	}
 	// without DISPLAY: :0
@@ -694,5 +694,58 @@ func TestEmulatorRunsIgnoreStepTimeout(t *testing.T) {
 		if timedOut != tc.limited {
 			t.Errorf("%s: timed out %v, want %v", tc.env, timedOut, tc.limited)
 		}
+	}
+}
+
+// GO-BUG3: a finished --rm emulator container leaves bw.avd/multiinstance.lock; the boot container removes it, but only when the
+// host saw no emulator container running.
+func TestStaleLockFlagOnlyWhenNothingRuns(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		ps       string
+		psRC     int
+		wantFlag bool
+	}{
+		{"nothing runs", "", 0, true},
+		{"only other images", "localhost/budget-wallet-dev:3.47.7-x\ndocker.io/library/busybox:latest\n", 0, true},
+		{"the emulator container runs", "localhost/budget-wallet-emu:54a1eab8\n", 0, false},
+		{"another worktree's screens run", "localhost/budget-wallet-dev:3.47.7-x\nlocalhost/budget-wallet-emu:54a1eab8\n", 0, false},
+		{"podman ps fails: cannot tell", "", 125, false},
+	} {
+		for _, cmd := range []string{"screens", "start"} {
+			r := newRig(t)
+			r.allImages()
+			r.logs = "emulator booted\n"
+			r.hook = func(c sys.Cmd) (int, bool) {
+				if len(c.Argv) > 1 && c.Argv[0] == "podman" && c.Argv[1] == "ps" {
+					if got := strings.Join(c.Argv, " "); got != "podman ps --format {{.Image}}" {
+						t.Errorf("ps argv %q", got)
+					}
+					c.Stdout.Write([]byte(tc.ps))
+					return tc.psRC, true
+				}
+				return 0, false
+			}
+			r.host(cmd)
+			runs := r.podmanRuns("run")
+			got := runs[len(runs)-1]
+			if has := strings.Contains(got, "-e BW_CLEAR_AVD_LOCK=1 "); has != tc.wantFlag {
+				t.Errorf("%s/%s: flag present %v, want %v: %s", tc.name, cmd, has, tc.wantFlag, got)
+			}
+			if strings.Contains(runs[0], "BW_CLEAR_AVD_LOCK") {
+				t.Errorf("%s/%s: the setup container (flock-guarded) gets no lock flag", tc.name, cmd)
+			}
+		}
+	}
+}
+
+// GO-BUG2: BW_TIMEOUT_<STEP> variables set on the host reach the container, where the drive limit is read.
+func TestDriveTimeoutIsForwardedToTheContainer(t *testing.T) {
+	r := newRig(t, "BW_TIMEOUT_EMULATOR_DRIVE=30")
+	r.allImages()
+	r.host("screens")
+	runs := r.podmanRuns("run")
+	if got := runs[len(runs)-1]; !strings.Contains(got, " -e BW_TIMEOUT_EMULATOR_DRIVE ") {
+		t.Errorf("not forwarded: %s", got)
 	}
 }

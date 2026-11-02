@@ -117,7 +117,7 @@ class _AccountRow extends StatelessWidget {
               'as of ${shortDateOrRaw(asOf)}',
             ].join(' · '),
             style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2)),
-        if (currencyInfo(a.currency)?.crypto ?? false) _CoinValue(wc, b),
+        if (a.currency != wc.currency) _HomeValue(wc, b),
         if (!a.isCash && b.duplicateOf == null) _CheckLine(wc, a),
         const SizedBox(height: 4),
         Wrap(spacing: 8, runSpacing: 4, children: [
@@ -144,27 +144,36 @@ class _AccountRow extends StatelessWidget {
   }
 }
 
-/// A coin account's balance in the wallet currency ("about 1,200 €"), or "Set a rate" while there is no rate.
-class _CoinValue extends StatelessWidget {
+/// A foreign account's balance in the wallet currency ("about 1,200 €" and where the rate comes from: "ECB 31 Oct" or "your rate"), or
+/// "Rate missing" with "Set a rate" while a part of it has none (never a partial sum).
+class _HomeValue extends StatelessWidget {
   final WalletController wc;
   final AccountBalance b;
-  const _CoinValue(this.wc, this.b);
+  const _HomeValue(this.wc, this.b);
 
   @override
   Widget build(BuildContext context) {
     final a = b.account, v = wc.accountHomeValue(b);
+    final style = TextStyle(fontSize: BwType.metaSize, color: context.c.ink2);
     if (v != null) {
-      return Text('About ${moneyExact(v, wc.currency)}',
-          key: ValueKey('accountHome:${a.id}'), style: TextStyle(fontSize: BwType.metaSize, color: context.c.ink2));
+      final src = wc.accountRateSource(b);
+      return Text('About ${moneyExact(v, wc.currency)}${src == null ? '' : ' · $src'}', key: ValueKey('accountHome:${a.id}'), style: style);
     }
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: TextButton.icon(
-          key: ValueKey('accountSetRate:${a.id}'),
-          icon: const Icon(Icons.edit_outlined, size: 16),
-          label: Text('Set a rate for ${a.currency}'),
-          onPressed: () => openFxSheet(context, wc, a.currency)),
-    );
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(key: ValueKey('accountRateMissing:${a.id}'), children: [
+        Icon(Icons.block, size: 14, color: context.c.muted),
+        const SizedBox(width: 6),
+        Expanded(child: Text('Rate missing: not counted in ${wc.currency}', style: style)),
+      ]),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+            key: ValueKey('accountSetRate:${a.id}'),
+            icon: const Icon(Icons.edit_outlined, size: 16),
+            label: Text('Set a rate for ${a.currency}'),
+            onPressed: () => openFxSheet(context, wc, a.currency)),
+      ),
+    ]);
   }
 }
 

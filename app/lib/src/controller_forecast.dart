@@ -39,7 +39,7 @@ extension ForecastDb on WalletController {
   /// Core's [ArgumentError] text is owner-readable.
   BalanceCheck recordBalanceCheck(String accountId, {required String date, required int bankCents}) {
     final a = accountsAll().firstWhere((x) => x.id == accountId, orElse: () => throw ArgumentError('No such account.'));
-    final c = checkBankBalance(a, [for (final t in wholeTxs) t.tx], date: date, bankCents: bankCents);
+    final c = checkBankBalance(a, [for (final t in wholeTxs) t.tx], date: date, bankCents: bankCents, accounts: accountsAll());
     // An older answer (an older file) never replaces a newer check: the comparison is shown, nothing is stored.
     final last = repo.lastBankCheck(accountId);
     final older = last != null && last.date.compareTo(date) > 0;
@@ -52,7 +52,7 @@ extension ForecastDb on WalletController {
   /// What the app counts for [accountId] up to and including [date] (the prefill of the bank question).
   int appBalanceOn(String accountId, String date) {
     final a = accountsAll().firstWhere((x) => x.id == accountId);
-    return checkBankBalance(a, [for (final t in wholeTxs) t.tx], date: date, bankCents: 0).appCents;
+    return checkBankBalance(a, [for (final t in wholeTxs) t.tx], date: date, bankCents: 0, accounts: accountsAll()).appCents;
   }
 
   /// The question to put to the owner now, or null: [q] was built while its file was written, so the app's number is counted again over
@@ -106,7 +106,7 @@ extension ForecastDb on WalletController {
             cash = true;
           } else if (a.currency != currency) {
             foreign = true;
-          } else if (balanceTrusted(a, today: now, last: checks[a.id], rows: rows)) {
+          } else if (balanceTrusted(a, today: now, last: checks[a.id], rows: rows, accounts: accountsAll())) {
             trusted++;
             start += b.balance;
           } else {

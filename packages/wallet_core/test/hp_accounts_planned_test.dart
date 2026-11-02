@@ -103,21 +103,21 @@ void main() {
     ];
 
     test('counts rows after the opening up to and including the date', () {
-      final c = checkBankBalance(a, rows, date: '2026-03-10', bankCents: 9500);
+      final c = checkBankBalance(a, accounts: [a], rows, date: '2026-03-10', bankCents: 9500);
       expect(c.appCents, 10000 - 200 - 300);
       expect(c.rowsSince, 2);
       expect(c.since, '2026-03-01');
       expect(c.diff, 9500 - 9500);
       expect(c.matches, isTrue);
       expect(c.stored.bankCents, 9500);
-      final d = checkBankBalance(a, rows, date: '2026-03-09', bankCents: 9500);
+      final d = checkBankBalance(a, accounts: [a], rows, date: '2026-03-09', bankCents: 9500);
       expect(d.appCents, 9800);
       expect(d.diff, -300);
       expect(d.matches, isFalse);
     });
 
     test('a check dated on the opening day counts no row', () {
-      final c = checkBankBalance(a, rows, date: '2026-03-01', bankCents: 10000);
+      final c = checkBankBalance(a, accounts: [a], rows, date: '2026-03-01', bankCents: 10000);
       expect(c.rowsSince, 0);
       expect(c.matches, isTrue);
     });
@@ -129,24 +129,27 @@ void main() {
     BankCheck chk(String date, int bank) => BankCheck(date: date, bankCents: bank, appCents: bank);
 
     test('opening within 35 days is trusted, 36 is not', () {
-      expect(balanceTrusted(a, today: '2026-02-05', rows: rows), isTrue); // 35 days
-      expect(balanceTrusted(a, today: '2026-02-06', rows: rows), isFalse); // 36 days
+      expect(balanceTrusted(a, accounts: [a], today: '2026-02-05', rows: rows), isTrue); // 35 days
+      expect(balanceTrusted(a, accounts: [a], today: '2026-02-06', rows: rows), isFalse); // 36 days
     });
 
     test('a matching recent check anchors trust; a stale, off or pre-opening check does not', () {
-      expect(balanceTrusted(a, today: '2026-03-01', last: chk('2026-02-10', 9000), rows: rows), isTrue);
-      expect(balanceTrusted(a, today: '2026-03-01', last: chk('2026-02-10', 9001), rows: rows), isFalse);
-      expect(balanceTrusted(a, today: '2026-03-01', rows: rows), isFalse);
+      expect(balanceTrusted(a, accounts: [a], today: '2026-03-01', last: chk('2026-02-10', 9000), rows: rows), isTrue);
+      expect(balanceTrusted(a, accounts: [a], today: '2026-03-01', last: chk('2026-02-10', 9001), rows: rows), isFalse);
+      expect(balanceTrusted(a, accounts: [a], today: '2026-03-01', rows: rows), isFalse);
       // 35 days old check: trusted; 36: not
-      expect(balanceTrusted(a, today: '2026-03-17', last: chk('2026-02-10', 9000), rows: rows), isTrue);
-      expect(balanceTrusted(a, today: '2026-03-18', last: chk('2026-02-10', 9000), rows: rows), isFalse);
+      expect(balanceTrusted(a, accounts: [a], today: '2026-03-17', last: chk('2026-02-10', 9000), rows: rows), isTrue);
+      expect(balanceTrusted(a, accounts: [a], today: '2026-03-18', last: chk('2026-02-10', 9000), rows: rows), isFalse);
       // dated before the opening: never
-      expect(balanceTrusted(a, today: '2026-01-20', last: chk('2025-12-30', 10000), rows: []), isTrue, reason: 'opening itself is recent');
-      expect(balanceTrusted(a, today: '2026-03-01', last: chk('2025-12-31', 10000), rows: rows), isFalse);
+      expect(balanceTrusted(a, accounts: [a], today: '2026-01-20', last: chk('2025-12-30', 10000), rows: []), isTrue,
+          reason: 'opening itself is recent');
+      expect(balanceTrusted(a, accounts: [a], today: '2026-03-01', last: chk('2025-12-31', 10000), rows: rows), isFalse);
     });
 
     test('a row deleted after the check makes it stale', () {
-      expect(balanceTrusted(a, today: '2026-03-01', last: chk('2026-02-10', 9000), rows: [_bank('1', '2026-02-01', -1000, deleted: true)]),
+      expect(
+          balanceTrusted(a,
+              accounts: [a], today: '2026-03-01', last: chk('2026-02-10', 9000), rows: [_bank('1', '2026-02-01', -1000, deleted: true)]),
           isFalse);
     });
   });
