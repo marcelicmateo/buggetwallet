@@ -73,13 +73,13 @@ extension TagsDb on WalletController {
   }
 
   Future<void> renameTag(String id, String name) async {
-    await repo.updateTag(id, name: name);
+    repo.patch(TagCols.entity, id, {TagCols.name: name});
     logEvent(_tagLog, Level.INFO, 'tags.rename');
     _changed();
   }
 
   Future<void> setTagHidden(String id, bool hidden) async {
-    await repo.updateTag(id, hidden: hidden);
+    repo.patch(TagCols.entity, id, {TagCols.hidden: hidden});
     logEvent(_tagLog, Level.INFO, 'tags.hide', {'hidden': hidden});
     _changed();
   }
@@ -97,7 +97,7 @@ extension TagsDb on WalletController {
     var written = 0;
     for (var k = 0; k < order.length; k++) {
       if (t.position(order[k]) != k) {
-        await repo.updateTag(order[k], position: k);
+        repo.patch(TagCols.entity, order[k], {TagCols.position: k});
         written++;
       }
     }

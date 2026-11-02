@@ -56,6 +56,8 @@ class FieldEditor extends StatefulWidget {
     this.lengthFrom,
     this.clearable,
     this.helper,
+    this.hint,
+    this.autofocus = false,
     this.errorText,
     this.capitalize,
     this.large = false,
@@ -106,6 +108,10 @@ class FieldEditor extends StatefulWidget {
 
   /// A muted line under the field (dates and text).
   final String? helper;
+
+  /// Grey example text in an empty text field; [autofocus] puts the cursor there when the form opens.
+  final String? hint;
+  final bool autofocus;
 
   /// A refusal the sheet worked out itself (core's text after its own Save); shown instead of the inline one.
   final String? errorText;
@@ -395,7 +401,7 @@ class _FieldEditorState extends State<FieldEditor> {
         labelText: _label,
         helperText: widget.helper,
         helperMaxLines: 2,
-        hintText: money ? amountHintFor(_currency) : null,
+        hintText: widget.hint ?? (money ? amountHintFor(_currency) : null),
         suffixText: money ? currencySymbol(_currency) : suffix,
         errorText: _shownError,
         errorMaxLines: 3);
@@ -405,6 +411,7 @@ class _FieldEditorState extends State<FieldEditor> {
         : TextField(
             key: ValueKey(_id),
             controller: _text,
+            autofocus: widget.autofocus,
             keyboardType: keyboard,
             inputFormatters: keyboard == null ? null : [FilteringTextInputFormatter.allow(RegExp(r'[0-9-]'))],
             textCapitalization: widget.capitalize ?? TextCapitalization.none,

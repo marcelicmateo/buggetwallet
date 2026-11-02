@@ -8,6 +8,7 @@ import '../logging.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/dash.dart';
+import '../widgets/field_editor.dart';
 import '../widgets/sheets.dart';
 import 'save.dart';
 
@@ -187,57 +188,48 @@ class IouSheet extends StatefulWidget {
 class _IouSheetState extends State<IouSheet> {
   String get _cur => widget.tx?.currency ?? view?.iou.currency ?? widget.wc.currency;
   late final IouView? view = widget.iouId == null ? null : widget.wc.iouById(widget.iouId!);
-  late final _person = TextEditingController(text: view?.iou.person ?? '');
-  late final _amount = TextEditingController(
-      text: view != null
-          ? centsToFieldText(view!.iou.amount, currency: _cur)
-          : widget.tx != null
-              ? centsToFieldText(widget.tx!.amount.abs(), currency: _cur)
-              : '');
-  late final _note = TextEditingController(text: view?.iou.note ?? '');
+
+  /// The draft the field editors keep; Save writes it (a new IOU through `addIou`, an old one through one `patch`).
+  late final Map<Col, Object?> _draft = {
+    IouCols.person: view?.iou.person ?? '',
+    IouCols.direction: view?.iou.direction ?? IouDirection.lent,
+    IouCols.amount: view?.iou.amount ?? widget.tx?.amount.abs(),
+    IouCols.date: view?.iou.date ?? widget.tx?.date ?? widget.wc.today(),
+    IouCols.note: view?.iou.note,
+  };
   final _part = TextEditingController();
-  late IouDirection _direction = view?.iou.direction ?? IouDirection.lent;
-  late String _date = view?.iou.date ?? widget.tx?.date ?? widget.wc.today();
   String? _error, _partError;
   String? _removedPart;
 
   @override
   void dispose() {
-    _person.dispose();
-    _amount.dispose();
-    _note.dispose();
     _part.dispose();
     super.dispose();
   }
 
   void _save() {
-    final cents = parseMoney(_amount.text, currency: _cur);
-    if (cents == null) {
+    final d = _draft, note = (d[IouCols.note] as String?)?.trim();
+    final amount = d[IouCols.amount] as int?;
+    if (amount == null) {
       setState(() => _error = invalidAmountMessage);
       return;
     }
+    final wc = widget.wc;
+    if (widget.iouId != null) {
+      final refusal = wc.patchFields(IouCols.entity, widget.iouId!, {...d, IouCols.note: note == null || note.isEmpty ? null : note});
+      if (refusal != null) return setState(() => _error = refusal);
+      return Navigator.pop(context, 'saved');
+    }
     try {
-      final wc = widget.wc;
-      if (widget.iouId == null) {
-        wc.addIou(
-            person: _person.text,
-            direction: _direction,
-            amount: cents,
-            date: _date,
-            note: _note.text,
-            tx: widget.tx?.id,
-            currency: widget.tx?.currency);
-        Navigator.pop(context, widget.tx != null ? 'lent' : 'saved');
-      } else {
-        wc.updateIou(widget.iouId!,
-            person: _person.text,
-            direction: _direction,
-            amount: cents,
-            date: _date,
-            note: _note.text,
-            clearNote: _note.text.trim().isEmpty);
-        Navigator.pop(context, 'saved');
-      }
+      wc.addIou(
+          person: d[IouCols.person] as String,
+          direction: d[IouCols.direction] as IouDirection,
+          amount: amount,
+          date: d[IouCols.date] as String,
+          note: note,
+          tx: widget.tx?.id,
+          currency: widget.tx?.currency);
+      Navigator.pop(context, widget.tx != null ? 'lent' : 'saved');
     } on ArgumentError catch (e) {
       setState(() => _error = _problem(e));
     }
@@ -261,10 +253,30 @@ class _IouSheetState extends State<IouSheet> {
     }
   }
 
-  Future<void> _pickDate() async {
-    final d = await showDatePicker(
-        context: context, initialDate: parseIso(_date), firstDate: DateTime(2000), lastDate: DateTime(widget.wc.now.year + 1, 12, 31));
-    if (d != null) setState(() => _date = isoDate(d));
+  Widget _field(Col c, String cur) {
+    // A payment that was lent fixes the date (read-only).
+    if (c == IouCols.date && widget.tx != null) {
+      return DateField(key: const ValueKey('iouDate'), label: 'Date', value: _draft[c] as String, onPick: () {});
+    }
+    return FieldEditor(c,
+        key: ValueKey(c),
+        id: 'iou${fieldId(c).replaceRange(0, 1, fieldId(c)[0].toUpperCase())}',
+        label: c == IouCols.note ? 'Note (optional)' : (c == IouCols.person ? 'Who' : null),
+        value: _draft[c],
+        today: widget.wc.today(),
+        autoSave: true,
+        lengths: false,
+        currency: cur,
+        capitalize: c == IouCols.person ? TextCapitalization.words : null,
+        labelOf: (d) => d == IouDirection.lent ? 'I lent' : 'I borrowed',
+        iconOf: (d) => d == IouDirection.lent ? Icons.call_made : Icons.call_received,
+        onSave: (v) {
+          setState(() {
+            _draft[c] = v;
+            _error = null;
+          });
+          return null;
+        });
   }
 
   @override
@@ -282,40 +294,10 @@ class _IouSheetState extends State<IouSheet> {
                   ? 'New IOU'
                   : 'IOU'),
           const SizedBox(height: 12),
-          TextField(
-              key: const ValueKey('iouPerson'),
-              controller: _person,
-              textCapitalization: TextCapitalization.words,
-              onChanged: (_) => setState(() => _error = null),
-              decoration: const InputDecoration(labelText: 'Who')),
-          const SizedBox(height: 10),
-          if (widget.tx == null)
-            Wrap(key: const ValueKey('iouDirection'), spacing: 8, runSpacing: 8, children: [
-              for (final (d, label, icon) in [
-                (IouDirection.lent, 'I lent', Icons.call_made),
-                (IouDirection.borrowed, 'I borrowed', Icons.call_received),
-              ])
-                ChoiceChip(
-                    key: ValueKey('iouDirection:${d.name}'),
-                    avatar: Icon(icon, size: 16),
-                    label: Text(label),
-                    selected: _direction == d,
-                    onSelected: (_) => setState(() => _direction = d)),
-            ]),
-          if (widget.tx == null) const SizedBox(height: 10),
-          MoneyField(
-              fieldKey: const ValueKey('iouAmount'),
-              controller: _amount,
-              onChanged: (_) => setState(() => _error = null),
-              decoration: InputDecoration(labelText: 'Amount', suffixText: currencySymbol(cur))),
-          const SizedBox(height: 10),
-          DateField(key: const ValueKey('iouDate'), label: 'Date', value: _date, onPick: widget.tx == null ? _pickDate : () {}),
-          const SizedBox(height: 10),
-          TextField(
-              key: const ValueKey('iouNote'),
-              controller: _note,
-              onChanged: (_) => setState(() => _error = null),
-              decoration: const InputDecoration(labelText: 'Note (optional)')),
+          for (final c in <Col>[IouCols.person, if (widget.tx == null) IouCols.direction, IouCols.amount, IouCols.date, IouCols.note]) ...[
+            _field(c, cur),
+            const SizedBox(height: 10),
+          ],
           if (widget.tx != null) ...[
             const SizedBox(height: 8),
             const Muted('This payment is then not counted as spending. It is linked to this IOU.', key: ValueKey('iouLinkNote')),

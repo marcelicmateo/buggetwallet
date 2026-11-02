@@ -223,13 +223,6 @@ extension FutureSpending on WalletController {
     _changed();
   }
 
-  /// [clearCategory] removes the category (a null [category] alone means unchanged).
-  void updatePlanned(String id, {String? title, String? date, int? amount, String? category, bool clearCategory = false}) {
-    repo.updatePlanned(id, title: title?.trim(), date: date, amount: amount, category: category, clearCategory: clearCategory);
-    logEvent(_planLog, Level.INFO, 'planned.edit', {'amount': amount != null});
-    _changed();
-  }
-
   /// "Confirm" or "Change" on a calendar suggestion: stores the event as a planned cost with [amount] (title and date may be
   /// changed). Only now does the cost count in the safe-to-spend number.
   void confirmSuggestion(UpcomingItem it, {required int amount, String? title, String? date, String? category}) {

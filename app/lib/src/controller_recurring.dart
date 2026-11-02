@@ -74,34 +74,15 @@ extension RecurringDb on WalletController {
         return out;
       });
 
-  /// Edits a bill (any status). Same rules and errors as [addRecurringBill]; only changed fields are written.
-  void updateRecurringBill(
-    String id, {
-    String? label,
-    String? category,
-    int? amount,
-    int? minAmount,
-    int? maxAmount,
-    bool clearRange = false,
-    int? intervalDays,
-    String? nextDue,
-    String? endsOn,
-    bool clearEnd = false,
-  }) {
-    repo.updateRecurring(id,
-        label: label,
-        category: category,
-        amount: amount,
-        minAmount: minAmount,
-        maxAmount: maxAmount,
-        clearRange: clearRange,
-        intervalDays: intervalDays,
-        nextDue: nextDue,
-        endsOn: endsOn,
-        clearEnd: clearEnd);
-    logEvent(_habits, Level.INFO, 'recurring.edited', {'range': minAmount != null, 'clearRange': clearRange, 'clearEnd': clearEnd});
-    refreshRecurring();
-    _changed();
+  /// Edits a bill or income (any status) with one `patch` (see [patchFields]); only changed columns are written. Returns core's refusal
+  /// text or null.
+  String? updateRecurringBill(String id, Map<Col, Object?> values) {
+    final refusal = patchFields(RecurringCols.entity, id, values);
+    if (refusal == null) {
+      refreshRecurring();
+      reload();
+    }
+    return refusal;
   }
 
   /// The Undo of removing a bill or an income: the same row (same id) comes back. A refusal is logged, not thrown.
