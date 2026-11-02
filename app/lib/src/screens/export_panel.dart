@@ -76,6 +76,5 @@ class _ExportPanelState extends State<ExportPanel> with AsyncAction {
               child: const Text('Planned costs (.ics)')),
         ]),
         const Muted('Plain files, not encrypted.'),
-        const Muted('The .ics file shows your planned costs in any calendar app.', size: BwType.metaSize),
       ]);
 }

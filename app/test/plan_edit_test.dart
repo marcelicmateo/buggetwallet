@@ -2,6 +2,7 @@
 // All data is SYNTHETIC.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wallet_core/wallet_core.dart';
 
 import 'support/plan_page.dart';
 import 'support/wallet.dart';
@@ -123,32 +124,14 @@ void main() {
     await tester.pump(const Duration(seconds: 4));
   });
 
-  testWidgets('the wallet currency here opens the same switch sheet; money fields then read that currency', (tester) async {
+  testWidgets('Plan has no currency control (it is in Settings > Accounts); after a switch the money fields read that currency',
+      (tester) async {
     final wc = demoWallet();
     await pumpApp(tester, Scaffold(body: PlanPage(wc: wc)), size: const Size(400, 3000));
-    Future<void> pick(String code) async {
-      await tester.ensureVisible(_key('planCurrency'));
-      await tester.tap(_key('planCurrency'));
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.enterText(_key('currencySearch'), code.toLowerCase());
-      await tester.pump();
-      await tester.tap(_key('currency:$code'));
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.pump(const Duration(milliseconds: 400));
-    }
-
-    // Cancel in the sheet: nothing changed.
-    await pick('USD');
-    expect(find.textContaining('keep their currency'), findsOneWidget);
-    await _tapKey(tester, 'currencyOfferNo');
-    expect(wc.settings.currency, 'EUR');
-    expect(find.descendant(of: _key('planCurrency'), matching: find.text('EUR · Euro')), findsOneWidget);
-    // Switch: it is written at once (setWalletCurrency), and the fields read yen.
-    await pick('JPY');
-    await _tapKey(tester, 'currencyOfferYes');
-    expect(wc.settings.currency, 'JPY');
-    expect(find.descendant(of: _key('planCurrency'), matching: find.text('JPY · Yen')), findsOneWidget);
+    expect(_key('planCurrency'), findsNothing);
+    wc.repo.setWalletCurrency('JPY');
+    wc.reload();
+    await tester.pump();
     final before = wc.settings.toMap();
     await openPlanEdit(tester, 'loan');
     await tester.enterText(_field('Loan'), '10.5');

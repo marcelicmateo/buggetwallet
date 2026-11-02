@@ -230,7 +230,7 @@ void main() {
     await tester.scrollUntilVisible(find.textContaining('Remind me at'), 300, scrollable: pageList(SettingsScreen));
     await tester.pumpAndSettle();
     await binding.takeScreenshot('5-settings-nudges');
-    await tester.scrollUntilVisible(find.text('Review day'), 300, scrollable: pageList(SettingsScreen));
+    await tester.scrollUntilVisible(find.text('WEEKLY REVIEW'), 300, scrollable: pageList(SettingsScreen));
     await tester.pumpAndSettle();
     await binding.takeScreenshot('5-settings-habits');
 

@@ -7,10 +7,8 @@ import '../logging.dart';
 import '../theme.dart';
 import '../widgets/charts.dart' show ForecastStepChart;
 import '../widgets/common.dart';
-import '../widgets/currency_picker.dart';
 import '../widgets/dash.dart';
 import '../widgets/sheets.dart';
-import 'currency_offer.dart' show switchWalletCurrency;
 import 'plan_suggestions.dart';
 
 /// Budget › Payday plan (P5, UX-B1): the ledger lines, edited in place: a tap on a value turns that row into its field with Save and
@@ -350,15 +348,6 @@ class _PaydayPlanState extends State<PaydayPlan> {
             const TileLabel('Other numbers'),
             const SizedBox(height: 4),
             _rows(context, other),
-            const SizedBox(height: 8),
-            CurrencyField(
-              key: const ValueKey('planCurrency'),
-              wc: wc,
-              value: wc.currency,
-              choice: CurrencyChoice.fiat,
-              // The same sheet as Settings › Accounts: it says what a switch does; it is not part of Save.
-              onChanged: (v) => switchWalletCurrency(context, wc, v),
-            ),
           ]),
         ),
       ),

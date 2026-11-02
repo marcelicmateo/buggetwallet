@@ -22,8 +22,6 @@ class ReviewDayRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final day = wc.reviewDay;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      const Heading('Review day', size: BwType.headingSize),
-      const SizedBox(height: 4),
       Muted('Today shows the review from ${_dayNames[day - 1]} until you finish it.'),
       const SizedBox(height: 8),
       Wrap(spacing: 6, runSpacing: 6, children: [

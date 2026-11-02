@@ -120,7 +120,6 @@ class BillRow extends StatelessWidget {
             Text(name, style: const TextStyle(fontWeight: FontWeight.w500)),
             if (dates.isNotEmpty) Text(dates, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
             if (overdue) const Padding(padding: EdgeInsets.only(top: 4), child: StateChip.over(text: 'Overdue')),
-            if (b.paid) const Padding(padding: EdgeInsets.only(top: 4), child: StateChip.onPace(text: 'Paid')),
           ]),
           end: b.total == null
               ? Text('No total', textAlign: TextAlign.end, style: TextStyle(fontSize: BwType.metaSize, color: c.muted))

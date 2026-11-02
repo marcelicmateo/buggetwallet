@@ -90,12 +90,7 @@ class _UpcomingScreenState extends State<UpcomingScreen> {
         final held = view.heldCycles(next: _next);
         final today = view.today();
         return Scaffold(
-          appBar: DialogAppBar(
-            title: 'Upcoming',
-            actions: [
-              IconButton(key: const ValueKey('addPlannedTop'), icon: const Icon(Icons.add), tooltip: 'Add planned cost', onPressed: _add),
-            ],
-          ),
+          appBar: const DialogAppBar(title: 'Upcoming'),
           body: ListView(
               padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, pageBottomPad),
               children: gapped([
