@@ -1,4 +1,4 @@
-// Clean neutral theme on every tab: three window sizes, both brightnesses, no error/overflow, bar vs rail, no Card, Panels are 14 dp cards.
+// Engineer theme on every tab: three window sizes, both brightnesses, no error/overflow, bar vs rail, no Card, Panels are 18 dp with a 1 px line border.
 // SYNTHETIC data only.
 import 'package:budget_wallet/src/layout.dart';
 import 'package:budget_wallet/src/theme.dart';
@@ -16,15 +16,15 @@ void main() {
   for (final size in _sizes) {
     for (final b in Brightness.values) {
       final name = '${size.width.toInt()}x${size.height.toInt()} ${b.name}';
-      testWidgets('$name: tabs scroll through, right navigation, no Card, Panels are 14 dp cards', (tester) async {
+      testWidgets('$name: tabs scroll through, right navigation, no Card, Panels are 18 dp bordered, shadowless panels', (tester) async {
         tester.platformDispatcher.platformBrightnessTestValue = b;
         addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
         await withErrors((errors) async {
           await pumpFull(tester, demoWallet(clock: pinnedNoon), 1.0, size: size);
           expect(tester.takeException(), isNull);
           final compact = sizeFor(size.width) == LayoutSize.compact;
-          expect(find.byType(NavigationBar), compact ? findsOneWidget : findsNothing);
-          expect(find.byType(NavigationRail), compact ? findsNothing : findsOneWidget);
+          expect(find.byKey(const ValueKey('navBar')), compact ? findsOneWidget : findsNothing);
+          expect(find.byKey(const ValueKey('rail')), compact ? findsNothing : findsOneWidget);
           expect(Theme.of(tester.element(find.byType(Scaffold).first)).brightness, b);
 
           for (final tab in _tabs) {
@@ -33,12 +33,17 @@ void main() {
             expect(tester.takeException(), isNull, reason: tab);
             expect(find.byType(Card), findsNothing, reason: '$tab has a Card');
             for (final p in find.byType(Panel).evaluate()) {
-              // The Panel's own box (the first DecoratedBox under it). Tags, chips and fields inside it keep their own radius.
-              final own = find.descendant(of: find.byElementPredicate((e) => e == p), matching: find.byType(DecoratedBox)).evaluate().first;
-              final dec = (own.widget as DecoratedBox).decoration;
-              if (dec is BoxDecoration) {
-                expect(dec.borderRadius, anyOf(isNull, BorderRadius.circular(cardRadius)), reason: '$tab Panel radius');
+              // The Panel's own box is its Material: radius 18, a 1 px line border, no shadow.
+              final own = find.descendant(of: find.byElementPredicate((e) => e == p), matching: find.byType(Material)).evaluate().first;
+              final m = own.widget as Material;
+              final shape = m.shape;
+              if (shape is RoundedRectangleBorder &&
+                  m.color != null &&
+                  m.color == tester.element(find.byElementPredicate((e) => e == p)).c.surface) {
+                expect(shape.borderRadius, BorderRadius.circular(cardRadius), reason: '$tab Panel radius');
+                expect(shape.side.width, 1, reason: '$tab Panel border');
               }
+              expect(m.elevation, 0, reason: '$tab Panel has no shadow');
             }
           }
           errors.check();

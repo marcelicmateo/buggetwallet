@@ -1,31 +1,16 @@
-// Text scale 2.0 at 320 and 360 dp with the real IBM Plex fonts loaded: no error or overflow on any tab. SYNTHETIC data only.
-import 'dart:io';
+// Text scale 2.0 at 320 and 360 dp with the real fonts loaded: no error or overflow on any tab. SYNTHETIC data only.
 
-import 'package:flutter/services.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/fonts.dart';
 import 'support/layout.dart';
 import 'support/wallet.dart';
 
 const _tabs = ['Today', 'Budget', 'Bills', 'Save', 'Settings'];
-const _dir = 'assets/fonts';
-
-Future<ByteData> _bytes(String f) async => ByteData.sublistView(await File('$_dir/$f').readAsBytes());
-
 void main() {
   setUpAll(() async {
-    for (final prefix in ['Inter', 'IBMPlexMono']) {
-      for (final w in ['Regular', 'Medium', 'SemiBold']) {
-        expect(File('$_dir/$prefix-$w.ttf').existsSync(), isTrue, reason: 'font file $prefix-$w.ttf missing in app/assets/fonts');
-      }
-    }
-    for (final (fam, prefix) in [('Inter', 'Inter'), ('IBM Plex Mono', 'IBMPlexMono')]) {
-      final l = FontLoader(fam);
-      for (final w in ['Regular', 'Medium', 'SemiBold']) {
-        l.addFont(_bytes('$prefix-$w.ttf'));
-      }
-      await l.load();
-    }
+    await loadAppFonts();
   });
 
   group('text scale 2.0 with real fonts', () {

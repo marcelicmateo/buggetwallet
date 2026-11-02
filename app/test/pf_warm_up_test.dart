@@ -60,15 +60,15 @@ void main() {
       _background();
       final wc = demoWallet(clock: pinnedNoon);
       await _pumpShell(t, HomeShell(wc: wc));
-      expect(_opacity(t, 'today'), 1, reason: 'the first page is simply there');
+      expect(_opacity(t, 'overview'), 1, reason: 'the first page is simply there');
       await _settle(t); // the other pages are built by now
-      await t.tap(find.text('Budget').last);
+      await t.tap(find.text('Explore').last);
       await t.pump();
-      expect(_opacity(t, 'budget'), lessThan(0.2));
+      expect(_opacity(t, 'explore'), lessThan(0.2));
       await t.pump(const Duration(milliseconds: 90));
-      expect(_opacity(t, 'budget'), allOf(greaterThan(0.2), lessThan(0.9)));
+      expect(_opacity(t, 'explore'), allOf(greaterThan(0.2), lessThan(0.9)));
       await t.pump(const Duration(milliseconds: 120));
-      expect(_opacity(t, 'budget'), 1);
+      expect(_opacity(t, 'explore'), 1);
       await _settle(t);
     });
 
@@ -77,25 +77,25 @@ void main() {
       final wc = demoWallet(clock: pinnedNoon);
       await _pumpShell(t, HomeShell(wc: wc), reduceMotion: true);
       await _settle(t);
-      await t.tap(find.text('Bills').last);
+      await t.tap(find.text('Money').last);
       await t.pump();
-      expect(_opacity(t, 'bills'), 1);
+      expect(_opacity(t, 'money'), 1);
       await _settle(t);
     });
 
-    testWidgets('Ctrl+2 goes through the fade too', (t) async {
+    testWidgets('Ctrl+3 goes through the fade too', (t) async {
       _background();
       final wc = demoWallet(clock: pinnedNoon);
       await _pumpShell(t, HomeShell(wc: wc));
       await _settle(t);
       await t.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      await t.sendKeyEvent(LogicalKeyboardKey.digit2);
+      await t.sendKeyEvent(LogicalKeyboardKey.digit3);
       await t.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
       await t.pump();
       expect(find.byType(SpendingScreen), findsOneWidget);
-      expect(_opacity(t, 'budget'), lessThan(0.2));
+      expect(_opacity(t, 'explore'), lessThan(0.2));
       await t.pump(const Duration(milliseconds: 250));
-      expect(_opacity(t, 'budget'), 1);
+      expect(_opacity(t, 'explore'), 1);
       await _settle(t);
     });
 
@@ -107,8 +107,9 @@ void main() {
       final spendingState = t.state(find.byType(SpendingScreen, skipOffstage: false));
       final spendingWidget = t.widget(find.byType(SpendingScreen, skipOffstage: false));
       final billsWidget = t.widget(find.byType(BillsScreen, skipOffstage: false));
-      for (final tab in ['Budget', 'Bills', 'Save', 'Settings', 'Today', 'Budget']) {
-        await t.tap(find.text(tab).last);
+      for (final tab in ['Explore', 'Money', 'Plan', 'Overview', 'Settings', 'Overview', 'Explore']) {
+        // Settings is the gear on Overview (a phone-wide shell).
+        await t.tap(tab == 'Settings' ? find.byKey(const ValueKey('openSettings')) : find.text(tab).last);
         await t.pump(const Duration(milliseconds: 250));
       }
       expect(identical(t.state(find.byType(SpendingScreen)), spendingState), isTrue);
@@ -124,7 +125,7 @@ void main() {
       await _settle(t);
       final bills = find.byType(BillsScreen, skipOffstage: false);
       final element = t.element(bills);
-      await t.tap(find.text('Save').last);
+      await t.tap(find.text('Plan').last);
       for (var i = 0; i < 15; i++) {
         await t.pump(_frame);
         expect(element.dirty, isFalse);
@@ -139,10 +140,10 @@ void main() {
       _background();
       final wc = demoWallet(clock: pinnedNoon);
       await _pumpShell(t, HomeShell(wc: wc));
-      await t.tap(find.text('Budget').last);
+      await t.tap(find.text('Explore').last);
       await t.pump();
       expect(find.byType(SpendingScreen, skipOffstage: false), findsNothing);
-      expect(_opacity(t, 'budget'), 0, reason: 'nothing to show yet');
+      expect(_opacity(t, 'explore'), 0, reason: 'nothing to show yet');
       var frames = 0;
       while (find.byType(SpendingScreen, skipOffstage: false).evaluate().isEmpty && frames < 100) {
         await t.pump(_frame);
@@ -150,9 +151,9 @@ void main() {
       }
       expect(frames, greaterThan(3), reason: 'one task a frame, not all in one');
       expect(frames, lessThan(60));
-      expect(_opacity(t, 'budget'), lessThan(0.5), reason: 'the fade starts when the page is there');
+      expect(_opacity(t, 'explore'), lessThan(0.5), reason: 'the fade starts when the page is there');
       await t.pump(const Duration(milliseconds: 250));
-      expect(_opacity(t, 'budget'), 1);
+      expect(_opacity(t, 'explore'), 1);
       await _settle(t);
     });
 
@@ -164,7 +165,7 @@ void main() {
       final old = t.widget(find.byType(SpendingScreen, skipOffstage: false));
       wc.addExpense(amount: -700, category: 'Groceries', note: 'x', date: wc.today());
       await t.pump();
-      await t.tap(find.text('Budget').last);
+      await t.tap(find.text('Explore').last);
       await t.pump();
       expect(identical(t.widget(find.byType(SpendingScreen)), old), isTrue, reason: 'the old page, at once');
       await _settle(t);
@@ -184,7 +185,7 @@ void main() {
       expect(find.byType(SpendingScreen, skipOffstage: false), findsNothing);
       expect(find.byType(SettingsScreen, skipOffstage: false), findsNothing);
       // Open Settings before its turn: it has no data to wait for, so it is there a frame later
-      await t.tap(find.text('Settings').last);
+      await t.tap(find.byKey(const ValueKey('openSettings')));
       await t.pump();
       await t.pump(_frame);
       await t.pump(_frame);
@@ -430,7 +431,7 @@ void main() {
         expect(wc.warmUp.tasksRun, 0, reason: 'the first frame is not rasterized: the warm-up waits');
         expect(find.byType(BillsScreen, skipOffstage: false), findsNothing);
       }
-      await t.tap(find.text('Bills').last);
+      await t.tap(find.text('Money').last);
       await _settle(t); // its data is worked out a task a frame, then the page is built
       expect(find.byType(BillsScreen), findsOneWidget);
       await _settle(t);

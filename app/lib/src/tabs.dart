@@ -1,10 +1,10 @@
-// The five tabs and the places a link can point at inside them (P5). Pure: no widgets.
+// The destinations (Overview, Money, Explore, Plan) plus Settings, and the places a link can point at inside them (P5). Pure: no widgets.
 import 'package:flutter/foundation.dart';
 
-/// Tab indexes, in bar order: Today, Budget, Bills, Save, Settings.
+/// Page indexes: the four destinations in bar order (Ctrl+1-4), then Settings (not in the bar: the Overview gear, the rail bottom, Ctrl+,).
 abstract final class Tabs {
-  static const today = 0, budget = 1, bills = 2, save = 3, settings = 4;
-  static const names = ['today', 'budget', 'bills', 'save', 'settings'];
+  static const overview = 0, money = 1, explore = 2, plan = 3, settings = 4;
+  static const names = ['overview', 'money', 'explore', 'plan', 'settings'];
 }
 
 /// The sections of the Settings tab, in page order. [currencies] is a place inside Accounts (a link scrolls to it).
@@ -31,7 +31,7 @@ enum SettingsSection {
       ];
 }
 
-/// Places on the Bills tab a link can scroll to.
+/// Places on the Money page a link can scroll to.
 enum BillsAnchor { comingUp, review, expected, slips }
 
 /// A "go there" request: a section or place to show. Each [request] notifies, also for the same value twice.

@@ -1,4 +1,4 @@
-// Idle warm-up in the controller: the list of derived values the five tabs ask for first, worked out one memo per idle task after
+// Idle warm-up in the controller: the list of derived values the four destinations ask for first, worked out one memo per idle task after
 // the first frame and after every data or day change (see warm_up.dart), so the first visit of a tab finds them ready.
 // A `part` of controller.dart so it can use the cache.
 //
@@ -12,7 +12,7 @@ extension WarmUpTasks on WalletController {
   List<WarmTask> warmUpTasksFor(int tab) {
     final month = monthOf(today());
     return switch (tab) {
-      Tabs.today => <WarmTask>[
+      Tabs.overview => <WarmTask>[
           ('period', period),
           ('periodDays', this.periodDays),
           ('heldTotals', heldTotals),
@@ -25,24 +25,24 @@ extension WarmUpTasks on WalletController {
           ('deliveryOrders90', () => deliveryOrders90),
           ('latestBySource', () => latestBySource),
         ],
-      Tabs.budget => <WarmTask>[
+      Tabs.explore => <WarmTask>[
           ('period', period),
           ('payPeriods', () => payPeriods(count: 12)),
           for (final m in monthsEnding(month, 13)) ('monthSummary', () => monthSummaryFor(m)),
           ('averageSpending', () => averageSpending(month)),
           ('spending', spending),
-          ('budgetVsActual', () => this.budgetVsActual(month)),
-          ('paceRows', paceRows),
-          ('paydayForecast', paydayForecast),
         ],
-      Tabs.bills => <WarmTask>[
+      Tabs.money => <WarmTask>[
           ('billLists', billLists),
           ('expectedBills', expectedBills),
           ('expectedIncomes', expectedIncomes),
           ('recurringPayments', recurringPayments),
           ('billsCost', billsCost),
         ],
-      Tabs.save => <WarmTask>[
+      Tabs.plan => <WarmTask>[
+          ('budgetVsActual', () => this.budgetVsActual(month)),
+          ('paceRows', paceRows),
+          ('paydayForecast', paydayForecast),
           ('owedTotals', owedTotals),
           ('goalTargetTotal', () => goalTargetTotal),
         ],

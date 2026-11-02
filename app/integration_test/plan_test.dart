@@ -4,8 +4,8 @@ import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/logging.dart';
 import 'package:budget_wallet/src/screens/bills_tab.dart';
-import 'package:budget_wallet/src/screens/budget.dart';
 import 'package:budget_wallet/src/screens/diagnostics.dart';
+import 'package:budget_wallet/src/screens/plan_screen.dart';
 import 'package:budget_wallet/src/screens/settings.dart';
 import 'package:budget_wallet/src/screens/tags_window.dart';
 import 'package:budget_wallet/src/tabs.dart';
@@ -22,14 +22,14 @@ import '../test/support/wallet.dart' show planRow;
 import 'demo_data.dart';
 import 'support/harness.dart';
 
-/// The payday plan sits on the Budget tab, behind the Spending | Plan switch.
-Finder inPlan(Finder f) => find.descendant(of: find.byType(BudgetScreen), matching: f);
+/// The payday plan sits on the Plan page, behind the Payday plan | Saving switch.
+Finder inPlan(Finder f) => find.descendant(of: find.byType(PlanScreen), matching: f);
 
-/// Chooses Plan on the Budget tab (no-op when it is shown).
+/// Chooses Plan › Payday plan (no-op when it is shown).
 Future<void> showPlan(WidgetTester t) async {
-  final plan = find.byKey(const ValueKey('budgetPlan'));
-  if (plan.evaluate().isEmpty || find.byKey(const ValueKey('planTile')).evaluate().isNotEmpty) return;
-  await tapVisible(t, plan);
+  if (find.byKey(const ValueKey('planTile')).evaluate().isNotEmpty) return;
+  await goTab(t, 'Plan');
+  await tapVisible(t, find.byKey(const ValueKey('planPayday')));
   await t.pumpAndSettle();
 }
 
@@ -51,7 +51,7 @@ Future<void> edit(WidgetTester t, String label) async {
   if (inPlan(field(label)).evaluate().isNotEmpty) return;
   await showPlan(t);
   final row = inPlan(planRow(_planKeys[label]!));
-  await scrollTo(t, row, BudgetScreen);
+  await scrollTo(t, row, PlanScreen);
   await tapVisible(t, row);
   await t.pumpAndSettle();
 }
@@ -61,7 +61,7 @@ Future<void> fill(WidgetTester t, Map<String, String> values) async {
   final entries = values.entries.toList();
   for (var i = 0; i < entries.length; i++) {
     await edit(t, entries[i].key);
-    await scrollTo(t, inPlan(field(entries[i].key)), BudgetScreen);
+    await scrollTo(t, inPlan(field(entries[i].key)), PlanScreen);
     await t.enterText(inPlan(field(entries[i].key)), entries[i].value);
     if (i < entries.length - 1) await save(t);
   }
@@ -69,7 +69,7 @@ Future<void> fill(WidgetTester t, Map<String, String> values) async {
 }
 
 Future<void> save(WidgetTester t) async {
-  await scrollTo(t, find.byKey(const ValueKey('planSave')), BudgetScreen);
+  await scrollTo(t, find.byKey(const ValueKey('planSave')), PlanScreen);
   await tapVisible(t, find.byKey(const ValueKey('planSave')));
   await t.pumpAndSettle();
 }
@@ -120,7 +120,7 @@ void main() {
     final p = wc.period();
     // 2500 - 600.50 - 250 - 45.99 - 200 (default goals) = 1403.51
     expect(p.flexBudget, 140351);
-    await scrollTo(t, find.byKey(const ValueKey('ledgerSpendingMoney')), BudgetScreen);
+    await scrollTo(t, find.byKey(const ValueKey('ledgerSpendingMoney')), PlanScreen);
     expect(inPlan(find.descendant(of: find.byKey(const ValueKey('ledgerSpendingMoney')), matching: find.text(moneyExact(140351, 'EUR')))),
         findsOneWidget);
     expect(
@@ -156,7 +156,7 @@ void main() {
     await t.pumpAndSettle();
     await goTab(t, 'Budget');
     await edit(t, 'Rent');
-    await scrollTo(t, inPlan(field('Rent')), BudgetScreen);
+    await scrollTo(t, inPlan(field('Rent')), PlanScreen);
     expect(fieldText(t, 'Rent'), '700', reason: 'Plan fields follow changes made elsewhere');
     await save(t);
     expect(find.text('Nothing to save'), findsOneWidget);
@@ -174,13 +174,13 @@ void main() {
     expect(find.text('Plan saved'), findsOneWidget);
     expect((wc.settings.loan, wc.settings.subs, wc.settings.salary, wc.settings.rent), (30000, 5000, 260000, 70000));
     // The Plan page: values as tappable rows, one of them open as its field.
-    await scrollTo(t, find.byKey(const ValueKey('planTile')), BudgetScreen, delta: -600);
+    await scrollTo(t, find.byKey(const ValueKey('planTile')), PlanScreen, delta: -600);
     await Harness.shot(t, 'plan-page');
     await edit(t, 'Rent');
     await Harness.shot(t, 'plan-page-editing');
-    await scrollTo(t, inPlan(find.byKey(const ValueKey('planOther'))), BudgetScreen);
+    await scrollTo(t, inPlan(find.byKey(const ValueKey('planOther'))), PlanScreen);
     await Harness.shot(t, 'plan-page-other');
-    await scrollTo(t, inPlan(find.byKey(const ValueKey('budgetsPanel'))), BudgetScreen);
+    await scrollTo(t, inPlan(find.byKey(const ValueKey('budgetsPanel'))), PlanScreen);
     await Harness.shot(t, 'plan-page-budgets');
     await Harness.checkLog();
   });
@@ -195,7 +195,7 @@ void main() {
 
     // Suggestions from the imports: nothing is written until a tap; Not now hides one, Accept writes one key.
     await showPlan(t);
-    await scrollTo(t, find.byKey(const ValueKey('planSuggestionsTile')), BudgetScreen);
+    await scrollTo(t, find.byKey(const ValueKey('planSuggestionsTile')), PlanScreen);
     await tapVisible(t, find.byKey(const ValueKey('planSuggestionsTile')));
     await t.pumpAndSettle();
     expect(find.byKey(const ValueKey('proposal:salary')), findsOneWidget);

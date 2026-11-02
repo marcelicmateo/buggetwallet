@@ -334,13 +334,29 @@ String todayIso() => isoDate(DateTime.now());
 
 /// The bottom bar (phones, narrow windows) or the rail (wide windows).
 Finder get navigation =>
-    find.byWidgetPredicate((w) => w is NavigationBar || w is NavigationRail, description: 'NavigationBar or NavigationRail');
+    find.byKey(const ValueKey('navBar')).evaluate().isNotEmpty ? find.byKey(const ValueKey('navBar')) : find.byKey(const ValueKey('rail'));
 
-Finder navTab(String label) => find.descendant(of: navigation, matching: find.text(label));
+/// The old tab names and where they live now (ENG E1); the new names work too.
+const _tabNames = {'Today': 'Overview', 'Budget': 'Explore', 'Bills': 'Money', 'Save': 'Plan'};
 
+Finder navTab(String label) => find.descendant(of: navigation, matching: find.text(_tabNames[label] ?? label));
+
+/// Opens a destination. 'Settings' = the rail bottom, or the Overview gear on a phone; 'Save' = Plan › Saving.
 Future<void> goTab(WidgetTester t, String label) async {
+  if (label == 'Settings' && find.byKey(const ValueKey('rail')).evaluate().isEmpty) {
+    await t.tap(navTab('Today'));
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('openSettings')));
+    await t.pumpAndSettle();
+    return;
+  }
+  await t.ensureVisible(navTab(label));
   await t.tap(navTab(label));
   await t.pumpAndSettle();
+  if (label == 'Save') {
+    await t.tap(find.byKey(const ValueKey('planSaving')));
+    await t.pumpAndSettle();
+  }
 }
 
 /// Opens Budget › Tags (main tags, tags, rules); scroll it with `scrollTo(t, f, TagsWindow)`.

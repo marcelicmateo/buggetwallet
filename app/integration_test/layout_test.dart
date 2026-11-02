@@ -10,6 +10,7 @@ import 'package:budget_wallet/src/screens/category_detail.dart';
 import 'package:budget_wallet/src/screens/insights.dart';
 import 'package:budget_wallet/src/screens/key_backup.dart';
 import 'package:budget_wallet/src/screens/onboarding.dart';
+import 'package:budget_wallet/src/screens/plan_screen.dart';
 import 'package:budget_wallet/src/screens/save.dart';
 import 'package:budget_wallet/src/screens/settings.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
@@ -131,6 +132,7 @@ void main() {
         for (final (tab, screen) in [
           ('Budget', SpendingScreen),
           ('Bills', BillsScreen),
+          ('Plan', PlanScreen),
           ('Save', SaveScreen),
           ('Settings', SettingsScreen)
         ]) {

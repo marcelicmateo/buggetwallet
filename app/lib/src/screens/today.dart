@@ -81,7 +81,7 @@ class TodayScreen extends StatelessWidget {
     final suggestions = view.suggestionCount();
     final tight = view.tightestBudget();
     final toReview = view.billsToReview();
-    // The Budget tab has two pages (Spending | Plan): each link picks the one it means before the tab opens.
+    // Plan and Explore each have two pages: each link picks the one it means before the page opens.
     void toPlan() {
       view.showBudgetView('plan');
       openPlan();

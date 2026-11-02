@@ -1,7 +1,6 @@
 // RX8: tag and category detail as Paper Tiles dashboards (hero total, compare tiles, per-month bars, merchants, payments), and the grid
 // on wide windows: the column count per width, no overflow at 1024 / 1280 / 1920 (also at text scale 2.0) and the same reading order as
 // the phone on every dashboard. SYNTHETIC wallets; the real Plex fonts are loaded (the test font is far wider).
-import 'dart:io';
 
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
@@ -13,11 +12,11 @@ import 'package:budget_wallet/src/widgets/common.dart' show TxTile;
 import 'package:budget_wallet/src/widgets/dash.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
 import 'support/detail.dart';
+import 'support/fonts.dart';
 import 'support/layout.dart';
 import 'support/wallet.dart';
 
@@ -31,13 +30,7 @@ final _wednesday = DateTime(2026, 10, 28, 12);
 WalletController _demo([DateTime? at]) => demoWallet(clock: () => at ?? _wednesday);
 
 Future<void> _loadFonts() async {
-  for (final (fam, prefix) in [('Inter', 'Inter'), ('IBM Plex Mono', 'IBMPlexMono')]) {
-    final l = FontLoader(fam);
-    for (final w in ['Regular', 'Medium', 'SemiBold']) {
-      l.addFont(File('assets/fonts/$prefix-$w.ttf').readAsBytes().then(ByteData.sublistView));
-    }
-    await l.load();
-  }
+  await loadAppFonts();
 }
 
 /// The budget wallet (20 Oct 2026) with named payees in Groceries and an extra tag on September's and October's Groceries rows.
@@ -386,8 +379,8 @@ void main() {
             check(tab);
             await scrollThrough(tester);
           }
-          await tapTab(tester, 'Budget');
-          await tester.tap(_k('budgetPlan'));
+          await tapTab(tester, 'Plan');
+          await tester.tap(_k('planPayday'));
           await pumpIdle(tester);
           check('Plan');
           await scrollThrough(tester);

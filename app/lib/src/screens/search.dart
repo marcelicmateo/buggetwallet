@@ -173,8 +173,10 @@ class _SearchResults extends StatelessWidget {
           _ResultSection('Goals', r.goals.length, [
             Rows(children: [
               for (final g in r.goals)
-                _ResultRow(g.name, '${money(g.saved, cur, decimals: 0)} / ${money(g.target, cur, decimals: 0)}', 'Goal', 'goal',
-                    () => onOpenTab(Tabs.save), query),
+                _ResultRow(g.name, '${money(g.saved, cur, decimals: 0)} / ${money(g.target, cur, decimals: 0)}', 'Goal', 'goal', () {
+                  wc.setPlanView('saving');
+                  onOpenTab(Tabs.plan);
+                }, query),
             ]),
           ]),
         if (r.wishlist.isNotEmpty)
@@ -259,7 +261,7 @@ class _SearchResults extends StatelessWidget {
 Future<void> _openRule(BuildContext context, WalletController wc, RuleView rule) async {
   if (rule.kind == RuleKind.builtIn || !rule.editable) {
     wc.setBudgetView('tags');
-    wc.openTab(Tabs.budget, via: 'search');
+    wc.openTab(Tabs.explore, via: 'search');
     return;
   }
   await openRuleForm(context, wc, edit: rule);

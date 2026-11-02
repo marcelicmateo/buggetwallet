@@ -1,23 +1,19 @@
-// Font assets: six unmodified TTFs (Inter and IBM Plex Mono), the two OFL licences, pubspec declarations, and the glyphs the app needs.
+// Font assets: unmodified TTFs (Manrope variable, JetBrains Mono 400/500/700), the two OFL licences, pubspec declarations, and the glyphs
+// the app needs.
 import 'dart:io';
 import 'dart:ui' as ui;
 
-import 'package:flutter/services.dart';
+import 'package:budget_wallet/src/theme.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-const _dir = 'assets/fonts';
-const _families = {'Inter': 'Inter', 'IBM Plex Mono': 'IBMPlexMono'};
-const _weights = ['Regular', 'Medium', 'SemiBold'];
+import 'support/fonts.dart';
 
 void main() {
-  final files = [
-    for (final p in _families.values)
-      for (final w in _weights) '$_dir/$p-$w.ttf'
-  ];
+  final files = [for (final l in fontFiles.values) ...l];
 
-  test('six font files exist, are non-empty TrueType', () {
+  test('font files exist, are non-empty TrueType', () {
     for (final f in files) {
-      final file = File(f);
+      final file = File('$fontDir/$f');
       expect(file.existsSync(), isTrue, reason: f);
       final b = file.readAsBytesSync();
       expect(b.length, greaterThan(10000), reason: f);
@@ -25,41 +21,50 @@ void main() {
     }
   });
 
-  for (final name in ['OFL.txt', 'OFL-Inter.txt']) {
+  test('the old Inter and IBM Plex Mono files are gone', () {
+    final names = Directory(fontDir).listSync().map((e) => e.uri.pathSegments.last).toList();
+    expect(names.where((n) => n.startsWith('Inter') || n.startsWith('IBMPlex') || n == 'OFL.txt'), isEmpty);
+  });
+
+  for (final name in ['OFL-Manrope.txt', 'OFL-JetBrainsMono.txt']) {
     test('$name exists with the licence text', () {
-      final f = File('$_dir/$name');
+      final f = File('$fontDir/$name');
       expect(f.existsSync(), isTrue);
       expect(f.readAsStringSync().toUpperCase(), contains('SIL OPEN FONT LICENSE'));
     });
   }
 
-  test('pubspec declares both families with weights 500 and 600, and the licence asset', () {
+  test('theme families match the declared ones', () {
+    expect(sansFamily, 'Manrope');
+    expect(monoFamily, 'JetBrains Mono');
+  });
+
+  test('pubspec declares both families, their weights, the files and the licences', () {
     final p = File('pubspec.yaml').readAsStringSync();
-    for (final fam in _families.keys) {
+    for (final fam in fontFiles.keys) {
       expect(p, contains('family: $fam'), reason: fam);
     }
-    expect(RegExp(r'weight:\s*500').allMatches(p).length, greaterThanOrEqualTo(2));
-    expect(RegExp(r'weight:\s*600').allMatches(p).length, greaterThanOrEqualTo(2));
-    for (final f in files) {
-      expect(p, contains(f), reason: f);
+    for (final w in [500, 600, 700, 800]) {
+      expect(p, contains(RegExp('weight:\\s*$w')), reason: 'weight $w');
     }
-    expect(p, contains('$_dir/OFL.txt'));
-    expect(p, contains('$_dir/OFL-Inter.txt'));
+    for (final f in files) {
+      expect(p, contains('$fontDir/$f'), reason: f);
+    }
+    expect(p, contains('$fontDir/OFL-Manrope.txt'));
+    expect(p, contains('$fontDir/OFL-JetBrainsMono.txt'));
+  });
+
+  test('the fonts README records a sha256 for every file', () {
+    final r = File('$fontDir/README.md').readAsStringSync();
+    for (final f in files) {
+      expect(r, contains(f), reason: f);
+    }
   });
 
   group('glyphs lay out after FontLoader', () {
-    setUpAll(() async {
-      if (!files.every((f) => File(f).existsSync())) return;
-      for (final e in _families.entries) {
-        final l = FontLoader(e.key);
-        for (final w in _weights) {
-          l.addFont(Future.value(ByteData.sublistView(File('$_dir/${e.value}-$w.ttf').readAsBytesSync())));
-        }
-        await l.load();
-      }
-    });
-    for (final fam in _families.keys) {
-      for (final (label, s) in [('euro', '€'), ('minus U+2212', '−'), ('NBSP', ' '), ('amount', '−12,50 €')]) {
+    setUpAll(loadAppFonts);
+    for (final fam in fontFiles.keys) {
+      for (final (label, s) in [('euro', '€'), ('minus U+2212', '−'), ('NBSP', ' '), ('amount', '−12,50 €'), ('arrows', '▲▼')]) {
         test('$fam: $label has width', () {
           final pb = ui.ParagraphBuilder(ui.ParagraphStyle(fontFamily: fam, fontSize: 16))..addText(s);
           final para = pb.build()..layout(const ui.ParagraphConstraints(width: 1000));

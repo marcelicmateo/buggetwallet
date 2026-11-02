@@ -1,26 +1,19 @@
 // The dashboard kit (RX2, lib/src/widgets/dash.dart): no overflow at 320 dp x 2.0, 360 and 1280, light and dark; exact cents;
 // states in icon + word; grid columns per width; semantics. SYNTHETIC numbers. Real Plex fonts (the test font is far wider).
-import 'dart:io';
 
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/theme.dart';
 import 'package:budget_wallet/src/widgets/dash.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../integration_test/support/dash_gallery.dart';
+import 'support/fonts.dart';
 import 'support/layout.dart';
 
 Future<void> _loadFonts() async {
-  for (final (fam, prefix) in [('Inter', 'Inter'), ('IBM Plex Mono', 'IBMPlexMono')]) {
-    final l = FontLoader(fam);
-    for (final w in ['Regular', 'Medium', 'SemiBold']) {
-      l.addFont(File('assets/fonts/$prefix-$w.ttf').readAsBytes().then(ByteData.sublistView));
-    }
-    await l.load();
-  }
+  await loadAppFonts();
 }
 
 Future<void> _pump(WidgetTester tester, Widget child,
@@ -227,18 +220,19 @@ void main() {
   });
 
   group('Tile', () {
-    testWidgets('14 dp radius, no border, surface ground, soft shadow', (tester) async {
+    testWidgets('18 dp radius, 1 px line border, surface ground, no shadow', (tester) async {
       await _pump(tester, _grid(1));
       final mat = tester.widget<Material>(find.descendant(of: find.byType(Tile), matching: find.byType(Material)).first);
       final shape = mat.shape! as RoundedRectangleBorder;
-      expect(shape.borderRadius, BorderRadius.circular(14));
-      expect(shape.side, BorderSide.none);
+      expect(shape.borderRadius, BorderRadius.circular(18));
+      expect(shape.side, BorderSide(color: WalletColors.light.line));
       expect(mat.color, WalletColors.light.surface);
       expect(mat.elevation, 0);
-      final deco = tester.widget<DecoratedBox>(find
-          .descendant(of: find.byType(Tile), matching: find.byWidgetPredicate((w) => w is DecoratedBox && w.decoration is BoxDecoration))
-          .first);
-      expect((deco.decoration as BoxDecoration).boxShadow, isNotEmpty);
+      final deco = find.descendant(
+          of: find.byType(Tile), matching: find.byWidgetPredicate((w) => w is DecoratedBox && w.decoration is BoxDecoration));
+      for (final e in deco.evaluate()) {
+        expect(((e.widget as DecoratedBox).decoration as BoxDecoration).boxShadow, anyOf(isNull, isEmpty));
+      }
     });
 
     testWidgets('a tap calls onTap; the gallery hero, goal and add tiles answer', (tester) async {

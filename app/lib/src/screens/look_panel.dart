@@ -19,8 +19,8 @@ class LookPanel extends StatelessWidget {
           style: SegmentedButton.styleFrom(minimumSize: const Size(0, touchMin)),
           segments: const [
             ButtonSegment(value: 'system', label: Text('System'), icon: Icon(Icons.brightness_auto_outlined)),
-            ButtonSegment(value: 'light', label: Text('Light'), icon: Icon(Icons.light_mode_outlined)),
             ButtonSegment(value: 'dark', label: Text('Dark'), icon: Icon(Icons.dark_mode_outlined)),
+            ButtonSegment(value: 'light', label: Text('Light'), icon: Icon(Icons.light_mode_outlined)),
           ],
           selected: {wc.themeModeName},
           onSelectionChanged: (s) {

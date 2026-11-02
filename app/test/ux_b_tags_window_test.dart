@@ -41,7 +41,7 @@ WalletController untaggedWallet() {
 
 void main() {
   group('the Tags segment', () {
-    testWidgets('third segment of the Budget switch; the window has its sections and one add button', (t) async {
+    testWidgets('second segment of the Explore switch; the window has its sections and one add button', (t) async {
       final wc = untaggedWallet();
       addTearDown(wc.dispose);
       await pumpApp(t, Scaffold(body: BudgetScreen(wc: wc)), size: const Size(400, 3000));
@@ -58,9 +58,9 @@ void main() {
       for (final gone in ['categoryAdd', 'rulesAdd']) {
         expect(k(gone), findsNothing, reason: 'the panels have no add button of their own');
       }
-      await t.tap(k('budgetPlan'));
+      await t.tap(k('budgetSpending'));
       await t.pump(const Duration(milliseconds: 300));
-      expect(wc.budgetView, 'plan');
+      expect(wc.budgetView, 'spending');
       await settle(t);
     }, timeout: _timeout);
 

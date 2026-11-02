@@ -17,14 +17,15 @@ import 'dash_charts.dart';
 
 export 'dash_charts.dart';
 
-/// Tile figures: Inter semibold with proportional figures (they read better large than the mono of the lists).
+/// Tile figures: JetBrains Mono bold with tabular figures (every amount is mono, spec §4.3).
 TextStyle dashNumStyle({double size = BwType.displaySize, Color? color}) => TextStyle(
-      fontFamily: sansFamily,
-      fontWeight: FontWeight.w600,
+      fontFamily: monoFamily,
+      fontFamilyFallback: const ['monospace'],
+      fontWeight: FontWeight.w700,
       fontSize: size,
       height: 1.1,
       letterSpacing: -0.3,
-      fontFeatures: const [FontFeature.proportionalFigures()],
+      fontFeatures: const [FontFeature.tabularFigures()],
       color: color,
     );
 
@@ -281,21 +282,15 @@ class Tile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.c;
-    // A white card lifted by a soft shadow, no border (an attention tile gets a 2 px accent ring instead).
-    final body = DecoratedBox(
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(radius), boxShadow: cardShadow(Theme.of(context).brightness)),
-      child: Material(
-        color: c.surface,
-        clipBehavior: Clip.antiAlias,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(radius),
-          side: attention
-              ? BorderSide(color: c.accent, width: 2)
-              // Dark: the surface is hardly lighter than the page, so a tile gets a hairline there.
-              : (Theme.of(context).brightness == Brightness.dark ? BorderSide(color: c.line) : BorderSide.none),
-        ),
-        child: InkWell(onTap: onTap, child: Padding(padding: padding, child: child)),
+    // A panel: 1 px line border, no shadow (an attention tile gets a 2 px accent ring instead).
+    final body = Material(
+      color: c.surface,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(radius),
+        side: attention ? BorderSide(color: c.accent, width: 2) : BorderSide(color: c.line),
       ),
+      child: InkWell(onTap: onTap, child: Padding(padding: padding, child: child)),
     );
     if (semanticLabel == null) return body;
     return Semantics(

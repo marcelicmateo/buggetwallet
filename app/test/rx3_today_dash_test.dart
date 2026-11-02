@@ -1,7 +1,6 @@
 // RX3: Today as a Paper Tiles dashboard. The tile set per state (normal, over today, over the plan, period ended, empty wallet, setup
 // pending), the hero to the exact cent, one state chip per fact, the Before payday tile, and layout (no overflow) at 320 dp x 2.0,
 // 360, 411 and 1280, light and dark. SYNTHETIC wallets on the fixed clock of Sunday 25 Oct 2026 12:00 (period 15 Oct to 15 Nov).
-import 'dart:io';
 
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
@@ -11,10 +10,10 @@ import 'package:budget_wallet/src/theme.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:budget_wallet/src/widgets/dash.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 
+import 'support/fonts.dart';
 import 'support/wallet.dart';
 
 final _at = DateTime(2026, 10, 25, 12);
@@ -40,13 +39,7 @@ WalletController _wallet({DateTime? now, int spentBefore = 0, int spentToday = 0
 }
 
 Future<void> _loadFonts() async {
-  for (final (fam, prefix) in [('Inter', 'Inter'), ('IBM Plex Mono', 'IBMPlexMono')]) {
-    final l = FontLoader(fam);
-    for (final w in ['Regular', 'Medium', 'SemiBold']) {
-      l.addFont(File('assets/fonts/$prefix-$w.ttf').readAsBytes().then(ByteData.sublistView));
-    }
-    await l.load();
-  }
+  await loadAppFonts();
 }
 
 Future<void> _pump(WidgetTester tester, WalletController wc,

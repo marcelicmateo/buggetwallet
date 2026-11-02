@@ -146,8 +146,8 @@ void main() {
       final bill = find.textContaining('Confirmed');
       await t.ensureVisible(bill);
       await t.tap(bill);
-      expect(tabs, [Tabs.save], reason: 'a goal jumps to Save');
-      expect(hooked, [Tabs.save], reason: 'a wish goes through openWish: Save, and the wish is the one to show');
+      expect(tabs, [Tabs.plan], reason: 'a goal jumps to Save');
+      expect(hooked, [Tabs.plan], reason: 'a wish goes through openWish: Save, and the wish is the one to show');
       expect(wc.highlightWish.value, wc.wish.firstWhere((w) => w.name == 'Synthetic lamp').id);
       expect(bills, 1);
       final tx = find.byType(TxTile).first;
@@ -170,7 +170,7 @@ void main() {
       await t.pump();
       await t.pump(const Duration(milliseconds: 100));
       expect(find.byKey(const ValueKey('searchField')), findsOneWidget);
-      expect(t.widget<IndexedStack>(find.byWidgetPredicate((w) => w is IndexedStack && w.children.length == 5)).index, 1);
+      expect(t.widget<IndexedStack>(find.byWidgetPredicate((w) => w is IndexedStack && w.children.length == 5)).index, Tabs.explore);
       await t.pump(const Duration(seconds: 4));
     });
 
@@ -183,7 +183,7 @@ void main() {
       wc.reload();
       await withErrors((errors) async {
         await pumpFull(t, wc, 2.0);
-        await t.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('Budget')));
+        await t.tap(find.descendant(of: find.byKey(const ValueKey('navBar')), matching: find.text('Explore')));
         await t.pump();
         await t.pump(const Duration(milliseconds: 500));
         await t.tap(find.byKey(const ValueKey('searchOpen')));

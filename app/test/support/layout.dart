@@ -88,10 +88,39 @@ Future<void> withErrors(Future<void> Function(Errors errors) body) async {
   }
 }
 
-/// Taps a tab in the bottom bar or the rail, whichever the window shows.
+/// The shell's navigation: the bottom bar (key `navBar`) or the rail (key `rail`), whichever the window shows.
+Finder get navFinder =>
+    find.byKey(const ValueKey('navBar')).evaluate().isNotEmpty ? find.byKey(const ValueKey('navBar')) : find.byKey(const ValueKey('rail'));
+
+/// The old tab names (Today, Budget, Bills, Save, Settings) and where they live now (ENG E1): Overview, Explore, Money, Plan › Saving,
+/// Settings (the Overview gear on a phone, the rail bottom from 600 dp). The new names (Overview, Money, Explore, Plan) work too.
+const _tabNames = {'Today': 'Overview', 'Budget': 'Explore', 'Bills': 'Money', 'Save': 'Plan'};
+
+/// Taps a destination in the bottom bar or the rail, whichever the window shows.
 Future<void> tapTab(WidgetTester tester, String label) async {
-  final nav = find.byType(NavigationBar).evaluate().isNotEmpty ? find.byType(NavigationBar) : find.byType(NavigationRail);
-  await tester.tap(find.descendant(of: nav, matching: find.text(label)));
-  await tester.pump();
-  await tester.pump(const Duration(milliseconds: 500));
+  Future<void> settle() async {
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+  }
+
+  if (label == 'Settings') {
+    if (find.byKey(const ValueKey('rail')).evaluate().isEmpty) {
+      await tester.tap(find.descendant(of: navFinder, matching: find.text('Overview')));
+      await settle();
+      await tester.tap(find.byKey(const ValueKey('openSettings')));
+    } else {
+      final item = find.descendant(of: navFinder, matching: find.text('Settings'));
+      await tester.ensureVisible(item); // the rail scrolls in a short window
+      await tester.tap(item);
+    }
+    return settle();
+  }
+  final item = find.descendant(of: navFinder, matching: find.text(_tabNames[label] ?? label));
+  await tester.ensureVisible(item);
+  await tester.tap(item);
+  await settle();
+  if (label == 'Save') {
+    await tester.tap(find.byKey(const ValueKey('planSaving')));
+    await settle();
+  }
 }

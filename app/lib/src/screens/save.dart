@@ -8,11 +8,14 @@ import 'goals.dart';
 import 'owed.dart';
 import 'wishlist.dart';
 
-/// The Save tab (RX6, "Paper Tiles"): three dashboards in one scroll on the desk, Goals, Wishlist and Owed, each a [DashGrid] of tiles
+/// Plan › Saving (was the Save tab; RX6, "Paper Tiles"): three dashboards in one scroll on the desk, Goals, Wishlist and Owed, each a [DashGrid] of tiles
 /// under a small heading.
 class SaveScreen extends StatelessWidget {
   final WalletController wc;
-  const SaveScreen({super.key, required this.wc});
+
+  /// The Payday plan | Saving switch of the Plan page, shown on top.
+  final Widget? switcher;
+  const SaveScreen({super.key, required this.wc, this.switcher});
 
   @override
   Widget build(BuildContext context) => ColoredBox(
@@ -22,7 +25,12 @@ class SaveScreen extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(pagePad, 12, pagePad, pageBottomPad),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: gapped([GoalsScreen(wc: wc, embedded: true), WishlistScreen(wc: wc, embedded: true), OwedPanel(wc: wc)], gap: 18),
+            children: gapped([
+              if (switcher != null) switcher!,
+              GoalsScreen(wc: wc, embedded: true),
+              WishlistScreen(wc: wc, embedded: true),
+              OwedPanel(wc: wc)
+            ], gap: 18),
           ),
         ),
       );

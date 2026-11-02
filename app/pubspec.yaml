@@ -52,20 +52,25 @@ hooks:
 flutter:
   uses-material-design: true
   assets:
-    - assets/fonts/OFL.txt
-    - assets/fonts/OFL-Inter.txt
+    - assets/fonts/OFL-Manrope.txt
+    - assets/fonts/OFL-JetBrainsMono.txt
   fonts:
-    - family: Inter
+    # Manrope is one variable file (wght 200-800); the five declared weights make FontWeight pick the matching axis value.
+    - family: Manrope
       fonts:
-        - asset: assets/fonts/Inter-Regular.ttf
-        - asset: assets/fonts/Inter-Medium.ttf
+        - asset: assets/fonts/Manrope-VariableFont_wght.ttf
+        - asset: assets/fonts/Manrope-VariableFont_wght.ttf
           weight: 500
-        - asset: assets/fonts/Inter-SemiBold.ttf
+        - asset: assets/fonts/Manrope-VariableFont_wght.ttf
           weight: 600
-    - family: IBM Plex Mono
+        - asset: assets/fonts/Manrope-VariableFont_wght.ttf
+          weight: 700
+        - asset: assets/fonts/Manrope-VariableFont_wght.ttf
+          weight: 800
+    - family: JetBrains Mono
       fonts:
-        - asset: assets/fonts/IBMPlexMono-Regular.ttf
-        - asset: assets/fonts/IBMPlexMono-Medium.ttf
+        - asset: assets/fonts/JetBrainsMono-Regular.ttf
+        - asset: assets/fonts/JetBrainsMono-Medium.ttf
           weight: 500
-        - asset: assets/fonts/IBMPlexMono-SemiBold.ttf
-          weight: 600
+        - asset: assets/fonts/JetBrainsMono-Bold.ttf
+          weight: 700
