@@ -247,6 +247,36 @@ func TestVersionSort(t *testing.T) {
 	}
 }
 
+// A failing worker must fail the run (exit 1) and be listed in last-failed.txt, in parallel mode too.
+func TestDesktopParallelFailureFailsRun(t *testing.T) {
+	root := t.TempDir()
+	for _, n := range []string{"good", "bad", "other"} {
+		write(t, filepath.Join(root, "app", "integration_test", n+"_test.dart"), "")
+	}
+	s, _ := newSession(t, root, "BW_JOBS=2")
+	s.C.R = &sys.Fake{Handle: func(c sys.Cmd) int {
+		for _, a := range c.Argv {
+			if a == "integration_test/bad_test.dart" {
+				return 1
+			}
+		}
+		return 0
+	}}
+	DesktopTests(s, nil)
+	if s.Exit() != 1 {
+		t.Fatalf("exit %d, want 1; results %v", s.Exit(), s.Results)
+	}
+	s.C.WriteLast(s.Logs, 1)
+	failed := file(t, filepath.Join(s.Logs, "last-failed.txt"))
+	last := file(t, filepath.Join(s.Logs, "last.status"))
+	if !strings.Contains(failed, "desktop-bad ") || strings.Contains(failed, "good") {
+		t.Errorf("last-failed.txt: %q", failed)
+	}
+	if n := strings.Count(last, "\n"); n != 3 {
+		t.Errorf("last.status has %d lines, want 3: %q", n, last)
+	}
+}
+
 func TestSmokeRunDetectsEarlyExitAndCleanShutdown(t *testing.T) {
 	dir := t.TempDir()
 	crash := filepath.Join(dir, "crash.sh")
