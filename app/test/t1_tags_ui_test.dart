@@ -19,6 +19,7 @@ import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
 import 'support/detail.dart';
+import 'support/tags_window.dart';
 import 'support/wallet.dart';
 
 const _timeout = Timeout(Duration(seconds: 90));
@@ -63,8 +64,7 @@ Future<void> openSheet(WidgetTester t, WalletController wc, CategorizedTx row, {
   await pumpApp(t, Scaffold(body: SingleChildScrollView(child: TxSheet(wc: wc, t: row))), size: size);
 }
 
-Widget tagsPanel(WalletController wc) =>
-    ListenableBuilder(listenable: wc, builder: (_, __) => Scaffold(body: SingleChildScrollView(child: TagsPanel(wc: wc))));
+Widget tagsPanel(WalletController wc) => panelWithAdd(wc, () => TagsPanel(wc: wc));
 
 void remoteTag(WalletController wc, String id, String name) {
   final now = DateTime.now().millisecondsSinceEpoch;
@@ -445,7 +445,7 @@ void main() {
       final wc = budgetWallet(budgets: false);
       await pumpApp(t, tagsPanel(wc), size: const Size(400, 3000));
       expect(k('tagsEmpty'), findsOneWidget);
-      await tapKey(t, 'tagsAdd');
+      await tapAdd(t, 'tag');
       await t.enterText(k('tagName'), 'Garden');
       await tapKey(t, 'tagSave');
       final id = wc.tagTable.ids.single;
@@ -454,7 +454,7 @@ void main() {
       expect(find.text('#Garden'), findsOneWidget);
       expect(find.text('0 payments'), findsOneWidget);
       // A main tag's name is taken: core's message shows under the field and the sheet stays open.
-      await tapKey(t, 'tagsAdd');
+      await tapAdd(t, 'tag');
       await t.enterText(k('tagName'), 'Groceries');
       await tapKey(t, 'tagSave');
       expect(t.widget<TextField>(k('tagName')).decoration!.errorText, isNotNull);

@@ -3,6 +3,7 @@
 import 'dart:async';
 
 import 'package:budget_wallet/src/screens/settings.dart';
+import 'package:budget_wallet/src/screens/tags_window.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/tabs.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
@@ -77,10 +78,13 @@ void main() {
       await scrollTo(t, find.byKey(const ValueKey('todaySearch')), TodayScreen);
       await Harness.shot(t, 'today-recent-search-$name');
 
-      // Plan › Rules › Suggested.
-      await goSettings(t, SettingsSection.rules);
-      await scrollTo(t, find.byKey(const ValueKey('ruleSuggest:mcdonalds_zagreb')), SettingsScreen);
+      // Budget › Tags › Recommendations.
+      await goTags(t);
+      await Harness.shot(t, 'tags-window-$name');
+      await scrollTo(t, find.byKey(const ValueKey('ruleSuggest:mcdonalds_zagreb')), TagsWindow);
       await Harness.shot(t, 'rules-suggested-$name');
+      await tapVisible(t, find.byKey(const ValueKey('budgetSpending'))); // the Budget view is remembered; the next round starts on Spending
+      await t.pumpAndSettle();
 
       // Settings › Sync › Recent changes.
       await goSettings(t, SettingsSection.sync);

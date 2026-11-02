@@ -7,6 +7,7 @@ import 'package:budget_wallet/src/screens/bills_tab.dart';
 import 'package:budget_wallet/src/screens/budget.dart';
 import 'package:budget_wallet/src/screens/diagnostics.dart';
 import 'package:budget_wallet/src/screens/settings.dart';
+import 'package:budget_wallet/src/screens/tags_window.dart';
 import 'package:budget_wallet/src/tabs.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:flutter/material.dart';
@@ -230,8 +231,8 @@ void main() {
     final wc = await Harness.start(t, batch: demoBatch(today), settings: {'salary': 100000, 'salaryConfirmed': true, 'paydayDay': 15});
     final pets = await wc.addOwnCategory(name: 'Pets', kind: BudgetKind.flex);
     final vet = await wc.addOwnCategory(name: 'Vet', kind: BudgetKind.flex);
-    await goSettings(t, SettingsSection.tags);
-    await scrollTo(t, find.byKey(const ValueKey('categoryAdd')), SettingsScreen);
+    await goTags(t);
+    await scrollTo(t, find.byKey(ValueKey('category:$vet')), TagsWindow);
     expect(find.byKey(ValueKey('category:$pets')), findsOneWidget);
     expect(find.byKey(ValueKey('category:$vet')), findsOneWidget);
     await Harness.shot(t, 'plan-categories');
@@ -254,7 +255,7 @@ void main() {
     // Plan › Tags: add a tag, see it in the list, rename it, delete it with Undo.
     final tag = await wc.addTag('Holiday');
     await t.pumpAndSettle();
-    await scrollTo(t, find.byKey(ValueKey('tag:$tag')), SettingsScreen);
+    await scrollTo(t, find.byKey(ValueKey('tag:$tag')), TagsWindow);
     await Harness.shot(t, 'plan-tags');
     await tapVisible(t, find.byKey(ValueKey('tagMenu:$tag')));
     await t.pumpAndSettle();
@@ -273,12 +274,14 @@ void main() {
     wc.repo.setMerchantPattern('Shopping', 'webshop', match: 'contains', minCents: 1200, maxCents: 3000);
     wc.repo.setMerchantPattern('Cash', r'^atm\b');
     wc.reload();
-    await goSettings(t, SettingsSection.rules);
-    await scrollTo(t, find.byKey(const ValueKey('rulesAdd')), SettingsScreen);
+    await goTags(t);
+    await scrollTo(t, find.byKey(ValueKey('rule:${wc.settings.patternRules.first.id}')), TagsWindow);
     final id = wc.settings.patternRules.first.id;
     expect(find.byKey(ValueKey('rule:$id')), findsOneWidget);
     await Harness.shot(t, 'plan-rules');
-    await tapVisible(t, find.byKey(const ValueKey('rulesAdd')));
+    await tapVisible(t, find.byKey(const ValueKey('tagsAdd')));
+    await t.pumpAndSettle();
+    await tapVisible(t, find.byKey(const ValueKey('tagsAdd:rule')));
     await t.pumpAndSettle();
     await t.enterText(find.byKey(const ValueKey('ruleText')), 'bakery');
     await t.enterText(find.byKey(const ValueKey('ruleMin')), '5');
