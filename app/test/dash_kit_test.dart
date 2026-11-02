@@ -401,6 +401,28 @@ void main() {
       expect(tester.getCenter(find.text('550')).dy, greaterThan(sat.dy));
     });
 
+    testWidgets('a short tile fills its row: the painted card is as tall as the tallest tile beside it (UX-B)', (tester) async {
+      for (final size in [const Size(360, 800), const Size(411, 800), const Size(1280, 800)]) {
+        await _pump(
+            tester,
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: SingleChildScrollView(
+                child: DashGrid(children: [
+                  StatTile(key: ValueKey('short'), label: 'Short', value: '1 €'),
+                  StatTile(key: ValueKey('tall'), label: 'Tall', value: '2 €', visual: SizedBox(height: 90)),
+                ]),
+              ),
+            ),
+            size: size);
+        expect(_rect(tester, 'tall').height, greaterThan(100));
+        expect(_rect(tester, 'short').height, closeTo(_rect(tester, 'tall').height, 0.5), reason: '$size');
+        // The Material (the white card itself) is as tall too, not only the empty space around it.
+        final card = tester.getRect(find.descendant(of: find.byKey(const ValueKey('short')), matching: find.byType(Material)).first);
+        expect(card.height, closeTo(_rect(tester, 'tall').height, 0.5), reason: '$size');
+      }
+    });
+
     testWidgets('DashItem.rowSpan: a 2x2 hero on four columns, the next tiles fill beside it; ignored where it fills the row',
         (tester) async {
       Widget grid() => Padding(

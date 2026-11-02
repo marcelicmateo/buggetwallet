@@ -23,6 +23,7 @@ import 'look_panel.dart';
 import 'settings_panels.dart';
 import 'setup_wizard.dart';
 import 'sync_panel.dart';
+import 'today_tiles_panel.dart';
 
 /// The panels of [section], unchanged from the Plan tab. The first one carries the section's key from [keys] (the one page scrolls to it).
 List<Widget> settingsPanels(BuildContext context, WalletController wc, SettingsSection section,
@@ -45,7 +46,7 @@ List<Widget> settingsPanels(BuildContext context, WalletController wc, SettingsS
         if (!isWeb) NudgesPanel(wc: wc),
         ReviewDayPanel(wc: wc),
       ],
-    SettingsSection.look => [keyed(LookPanel(wc: wc))],
+    SettingsSection.look => [keyed(LookPanel(wc: wc)), TodayTilesPanel(wc: wc)],
     SettingsSection.diagnostics => [keyed(DiagnosticsPanel(wc: wc, chooser: chooser))],
     SettingsSection.currencies => const [],
   };

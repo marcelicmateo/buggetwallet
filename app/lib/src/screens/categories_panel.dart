@@ -1,4 +1,4 @@
-// Plan › Main tags (P1, T1): the built-in categories and the owner's own, grouped by kind. A main tag decides the money (budgets, plan,
+// Budget › Tags (main tags) (P1, T1): the built-in categories and the owner's own, grouped by kind. A main tag decides the money (budgets, plan,
 // safe-to-spend); the extra tags for tracking are in tags_panel.dart. Add / rename / hide / move / delete with Undo. The rules (unique
 // names, at most 200) are core's; its `ArgumentError` text is shown under the field or in a toast.
 import 'package:flutter/material.dart';
@@ -42,14 +42,9 @@ class CategoriesPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = wc.categoryTable;
     return Panel(children: [
-      SectionHead('Main tags',
-          trailing: TextButton.icon(
-              key: const ValueKey('categoryAdd'),
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Add'),
-              onPressed: () => openAddCategory(context, wc))),
+      const SectionHead('Main tags'),
       Explainer(wc, 'categories',
-          'A payment has one main tag. It decides what the payment counts for: budgets, your plan and what is safe to spend. Add your own next to the built-in ones. Hide one to stop it showing in pickers. For more detail, give a payment extra tags (Budget › Tags).'),
+          'A payment has one main tag. It decides what the payment counts for: budgets, your plan and what is safe to spend. Add your own next to the built-in ones. Hide one to stop it showing in pickers. For more detail, give a payment extra tags.'),
       for (final (id, title, kinds) in _groups) ...[
         Padding(
           padding: const EdgeInsets.only(top: 6),

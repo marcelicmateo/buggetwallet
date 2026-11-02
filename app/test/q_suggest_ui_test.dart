@@ -1,7 +1,6 @@
 // Stage Q1 + Q6 UI: the main tag chips and the payee list under the Add expense note, and the payee-rule suggestions (the toast after a
 // hand-set main tag, Plan › Rules › Suggested). Nothing is ever applied without a tap. All data is SYNTHETIC.
 import 'package:budget_wallet/src/controller.dart';
-import 'package:budget_wallet/src/screens/rules_panel.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,6 +8,7 @@ import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
 import 'support/seams.dart';
+import 'support/tags_window.dart';
 import 'support/wallet.dart';
 
 const _timeout = Timeout(Duration(seconds: 60));
@@ -329,13 +329,12 @@ void main() {
       expect(wc.takeRuleOffer(), isNull);
     });
 
-    testWidgets('Rules › Suggested lists the payee; Make rule makes it with an Undo', (t) async {
+    testWidgets('Budget › Tags › Recommendations lists the payee; Accept makes the rule with an Undo', (t) async {
       final wc = konzumWallet(chosen: 3);
       addTearDown(wc.dispose);
-      await pumpApp(
-          t, ListenableBuilder(listenable: wc, builder: (_, __) => Scaffold(body: SingleChildScrollView(child: RulesPanel(wc: wc)))));
+      await pumpApp(t, tagsWindow(wc));
       expect(k('ruleSuggest:$konzum'), findsOneWidget);
-      expect(find.text('Suggested'), findsOneWidget);
+      expect(k('tagsRecommendations'), findsOneWidget);
       await tapKey(t, 'ruleSuggestMake:$konzum');
       expect(wc.categorizer.merchantRules[konzum], 'Eating out');
       expect(k('ruleSuggest:$konzum'), findsNothing);
@@ -349,8 +348,7 @@ void main() {
     testWidgets('Dismiss hides it, and it stays hidden after a reload and in a new controller on the same data', (t) async {
       final wc = konzumWallet(chosen: 3);
       addTearDown(wc.dispose);
-      await pumpApp(
-          t, ListenableBuilder(listenable: wc, builder: (_, __) => Scaffold(body: SingleChildScrollView(child: RulesPanel(wc: wc)))));
+      await pumpApp(t, tagsWindow(wc));
       await tapKey(t, 'ruleSuggestDismiss:$konzum');
       expect(k('ruleSuggest:$konzum'), findsNothing);
       expect(wc.categorizer.merchantRules, isEmpty, reason: 'dismissing makes no rule');
@@ -366,9 +364,7 @@ void main() {
     testWidgets('the suggested list fits 320 dp at text scale 2.0', (t) async {
       final wc = konzumWallet(chosen: 3);
       addTearDown(wc.dispose);
-      await pumpApp(
-          t, ListenableBuilder(listenable: wc, builder: (_, __) => Scaffold(body: SingleChildScrollView(child: RulesPanel(wc: wc)))),
-          size: const Size(320, 640), textScale: 2);
+      await pumpApp(t, tagsWindow(wc), size: const Size(320, 640), textScale: 2);
       expect(k('ruleSuggest:$konzum'), findsOneWidget);
       expect(t.takeException(), isNull);
       await settle(t);

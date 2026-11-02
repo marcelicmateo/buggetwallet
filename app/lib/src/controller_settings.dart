@@ -102,6 +102,29 @@ extension DeviceSettings on WalletController {
     notifyListeners();
   }
 
+  /// The Today number tiles, in their default order (UX-B B4). The tiles that need action are not here: they always come first.
+  static const todayTileIds = ['left', 'payday', 'before', 'budget', 'held', 'income', 'reviewed', 'foreign', 'add', 'recent'];
+
+  /// The order of the Today number tiles (every id once) and the hidden ones. Device-local, never synced. Stored as
+  /// `order|hidden` (ids, comma separated); an unknown id is ignored, a tile missing from the list is appended.
+  ({List<String> order, Set<String> hidden}) get todayTiles {
+    final parts = (repo.localValue('todayTiles') ?? '|').split('|');
+    List<String> ids(String s) => s.split(',').where(todayTileIds.contains).toList();
+    final order = ids(parts[0]).toSet().toList();
+    return (
+      order: [...order, ...todayTileIds.where((id) => !order.contains(id))],
+      hidden: parts.length > 1 ? ids(parts[1]).toSet() : <String>{}
+    );
+  }
+
+  /// Saves the order and the hidden tiles (nothing stored when it equals the default).
+  void setTodayTiles(List<String> order, Set<String> hidden) {
+    final isDefault = hidden.isEmpty && order.join(',') == todayTileIds.join(',');
+    repo.setLocalValue('todayTiles', isDefault ? null : '${order.join(',')}|${hidden.join(',')}');
+    logEvent(_log, Level.INFO, 'today.tiles', {'hidden': hidden.length});
+    notifyListeners();
+  }
+
   /// Whether the explainer paragraphs (the muted text under section heads) have been shown once. Device-local.
   bool explainerSeen(String key) => repo.localValue('explainer:$key') != null;
 

@@ -10,6 +10,7 @@ import 'budgets.dart';
 import 'habits_panels.dart' show ExpectedIncomePanel;
 import 'payday_plan.dart';
 import 'spending.dart';
+import 'tags_window.dart';
 
 /// The Budget tab (RX4): two dashboards behind a **Spending | Plan** switch. Spending answers "where did it go?", Plan "where will
 /// the salary go?". The choice is remembered on the device (`wc.budgetView`, default Spending); Today's links pick the page they mean
@@ -90,7 +91,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
           logNav('budget.view', {'view': v});
           wc.setBudgetView(v);
         });
-    return IndexedStack(index: view == 'plan' ? 1 : 0, sizing: StackFit.expand, children: [
+    return IndexedStack(index: switch (view) { 'plan' => 1, 'tags' => 2, _ => 0 }, sizing: StackFit.expand, children: [
       SpendingScreen(wc: wc, searchRequest: widget.searchRequest, openTab: widget.openTab, openBills: widget.openBills, switcher: switcher),
       MarginLine(
         child: ListView(
@@ -103,11 +104,13 @@ class _BudgetScreenState extends State<BudgetScreen> {
               BudgetsPanel(key: const ValueKey('budgetsPanel'), wc: wc),
             ])),
       ),
+      // Built only while shown: three long lists need not be laid out behind the other pages.
+      view == 'tags' ? TagsWindow(wc: wc, switcher: switcher) : const SizedBox.shrink(),
     ]);
   }
 }
 
-/// The Spending | Plan switch (`budgetSwitch`; segments `budgetSpending`, `budgetPlan`): the chosen segment has a tick and a tint.
+/// The Spending | Plan | Tags switch (`budgetSwitch`; segments `budgetSpending`, `budgetPlan`, `budgetTags`): the chosen segment has a tick and a tint.
 class BudgetSwitch extends StatelessWidget {
   final String view;
   final ValueChanged<String> onChanged;
@@ -121,6 +124,7 @@ class BudgetSwitch extends StatelessWidget {
         segments: const [
           ButtonSegment(value: 'spending', label: Text('Spending', key: ValueKey('budgetSpending'), maxLines: 1)),
           ButtonSegment(value: 'plan', label: Text('Plan', key: ValueKey('budgetPlan'), maxLines: 1)),
+          ButtonSegment(value: 'tags', label: Text('Tags', key: ValueKey('budgetTags'), maxLines: 1)),
         ],
         selected: {view},
         onSelectionChanged: (s) => onChanged(s.first),

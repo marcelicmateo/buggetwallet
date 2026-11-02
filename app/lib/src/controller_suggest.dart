@@ -144,9 +144,11 @@ extension SuggestDb on WalletController {
   }
 
   // ---------- Q6: payee rules offered ----------
-  /// Payee keys the owner dismissed in Rules › Suggested (device-local `ruleSuggestOff`, a JSON list).
-  Set<String> get ruleSuggestOff {
-    final raw = repo.localValue('ruleSuggestOff');
+  /// Payee keys the owner dismissed in Budget › Tags › Recommendations (device-local `ruleSuggestOff`, a JSON list).
+  Set<String> get ruleSuggestOff => _localKeys('ruleSuggestOff');
+
+  Set<String> _localKeys(String name) {
+    final raw = repo.localValue(name);
     if (raw == null || raw.isEmpty) return const {};
     try {
       final v = jsonDecode(raw);
@@ -159,6 +161,25 @@ extension SuggestDb on WalletController {
     } on FormatException {
       return const {};
     }
+  }
+
+  /// Payees with no main tag that keep coming back (at least [_recurring] payments), minus the ones dismissed on this device. Cached.
+  List<PayeeCount> payeeRecommendations({int limit = 5}) {
+    final off = _localKeys('payeeRecOff');
+    return [
+      for (final p in uncategorisedPayeeList(limit: 50))
+        if (p.count >= _recurring && !off.contains(p.merchantKey)) p
+    ].take(limit).toList();
+  }
+
+  static const _recurring = 2;
+
+  /// Hides the "no main tag" recommendation for payee [key] on this device (never synced); nothing else changes.
+  void dismissPayeeRecommendation(String key) {
+    final off = {..._localKeys('payeeRecOff'), key};
+    repo.setLocalValue('payeeRecOff', jsonEncode(off.toList()..sort()));
+    logEvent(_suggestLog, Level.INFO, 'payeeRec.dismiss', {'dismissed': off.length});
+    notifyListeners();
   }
 
   /// The payee rules to offer in Rules › Suggested. Cached per data version and dismissal list.

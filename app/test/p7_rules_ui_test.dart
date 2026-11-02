@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
 
+import 'support/tags_window.dart';
 import 'support/wallet.dart';
 
 const _timeout = Timeout(Duration(seconds: 90));
@@ -43,8 +44,7 @@ WalletController rulesWallet() {
   return wc;
 }
 
-Widget rulesPanel(WalletController wc) =>
-    ListenableBuilder(listenable: wc, builder: (_, __) => Scaffold(body: SingleChildScrollView(child: RulesPanel(wc: wc))));
+Widget rulesPanel(WalletController wc) => panelWithAdd(wc, () => RulesPanel(wc: wc));
 
 String patternId(WalletController wc, String text) => wc.settings.patternRules.firstWhere((p) => p.pattern == text).id;
 
@@ -139,7 +139,7 @@ void main() {
     testWidgets('a description-contains rule with an amount range', (t) async {
       final wc = rulesWallet();
       await pumpApp(t, rulesPanel(wc), size: const Size(400, 1600));
-      await tapKey(t, 'rulesAdd');
+      await tapAdd(t, 'rule');
       expect(k('ruleMode:contains'), findsOneWidget);
       await t.enterText(k('ruleText'), '  LÍDL ');
       await t.enterText(k('ruleMin'), '12');
@@ -158,7 +158,7 @@ void main() {
     testWidgets('a range without text is refused', (t) async {
       final wc = rulesWallet();
       await pumpApp(t, rulesPanel(wc), size: const Size(400, 1600));
-      await tapKey(t, 'rulesAdd');
+      await tapAdd(t, 'rule');
       await t.enterText(k('ruleMin'), '10');
       await pickMain(t, 'Shopping');
       await tapKey(t, 'ruleSave');
@@ -171,7 +171,7 @@ void main() {
     testWidgets("core's message shows under the field, and a bad range under its fields", (t) async {
       final wc = rulesWallet();
       await pumpApp(t, rulesPanel(wc), size: const Size(400, 1800));
-      await tapKey(t, 'rulesAdd');
+      await tapAdd(t, 'rule');
       await tapKey(t, 'ruleMode:regex');
       expect(k('ruleMin'), findsNothing, reason: 'a range works with description contains only');
       await t.enterText(k('ruleText'), '(');
@@ -197,7 +197,7 @@ void main() {
     testWidgets('switching to regex clears a typed range and says why', (t) async {
       final wc = rulesWallet();
       await pumpApp(t, rulesPanel(wc), size: const Size(400, 1800));
-      await tapKey(t, 'rulesAdd');
+      await tapAdd(t, 'rule');
       await t.enterText(k('ruleMin'), '10');
       await tapKey(t, 'ruleMode:regex');
       expect(find.text("Amount ranges work with 'description contains' only."), findsOneWidget);
@@ -213,7 +213,7 @@ void main() {
       final holiday = await wc.addTag('Holiday');
       wc.reload();
       await pumpApp(t, rulesPanel(wc), size: const Size(400, 2000));
-      await tapKey(t, 'rulesAdd');
+      await tapAdd(t, 'rule');
       await tapKey(t, 'ruleMode:payee');
       expect(k('ruleMin'), findsNothing, reason: 'payee rules have no range');
       await t.tap(k('rulePayee'));
@@ -233,7 +233,7 @@ void main() {
     testWidgets('no main tag picked is refused', (t) async {
       final wc = rulesWallet();
       await pumpApp(t, rulesPanel(wc), size: const Size(400, 1600));
-      await tapKey(t, 'rulesAdd');
+      await tapAdd(t, 'rule');
       await t.enterText(k('ruleText'), 'lidl');
       await tapKey(t, 'ruleSave');
       expect(k('ruleCatError'), findsOneWidget);
@@ -438,7 +438,7 @@ void main() {
         expect(t.takeException(), isNull);
         await t.tapAt(const Offset(2, 2));
         await t.pump(const Duration(milliseconds: 400));
-        await tapKey(t, 'rulesAdd');
+        await tapAdd(t, 'rule');
         expect(t.takeException(), isNull);
         await tapKey(t, 'ruleMode:payee');
         await tapKey(t, 'rulePreview');
