@@ -371,6 +371,13 @@ class WalletController extends ChangeNotifier {
   (int, int, String)? _needsKey;
   List<NeedsYouItem>? _needsVal;
 
+  /// Values that read every payment (`_heavy`): the last one, and the (data version, day) it was worked out for.
+  final Map<String, Object?> _heavyLast = {};
+  final Map<String, (int, String)> _heavyAt = {};
+
+  /// Set when a screen was given an old value; the idle warm-up step that catches up tells the screens.
+  bool _heavyWanted = false;
+
   bool _disposed = false;
 
   /// An ECB download is running (UX-FX, `controller_ecb.dart`): one at a time; the Currencies panel shows it.

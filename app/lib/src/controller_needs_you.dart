@@ -81,6 +81,31 @@ extension NeedsYou on WalletController {
     return items;
   }
 
+  /// A value that reads every payment (200 ms or more on a big wallet, too long for a frame). With the background work on, right after
+  /// a data change the last value is returned instead of working the new one out in the frame that asks; the idle warm-up steps
+  /// (`force`) work it out, then [warmNeedsYou] tells the screens. The first time, and with the background work off, it is worked out at once.
+  T _heavy<T>(String name, T Function() compute, {bool force = false}) {
+    final at = (dataVersion, today());
+    if (!force && WarmUp.enabled && _heavyAt[name] != at && _heavyLast.containsKey(name)) {
+      _heavyWanted = true;
+      return _heavyLast[name] as T;
+    }
+    _heavyAt[name] = at;
+    final v = compute();
+    _heavyLast[name] = v;
+    return v;
+  }
+
+  /// Idle warm-up step, after the heavy values are worked out: builds the queue again and tells the screens if they were given old values.
+  void warmNeedsYou() {
+    _needsKey = null;
+    needsYouItems();
+    if (_heavyWanted) {
+      _heavyWanted = false;
+      notifyListeners();
+    }
+  }
+
   /// How many cards the queue has: the number on the Overview badge.
   int needsYouCount() => needsYouItems().length;
 

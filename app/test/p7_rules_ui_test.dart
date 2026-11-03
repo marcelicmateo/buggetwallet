@@ -4,6 +4,7 @@
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/screens/rules_panel.dart';
 import 'package:budget_wallet/src/theme.dart';
+import 'package:budget_wallet/src/warm_up.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -119,6 +120,19 @@ void main() {
       await pumpApp(t, rulesPanel(wc), size: const Size(400, 1600));
       expect(k('rulesEmpty'), findsOneWidget);
       expect(k('builtInToggle'), findsOneWidget);
+      wc.dispose();
+    });
+
+    test('with the background work on, the counts stay as they were until the idle warm-up step has the new ones', () {
+      WarmUp.enabled = true;
+      addTearDown(() => WarmUp.enabled = false);
+      final wc = rulesWallet();
+      final first = wc.ruleUseCounts();
+      wc.reload();
+      expect(identical(wc.ruleUseCounts(), first), isTrue, reason: 'the frame after a data change does not read every payment again');
+      final fresh = wc.ruleUseCounts(force: true);
+      expect(identical(fresh, first), isFalse);
+      expect(identical(wc.ruleUseCounts(), fresh), isTrue);
       wc.dispose();
     });
 

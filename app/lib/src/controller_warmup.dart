@@ -66,6 +66,12 @@ extension WarmUpTasks on WalletController {
       for (var tab = 0; tab < Tabs.names.length; tab++)
         for (final t in warmUpTasksFor(tab))
           if (t.$1 == 'monthSummary' || t.$1 == 'pin' || seen.add(t.$1)) t,
+      // Idle only, never the per-tab steps of a tab opened early: each reads every payment (`_heavy`). Until they are done the screens
+      // show the last Needs-you cards, suggestions and rule counts; [warmNeedsYou] then builds the queue again and tells them.
+      ('payees', () => payeeCandidates(force: true)),
+      ('ruleSuggest', () => ruleSuggestionsNow(force: true)),
+      ('ruleUseCounts', () => ruleUseCounts(force: true)),
+      ('needsRules', warmNeedsYou),
       for (final id in insightGraphs) ('insights.$id', () => _warmInsight(id)),
     ];
   }

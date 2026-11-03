@@ -58,11 +58,15 @@ void main() {
       }
     }, reportKey: '${perfPrefix}spending_scroll');
 
-    // Every tab, twice
+    // Every tab, four times (the shell has four destinations plus Settings, so a round makes fewer frames than before: each switch is
+    // followed by a few frames of the fade). 'Explore' is the tab itself; 'Budget' would also open Spending (its own cost, see spending_scroll).
     await binding.traceAction(() async {
-      for (var r = 0; r < 2; r++) {
-        for (final tab in ['Budget', 'Bills', 'Save', 'Settings', 'Today']) {
+      for (var r = 0; r < 4; r++) {
+        for (final tab in ['Explore', 'Bills', 'Save', 'Settings', 'Today']) {
           await goTab(t, tab);
+          for (var i = 0; i < 3; i++) {
+            await t.pump(const Duration(milliseconds: 16));
+          }
         }
       }
     }, reportKey: '${perfPrefix}tab_switch');

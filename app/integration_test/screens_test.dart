@@ -240,6 +240,9 @@ void main() {
     await binding.takeScreenshot('3-bill-warranty');
     Navigator.of(tester.element(find.byType(BillSheet))).pop();
     await tester.pumpAndSettle();
+    // The bills database is a page on a phone (it covers the bottom bar) and a dialog on a wide window: close it either way.
+    Navigator.of(tester.element(find.byType(BillsScreen))).pop();
+    await tester.pumpAndSettle();
 
     // Settings (P5): one page on a phone, two panes on a wide window (a section is then picked in the list). The page that holds
     // the panels is looked up again each time: it is another list after a section is picked.
