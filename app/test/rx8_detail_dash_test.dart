@@ -7,6 +7,7 @@ import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/insights_api.dart';
 import 'package:budget_wallet/src/screens/category_detail.dart';
 import 'package:budget_wallet/src/theme.dart';
+import 'package:budget_wallet/src/widgets/common.dart' show TxTile;
 import 'package:budget_wallet/src/widgets/dash.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -181,7 +182,12 @@ void main() {
       expect(find.descendant(of: _k('compareDelta'), matching: find.text('2 % vs Sep')), findsOneWidget);
       expect(inTile('compareLast', moneyExact(29000, 'EUR')), findsOneWidget);
       expect(inTile('compareAverage', moneyExact(cmp.average6, 'EUR')), findsOneWidget);
-      expect(cmp.average6, 29000, reason: 'the average is over the months that have spending: only September before October');
+      // Core's rule: the mean of the 6 months before, always divided by 6 (April to September here, 29000 each).
+      final before = [
+        for (final m in ['04', '05', '06', '07', '08', '09']) wc.categoryTotal('Groceries', wc.monthRange('2026-$m'))
+      ];
+      expect(cmp.average6, (before.fold<int>(0, (a, b) => a + b) / 6).round());
+      expect(cmp.average6, 29000);
       expect(_k('detailBars_category'), findsOneWidget);
       // One month is ~30 day bars: the rows follow them (they are hidden only when there is a single bar), and add up to the hero.
       final days = wc.spendingSeriesFor(r, bucketFor(r), category: 'Groceries');
@@ -288,6 +294,11 @@ void main() {
       await tester.tap(_k('merchantRow_${lidl.key}'));
       await tester.pump(const Duration(milliseconds: 400));
       expect(_k('merchantRows'), findsOneWidget);
+      expect(find.descendant(of: _k('merchantRows'), matching: find.byType(TxTile)),
+          findsNWidgets(wc.rowsOf('Groceries', lidl.key, r).length));
+      // The sentence is behind the (i), not on the tile.
+      expect(_k('paymentsInfo'), findsOneWidget);
+      expect(find.text('Tap a payment to change it.'), findsNothing);
       expect(heroIs('detailTotal', moneyExact(lidl.spent, 'EUR')), findsOneWidget);
       expect(_k('detailBack'), findsOneWidget);
       await tester.tap(_k('detailBack'));

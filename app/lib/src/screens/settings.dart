@@ -133,13 +133,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
             return _twoPane ? _twoPanes(context) : _onePage(context);
           }));
 
+  SettingsSection _before(SettingsSection s) => SettingsSection.listed[SettingsSection.listed.indexOf(s) - 1];
+
   Widget _onePage(BuildContext context) => NarrowPage(
         child: ListView(
           key: const ValueKey('settingsPage'),
           controller: _scroll,
           padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, pageBottomPad),
           children: gapped([
-            for (final s in SettingsSection.listed) ..._panels(s),
+            for (final s in SettingsSection.listed) ...[
+              // A visual grouping only (each panel below names itself): left out of the semantics because Flutter's contrast guideline
+              // samples a partly scrolled-out text node at the wrong place (its y offset is lost) and fails it on any scroll position.
+              if (s == SettingsSection.listed.first || s.group != _before(s).group) ExcludeSemantics(child: Eyebrow(s.group)),
+              ..._panels(s),
+            ],
             _NavGroup([_SetupAgainRow(wc: widget.wc, chooser: widget.chooser)]),
           ]),
         ),
@@ -272,21 +279,24 @@ class _NavRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => _IndexRow(
         rowKey: ValueKey('settingsNav:${section.name}'),
-        icon: _icons[section.nav]!,
+        icon: section.nav.icon,
         title: section.title,
         sub: section.sub,
         selected: selected,
         onTap: onTap,
       );
+}
 
-  static const _icons = {
-    SettingsSection.accounts: Icons.account_balance_wallet_outlined,
-    SettingsSection.tags: Icons.sell_outlined,
-    SettingsSection.import: Icons.file_download_outlined,
-    SettingsSection.sync: Icons.sync,
-    SettingsSection.backup: Icons.save_outlined,
-    SettingsSection.calendars: Icons.notifications_none,
-    SettingsSection.look: Icons.contrast,
-    SettingsSection.diagnostics: Icons.notes,
-  };
+extension on SettingsSection {
+  /// The icon of the section's row in the list (a section that is only a place inside another uses that one's).
+  IconData get icon => switch (this) {
+        SettingsSection.accounts || SettingsSection.currencies => Icons.account_balance_wallet_outlined,
+        SettingsSection.tags => Icons.sell_outlined,
+        SettingsSection.import => Icons.file_download_outlined,
+        SettingsSection.sync => Icons.sync,
+        SettingsSection.backup => Icons.save_outlined,
+        SettingsSection.calendars => Icons.notifications_none,
+        SettingsSection.look => Icons.contrast,
+        SettingsSection.diagnostics => Icons.notes,
+      };
 }

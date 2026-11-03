@@ -65,7 +65,7 @@ void main() {
       await settle(t);
     }, timeout: _timeout);
 
-    testWidgets('the wide Settings list groups its sections under headings (ENG E7b)', (t) async {
+    testWidgets('the Settings list and the phone page group their sections under headings (ENG E7b)', (t) async {
       final wc = untaggedWallet();
       addTearDown(wc.dispose);
       await pumpApp(t, Scaffold(body: SettingsScreen(wc: wc)), size: const Size(1200, 900));
@@ -74,6 +74,9 @@ void main() {
         expect(find.text(g), findsOneWidget, reason: g);
       }
       expect(k('settingsNav:tags'), findsOneWidget);
+      await pumpApp(t, Scaffold(body: SettingsScreen(wc: wc)), size: const Size(400, 900));
+      await t.pump(const Duration(milliseconds: 300));
+      expect(find.text('YOUR MONEY'), findsOneWidget, reason: 'the phone page shows the groups too');
       await settle(t);
     }, timeout: _timeout);
 

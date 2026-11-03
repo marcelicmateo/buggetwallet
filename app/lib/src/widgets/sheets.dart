@@ -675,6 +675,7 @@ class _TxSheetState extends State<TxSheet> {
     final t = row.tx;
     final manual = t.source == 'manual';
     final bill = widget.wc.billForTx(t.id);
+    final loan = _loanSection(context), iou = _iouSection(context);
     final src = switch (t.source) { 'pbz' => 'PBZ', 'revolut' => 'Revolut', _ => 'Added by you' };
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Heading(merchantName(t)),
@@ -704,7 +705,6 @@ class _TxSheetState extends State<TxSheet> {
         Padding(
             padding: const EdgeInsets.only(top: 8),
             child: SelectableText(t.description, style: const TextStyle(fontSize: BwType.metaSize))),
-      if (accountError != null) StatusLabel(key: const ValueKey('txAccountError'), good: false, text: accountError!),
       const SizedBox(height: 12),
       Panel(children: [
         MainTagPicker(
@@ -755,18 +755,16 @@ class _TxSheetState extends State<TxSheet> {
       ]),
       if (_accountSection(context) case final acct?) ...[
         const SizedBox(height: 12),
-        Panel(children: [acct])
-      ],
-      if (canSplit || _loanSection(context) != null || _iouSection(context) != null) ...[
-        const SizedBox(height: 12),
         Panel(children: [
-          if (canSplit) _splitSection(context),
-          if (_loanSection(context) case final w?) w,
-          if (_iouSection(context) case final w?) w,
-        ]),
+          acct,
+          if (accountError != null) StatusLabel(key: const ValueKey('txAccountError'), good: false, text: accountError!),
+        ])
       ],
-      const SizedBox(height: 4),
-      const SizedBox(height: 8),
+      if (canSplit || loan != null || iou != null) ...[
+        const SizedBox(height: 12),
+        Panel(children: [if (canSplit) _splitSection(context), if (loan != null) loan, if (iou != null) iou]),
+      ],
+      const SizedBox(height: 12),
       Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 8, children: [
         FilledButton(
           onPressed: saving

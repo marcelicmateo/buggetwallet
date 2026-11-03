@@ -1,4 +1,4 @@
-// Budget › Tags (rules) (P7, spec docs/context/P7_SPEC.md): the rules that choose a payment's main tag, with how many payments each one decided.
+// Settings › Tags and rules (rules) (P7, spec docs/context/P7_SPEC.md): the rules that choose a payment's main tag, with how many payments each one decided.
 // Payee rules ("always use this main tag for <payee>", maybe with tags), text patterns (description contains / regex, with an optional
 // amount range) and the built-in rules (collapsed; editable like the others). Rules never use the amount alone: a range only narrows a text rule.
 // The lists and counts come from the controller (once per data version); core's `ArgumentError` text shows under the field.

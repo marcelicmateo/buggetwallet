@@ -331,7 +331,7 @@ void main() {
       expect(wc.takeRuleOffer(), isNull);
     });
 
-    testWidgets('Budget › Tags › Recommendations lists the payee; Accept makes the rule with an Undo', (t) async {
+    testWidgets('Settings › Tags and rules › Recommendations lists the payee; Accept makes the rule with an Undo', (t) async {
       final wc = konzumWallet(chosen: 3);
       addTearDown(wc.dispose);
       await pumpApp(t, tagsWindow(wc));
