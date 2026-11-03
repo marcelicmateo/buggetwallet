@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -106,7 +107,7 @@ func (c *Ctx) PruneRuns() {
 		return
 	}
 	defer unix.Flock(int(lock.Fd()), unix.LOCK_UN)
-	c.TrimHistory(HistoryDays)
+	c.trimHistoryDaily()
 	ents, err := os.ReadDir(filepath.Join(c.Data, "runs"))
 	if err != nil {
 		return
@@ -184,6 +185,24 @@ func (c *Ctx) WriteLast(dir string, code int) {
 	_ = os.WriteFile(filepath.Join(dir, "last-failed.txt"), []byte(failed.String()), 0o644)
 }
 
+// MarkIncomplete writes "<name> incomplete" into the per-command result files at the start of a command; Finish replaces it.
+func (c *Ctx) MarkIncomplete(name string) {
+	_ = os.MkdirAll(filepath.Join(c.Root, "dist"), 0o755)
+	_ = os.WriteFile(filepath.Join(c.Root, "dist", "last-failed."+name+".txt"), []byte(name+" incomplete (no result written: usage error, killed or crashed)\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(c.Root, "dist", "last."+name+".status"), []byte(name+" incomplete 0\n"), 0o644)
+}
+
+// trimHistoryDaily runs TrimHistory at most once a day (stamp file history/.trimmed; the caller holds .prune.lock).
+func (c *Ctx) trimHistoryDaily() {
+	stamp := filepath.Join(c.Data, "history", ".trimmed")
+	if st, err := os.Stat(stamp); err == nil && c.Clock().Sub(st.ModTime()) < 24*time.Hour {
+		return
+	}
+	c.TrimHistory(HistoryDays)
+	_ = os.WriteFile(stamp, nil, 0o644)
+	_ = os.Chtimes(stamp, c.Clock(), c.Clock())
+}
+
 // HistoryDays is how long history rows (and *.bak-* copies) are kept.
 const HistoryDays = 30
 
@@ -194,6 +213,10 @@ func (c *Ctx) TrimHistory(days int) {
 	dir := filepath.Join(c.Data, "history")
 	cut := c.Clock().AddDate(0, 0, -days)
 	cutTS := cut.UTC().Format("2006-01-02T15:04:05")
+	stale, _ := filepath.Glob(filepath.Join(dir, ".trim-*")) // left by a crash mid-trim
+	for _, t := range stale {
+		_ = os.Remove(t)
+	}
 	baks, _ := filepath.Glob(filepath.Join(dir, "*.bak-*"))
 	for _, b := range baks {
 		if st, err := os.Stat(b); err == nil && st.ModTime().Before(cut) {
@@ -217,6 +240,7 @@ func trimFile(path, cutTS string) {
 		return
 	}
 	defer os.Remove(tmp.Name())
+	defer tmp.Close()
 	w := bufio.NewWriterSize(tmp, 1<<20)
 	r := bufio.NewReaderSize(f, 1<<20)
 	var read int64
@@ -227,8 +251,7 @@ func trimFile(path, cutTS string) {
 			break // a partial last line is left for the tail copy
 		}
 		read += int64(len(line))
-		const pre = `{"ts":"`
-		if s := string(line); strings.HasPrefix(s, pre) && len(s) >= len(pre)+19 && s[len(pre):len(pre)+19] < cutTS {
+		if rowTime(line) < cutTS && rowTime(line) != "" {
 			dropped = true
 			continue
 		}
@@ -244,9 +267,23 @@ func trimFile(path, cutTS string) {
 	if _, err := f.Seek(read, io.SeekStart); err != nil {
 		return
 	}
-	if _, err := io.Copy(w, f); err != nil || w.Flush() != nil || tmp.Close() != nil {
+	if _, err := io.Copy(w, f); err != nil || w.Flush() != nil {
+		return
+	}
+	if tmp.Close() != nil {
 		return
 	}
 	_ = os.Chmod(tmp.Name(), 0o644)
 	_ = os.Rename(tmp.Name(), path)
+}
+
+var rowTimeRe = regexp.MustCompile(`"(?:ts|time)": ?"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)`)
+
+// rowTime is the first 19 characters of the row's "ts" (steps, tests) or "time" (perf) value, both with or without a space
+// after the colon (PyJSON writes one); "" when the row has none.
+func rowTime(line []byte) string {
+	if m := rowTimeRe.FindSubmatch(line); m != nil {
+		return string(m[1])
+	}
+	return ""
 }

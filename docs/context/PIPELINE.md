@@ -19,7 +19,7 @@ suites stay serialized (one Haiku run per stage); builders run only targeted che
   `grep -n` + line ranges, never whole files, build output by result line + failures, screenshots downscaled to 540 px.
   **Build output: no pipes** (owner 2026-11-01). A pipe reports the last command's status (`build | tail` says 0
   when tests fail). Use quiet mode and branch on the build's own exit code:
-  `tools/build.sh -q <cmd> || cat dist/last-failed.<cmd>.txt` (also `tools/emulator.sh -q`): nothing is printed when it is green,
+  `make Q=1 <cmd> || cat dist/last-failed.<cmd>.txt` (emulator: `make Q=1 emulator-test || cat dist/last-failed.emulator-test.txt`): nothing is printed when it is green,
   the failed steps with their log paths when not; read the named log's tail only if needed. Never judge a run by a piped
   command's exit code.
   Measure with `python3 -I tools/token-usage.py` (baseline in memory: ~2.9M tokens/commit before 2026-10-21).
