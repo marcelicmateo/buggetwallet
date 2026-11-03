@@ -465,7 +465,9 @@ class _TodayLine extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(key: const ValueKey('moneyToday'), children: [
           Expanded(child: SizedBox(height: 1, child: CustomPaint(painter: _Rule(c.accent)))),
+          // flex 100: the label gets its whole width before the two rules share what is left.
           Flexible(
+            flex: 100,
             child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 child: Text('TODAY · ${shortDateOrRaw(date).toUpperCase()}',

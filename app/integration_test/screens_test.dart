@@ -342,8 +342,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(ReviewScreen), findsOneWidget);
     await binding.takeScreenshot('7-review');
-    if (find.text('Looks right').evaluate().isNotEmpty) {
-      await tester.tap(find.text('Looks right').first);
+    final looksRight = find.descendant(of: find.byType(ReviewScreen), matching: find.text('Looks right')); // not the pane's salary card
+    if (looksRight.evaluate().isNotEmpty) {
+      await tester.tap(looksRight.first);
       await tester.pumpAndSettle();
     }
     await tester.tap(find.byTooltip('Close').last);
