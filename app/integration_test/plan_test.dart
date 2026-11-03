@@ -125,6 +125,8 @@ void main() {
         findsOneWidget);
     expect(
         find.descendant(of: find.byKey(const ValueKey('planPerDay')), matching: find.text(moneyExact(p.planDaily, 'EUR'))), findsOneWidget);
+    debugPrint(
+        'DBG tab=${t.widget<IndexedStack>(find.byWidgetPredicate((w) => w is IndexedStack && w.children.length == 5)).index} plan=${find.byType(PlanScreen).evaluate().length} payday=${find.byKey(const ValueKey('planPayday')).evaluate().length} saving=${find.byKey(const ValueKey('planSaving')).evaluate().length}');
     await goTab(t, 'Save');
     expect(find.text('Over 80\u00A0€ waits 48 h'), findsOneWidget);
     await goTab(t, 'Today');
@@ -349,6 +351,8 @@ void main() {
         NormalizedBill(source: BillSource.manual, externalId: 'gym-slip', date: on(2), total: 3050, payee: 'POS SYNTHGYM ZAGREB'));
     wc.reload();
     await goTab(t, 'Bills');
+    await tapVisible(t, find.byKey(const ValueKey('billsOpen')));
+    await t.pumpAndSettle();
     await scrollTo(t, find.byKey(ValueKey('billHistory_${bill.id}')), BillsScreen);
     await Harness.shot(t, 'plan-bill-row');
     await tapVisible(t, find.byKey(ValueKey('billHistory_${bill.id}')));

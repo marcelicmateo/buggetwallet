@@ -30,6 +30,10 @@ class TodayView implements Listenable {
   @override
   void removeListener(VoidCallback listener) => _wc.removeListener(listener);
 
+  /// The controller, for the Needs-you queue (its cards run the controller's own actions).
+  WalletController get controller => _wc;
+  int needsYouCount() => _wc.needsYouCount();
+
   /// Picks the page (`'plan'` = Plan › Payday plan, or `'spending'` = Explore › Spending) before Overview switches to it.
   void showBudgetView(String view) => view == 'plan' ? _wc.setPlanView('payday') : _wc.setBudgetView(view);
 

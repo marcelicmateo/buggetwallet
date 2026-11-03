@@ -345,8 +345,8 @@ void main() {
   });
 
   group('Today', () {
-    Widget today(WalletController wc) => Scaffold(
-        body: TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => budgetToday, chooser: const FileChooser(), openBills: () {}));
+    Widget today(WalletController wc) =>
+        Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => budgetToday, chooser: const FileChooser()));
 
     tw('a held yearly bill is in the Before payday tile: 600 €', (tester) async {
       final wc = hw();
@@ -555,10 +555,7 @@ void main() {
       final c = wc.period().dueCycles.firstWhere((c) => c.bill.label == 'Zorblex cover');
       expect(c.reserve, 0);
       await pumpApp(
-          tester,
-          Scaffold(
-              body: TodayScreen(
-                  view: TodayView(wc), openPlan: () {}, clock: () => budgetToday, chooser: const FileChooser(), openBills: () {})),
+          tester, Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => budgetToday, chooser: const FileChooser())),
           size: const Size(400, 3000));
       expect(find.textContaining('held until paid'), findsNothing);
     });

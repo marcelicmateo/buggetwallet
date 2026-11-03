@@ -161,7 +161,7 @@ void main() {
       await t.pump(const Duration(seconds: 4));
     });
 
-    testWidgets('Ctrl+F in the app opens Spending with the search field', (t) async {
+    testWidgets('Ctrl+F in the app opens Money with the search field (Ctrl+K opens Explore)', (t) async {
       final wc = searchWallet();
       await pumpFull(t, wc, 1, size: const Size(400, 800));
       await t.tapAt(const Offset(397, 400));
@@ -172,6 +172,12 @@ void main() {
       await t.pump();
       await t.pump(const Duration(milliseconds: 100));
       expect(find.byKey(const ValueKey('searchField')), findsOneWidget);
+      expect(t.widget<IndexedStack>(find.byWidgetPredicate((w) => w is IndexedStack && w.children.length == 5)).index, Tabs.money);
+      await t.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await t.sendKeyEvent(LogicalKeyboardKey.keyK);
+      await t.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 100));
       expect(t.widget<IndexedStack>(find.byWidgetPredicate((w) => w is IndexedStack && w.children.length == 5)).index, Tabs.explore);
       await t.pump(const Duration(seconds: 4));
     });

@@ -2,8 +2,10 @@
 // two panes. The panels themselves are tested where they were (they moved unchanged). All data is SYNTHETIC.
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
+import 'package:budget_wallet/src/screens/bill_sheet.dart';
 import 'package:budget_wallet/src/screens/bills_tab.dart';
 import 'package:budget_wallet/src/screens/goals.dart';
+import 'package:budget_wallet/src/screens/money.dart';
 import 'package:budget_wallet/src/screens/plan_screen.dart';
 import 'package:budget_wallet/src/screens/save.dart';
 import 'package:budget_wallet/src/screens/settings.dart';
@@ -41,9 +43,6 @@ Future<void> _settle(WidgetTester t) async {
   await t.pump();
   await t.pump(const Duration(milliseconds: 500));
 }
-
-/// The distance of [f] from the top of the window (what is higher is above).
-double _top(WidgetTester t, Finder f) => t.getTopLeft(f).dy;
 
 Future<void> _scrollInto(WidgetTester t, Finder f, Type screen) async {
   await t.scrollUntilVisible(f, 300, scrollable: find.descendant(of: find.byType(screen), matching: find.byType(Scrollable)).first);
@@ -180,13 +179,21 @@ void main() {
   });
 
   group('Bills', () {
-    tw('Before payday, Expected bills and the bills database, with Add bill', (t) async {
+    Future<void> openBillsPage(WidgetTester t) async {
+      await t.ensureVisible(_key('billsOpen'));
+      await t.tap(_key('billsOpen'));
+      await t.pumpAndSettle();
+    }
+
+    tw('Money has the coming-up head; Bills & slips has Expected bills and the bills database, with Add bill', (t) async {
       final wc = _wallet(bill: true);
       await pumpFull(t, wc, 1.0, size: const Size(400, 900));
       await tapTab(t, 'Bills');
-      expect(find.byType(BillsScreen), findsOneWidget);
+      expect(find.byType(MoneyScreen), findsOneWidget);
       expect(_key('comingUpPanel'), findsOneWidget);
-      expect(find.text('BEFORE PAYDAY'), findsOneWidget);
+      expect(find.textContaining('COMING UP TO PAYDAY'), findsOneWidget);
+      expect(_key('billsAdd'), findsNothing, reason: 'Add bill is on the Bills & slips page');
+      await openBillsPage(t);
       expect(_key('billsAdd'), findsOneWidget);
       expect(find.text('Add bill'), findsOneWidget, reason: 'one Add bill, in the Expected bills tile (no second button)');
       expect(_key('addRecurring'), findsNothing);
@@ -195,16 +202,15 @@ void main() {
       expect(t.takeException(), isNull);
     });
 
-    tw('Before payday shows core\'s number and count; each bill has one state chip with its date', (t) async {
+    tw('the head holds core\'s number; each bill has one state chip with its date on Bills & slips', (t) async {
       final wc = _wallet(bill: true);
       await pumpFull(t, wc, 1.0, size: const Size(400, 900));
       await tapTab(t, 'Bills');
       final p = wc.period();
       expect(p.dueCycles, isNotEmpty);
-      final tile = _key('comingUpPanel');
-      expect(find.descendant(of: tile, matching: find.text(moneyExact(p.beforePayday, wc.currency))), findsOneWidget);
-      final n = p.beforePaydayCount;
-      expect(find.descendant(of: tile, matching: find.text('$n ${n == 1 ? 'cost' : 'costs'}')), findsOneWidget);
+      expect(find.descendant(of: _key('comingUpPanel'), matching: find.text('${moneyExact(p.beforePayday, wc.currency)} held')),
+          findsOneWidget);
+      await openBillsPage(t);
       for (final x in p.dueCycles) {
         final row = _key('bill:${x.bill.id}');
         expect(row, findsOneWidget);
@@ -213,7 +219,7 @@ void main() {
       expect(find.textContaining('29.99'), findsWidgets);
     });
 
-    tw('no bills before payday: the tile says Nothing due', (t) async {
+    tw('no bills before payday: the head says Nothing due', (t) async {
       await pumpFull(t, _wallet(), 1.0, size: const Size(400, 900));
       await tapTab(t, 'Bills');
       expect(find.descendant(of: _key('comingUpPanel'), matching: find.text('Nothing due')), findsOneWidget);
@@ -222,12 +228,13 @@ void main() {
     tw('Add bill opens the repeating bill form', (t) async {
       await pumpFull(t, _wallet(), 1.0, size: const Size(400, 900));
       await tapTab(t, 'Bills');
+      await openBillsPage(t);
       await t.tap(_key('billsAdd'));
       await t.pumpAndSettle();
       expect(_key('recurringSheet'), findsOneWidget);
     });
 
-    tw('Today\'s Overdue tile (an unpaid bill past its date) opens the Bills tab', (t) async {
+    tw('an unpaid bill past its date is a Needs-you card (not an Overview tile) that opens Bills & slips', (t) async {
       final wc = _wallet();
       wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [
         for (final d in const ['2026-06-10', '2026-07-10', '2026-08-10']) syntheticTx(d, -4500, 'POS plaćanje', 'POS SYNTHPOOL ZAGREB'),
@@ -238,25 +245,27 @@ void main() {
         wc.confirmRecurring(b.id);
       }
       await pumpFull(t, wc, 1.0, size: const Size(400, 900));
-      await _scrollInto(t, _key('billsLine'), TodayScreen);
-      await t.tap(_key('billsLine'));
+      expect(_key('billsLine'), findsNothing);
+      await t.tap(_key('overviewNeedsYou'));
+      await t.pumpAndSettle();
+      await t.tap(_key('needsPrimary:overdue'));
       await t.pumpAndSettle();
       expect(find.byType(BillsScreen), findsOneWidget);
-      expect(find.byType(TodayScreen), findsNothing);
     });
 
-    tw('a slip to review: Today\'s line opens Bills at To review, which lists it', (t) async {
+    tw('a slip to review is a Needs-you card that opens the bill; the database lists it too', (t) async {
       final wc = _wallet();
       wc.repo.importBill(const NormalizedBill(source: BillSource.manual, externalId: 'p5-slip', payee: 'Synthetic Slip Shop', total: 5000));
       wc.reload();
       await pumpFull(t, wc, 1.0, size: const Size(400, 900));
-      await _scrollInto(t, _key('billsToReview'), TodayScreen);
-      await t.tap(_key('billsToReview'));
+      expect(_key('billsToReview'), findsNothing);
+      await t.tap(_key('overviewNeedsYou'));
       await t.pumpAndSettle();
-      expect(find.byType(BillsScreen), findsOneWidget);
-      expect(find.text('TO REVIEW'), findsOneWidget);
-      expect(_key('billsReviewPanel'), findsOneWidget);
-      expect(find.text('Synthetic Slip Shop'), findsOneWidget, reason: 'listed once: the database panel leaves To review to this panel');
+      expect(find.text('Synthetic Slip Shop'), findsOneWidget);
+      await t.tap(
+          find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('needsPrimary:bill:')));
+      await t.pumpAndSettle();
+      expect(find.byType(BillSheet), findsOneWidget);
       expect(t.takeException(), isNull);
     });
   });
@@ -291,9 +300,8 @@ void main() {
       for (var i = 0; i < 12; i++) {
         await t.pump(const Duration(milliseconds: 100));
       }
-      expect(find.byType(BillsScreen), findsOneWidget);
+      expect(find.byType(BillsScreen), findsOneWidget, reason: 'the search result opens Bills & slips');
       expect(find.text('EXPECTED BILLS'), findsOneWidget);
-      expect(_top(t, find.text('EXPECTED BILLS')), lessThan(400), reason: 'scrolled to Expected bills');
     });
 
     tw('a long bill held until paid shows the Held chip with its whole amount, and core counts it in Before payday', (t) async {
@@ -305,11 +313,15 @@ void main() {
       expect(held.reserve, 60000, reason: 'core holds the whole yearly amount');
       await pumpFull(t, wc, 1.0, size: const Size(400, 900));
       await tapTab(t, 'Bills');
+      await t.tap(_key('billsOpen'));
+      await t.pumpAndSettle();
       expect(find.descendant(of: _key('bill:$id'), matching: find.text('Held')), findsOneWidget);
       expect(find.descendant(of: _key('bill:$id'), matching: find.text(moneyExact(60000, wc.currency))), findsOneWidget);
       expect(_key('billHeld:$id'), findsOneWidget);
       expect(p.beforePayday, 60000, reason: 'core holds the whole yearly amount from the start');
-      expect(find.descendant(of: _key('comingUpPanel'), matching: find.text(moneyExact(60000, wc.currency))), findsOneWidget);
+      await t.tap(_key('sheetClose'));
+      await t.pumpAndSettle();
+      expect(find.descendant(of: _key('comingUpPanel'), matching: find.text('${moneyExact(60000, wc.currency)} held')), findsOneWidget);
     });
 
     tw('a device-local switch still updates Settings while shown, and after the tab was hidden', (t) async {
@@ -401,13 +413,15 @@ void main() {
   });
 
   group('links from Today', () {
-    tw('the payday link ("Open Plan") opens Plan › Payday plan', (t) async {
+    tw('the payday card\'s "Open Plan" opens Plan › Payday plan', (t) async {
       final wc = habitsWallet();
       wc.updateSettings({'salaryConfirmed': false});
       addTearDown(wc.dispose);
       await pumpFull(t, wc, 1.0, size: const Size(400, 900));
-      final open = find.text('Open Plan');
-      await _scrollInto(t, open, TodayScreen);
+      await t.tap(_key('overviewNeedsYou'));
+      await t.pumpAndSettle();
+      final open = _key('needsAlt:salary');
+      expect(find.text('Open Plan'), findsOneWidget);
       await t.ensureVisible(open);
       await t.pump();
       await t.tap(open);
@@ -605,7 +619,7 @@ void main() {
 
       final screens = <(LogicalKeyboardKey, Type)>[
         (LogicalKeyboardKey.digit3, SpendingScreen),
-        (LogicalKeyboardKey.digit2, BillsScreen),
+        (LogicalKeyboardKey.digit2, MoneyScreen),
         (LogicalKeyboardKey.digit4, PlanScreen),
         (LogicalKeyboardKey.digit1, TodayScreen),
       ];

@@ -60,18 +60,20 @@ void main() {
       expect(all.contains('Pay period ended'), isTrue);
       expect(all.where((t) => t.contains('0 days') || t.contains('already used') || t.contains('Safe to spend')), isEmpty);
       expect(all.where(_negativeAmount.hasMatch), isEmpty);
-      expect(find.byKey(const ValueKey('startNewPeriod')), findsOneWidget);
-      expect(find.text('Start new period on ${shortDate(p.end)}'), findsOneWidget);
+      expect(find.byKey(const ValueKey('startNewPeriod')), findsNothing, reason: 'the button is a Needs-you card since ENG E7a');
       // The hero is what is left, not zero or negative.
       expect(_hero(tester), money(p.remaining, 'EUR', decimals: 0));
+      await pumpApp(tester, needsYouOf(wc), size: const Size(400, 3000));
+      expect(find.byKey(const ValueKey('needsPrimary:periodEnded')), findsOneWidget);
+      expect(find.text('Start new period on ${shortDate(p.end)}'), findsOneWidget);
     });
 
     testWidgets('the new-period button starts the period on the payday', (tester) async {
       final wc = passedWallet();
       final end = wc.period().end;
-      await pumpApp(tester, today(wc), size: const Size(400, 3000));
-      await tester.ensureVisible(find.byKey(const ValueKey('startNewPeriod')));
-      await tester.tap(find.byKey(const ValueKey('startNewPeriod')));
+      await pumpApp(tester, needsYouOf(wc), size: const Size(400, 3000));
+      await tester.ensureVisible(find.byKey(const ValueKey('needsPrimary:periodEnded')));
+      await tester.tap(find.byKey(const ValueKey('needsPrimary:periodEnded')));
       await tester.pump();
       await tester.pump(const Duration(seconds: 4)); // the controller's sync debounce
       expect(wc.settings.periodStart, end);
@@ -84,22 +86,24 @@ void main() {
       wc.repo.updateSettings({'paydayDay': 1, 'periodStart': '2026-07-01'});
       wc.reload();
       expect(wc.period().paydayPassed, isTrue);
-      await pumpApp(tester, today(wc), size: const Size(400, 3000));
+      await pumpApp(tester, needsYouOf(wc), size: const Size(400, 3000));
       expect(find.text('Start new period on ${shortDate('2026-10-01')}'), findsOneWidget);
-      await tester.ensureVisible(find.byKey(const ValueKey('startNewPeriod')));
-      await tester.tap(find.byKey(const ValueKey('startNewPeriod')));
+      await tester.ensureVisible(find.byKey(const ValueKey('needsPrimary:periodEnded')));
+      await tester.tap(find.byKey(const ValueKey('needsPrimary:periodEnded')));
       await tester.pump();
       await tester.pump(const Duration(seconds: 4));
       expect(wc.settings.periodStart, '2026-10-01');
       expect(wc.period().paydayPassed, isFalse);
     });
 
-    testWidgets('the new-period action has its own panel, not the main one', (tester) async {
+    testWidgets('the new-period action has its own card, not the hero or Overview', (tester) async {
       final wc = passedWallet();
       await pumpApp(tester, today(wc), size: const Size(400, 3000));
-      final own = find.byKey(const ValueKey('periodEndedPanel'));
+      expect(find.byKey(const ValueKey('periodEndedPanel')), findsNothing);
+      await pumpApp(tester, needsYouOf(wc), size: const Size(400, 3000));
+      final own = find.byKey(const ValueKey('needs:periodEnded'));
       expect(own, findsOneWidget);
-      expect(find.descendant(of: own, matching: find.byKey(const ValueKey('startNewPeriod'))), findsOneWidget);
+      expect(find.descendant(of: own, matching: find.byKey(const ValueKey('needsPrimary:periodEnded'))), findsOneWidget);
       expect(find.descendant(of: own, matching: find.byKey(const ValueKey('addExpense'))), findsNothing);
       expect(find.descendant(of: own, matching: find.byKey(const ValueKey('safeToSpend'))), findsNothing);
     });

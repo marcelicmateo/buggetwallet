@@ -356,7 +356,7 @@ void main() {
       ('1280 x 2.0', Size(1280, 800), 2.0),
       ('1920 x 2.0', Size(1920, 1080), 2.0),
     ]) {
-      testWidgets('$name: Today, Spending, Plan, Bills, Save and the period report keep their order, overlap nothing, overflow nothing',
+      testWidgets('$name: Today, Spending, Plan, Money, Save and the period report keep their order, overlap nothing, overflow nothing',
           (tester) async {
         overflowing.clear();
         await withErrors((errors) async {
@@ -376,7 +376,8 @@ void main() {
           for (final tab in const ['Budget', 'Bills', 'Save']) {
             await tapTab(tester, tab);
             await pumpIdle(tester);
-            check(tab);
+            // Money is a timeline (ENG E7a), not a tile grid: it is scrolled through for overflow, the grids have the others.
+            if (tab != 'Bills') check(tab);
             await scrollThrough(tester);
           }
           await tapTab(tester, 'Plan');

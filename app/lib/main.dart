@@ -13,10 +13,11 @@ import 'src/layout.dart';
 import 'src/logging.dart';
 import 'src/platform.dart';
 import 'src/screens/bill_sheet.dart';
-import 'src/screens/bills_tab.dart';
 import 'src/screens/budget.dart';
 import 'src/screens/in_use.dart';
 import 'src/screens/key_backup.dart';
+import 'src/screens/money.dart';
+import 'src/screens/needs_you.dart';
 import 'src/screens/onboarding.dart';
 import 'src/screens/period_report.dart';
 import 'src/screens/plan_screen.dart';
@@ -262,6 +263,10 @@ class _SettingsIntent extends Intent {
   const _SettingsIntent();
 }
 
+class _FindIntent extends Intent {
+  const _FindIntent();
+}
+
 class _SearchIntent extends Intent {
   const _SearchIntent();
 }
@@ -279,8 +284,9 @@ final _shortcuts = <ShortcutActivator, Intent>{
   const SingleActivator(LogicalKeyboardKey.keyR, control: true): const _SyncIntent(),
   const SingleActivator(LogicalKeyboardKey.f5): const _SyncIntent(),
   const SingleActivator(LogicalKeyboardKey.comma, control: true): const _SettingsIntent(),
-  const SingleActivator(LogicalKeyboardKey.keyF, control: true): const _SearchIntent(),
-  const SingleActivator(LogicalKeyboardKey.keyK, control: true): const _SearchIntent(), // Ctrl+K and Ctrl+F: search in Explore
+  const SingleActivator(LogicalKeyboardKey.keyF, control: true): const _FindIntent(),
+  const SingleActivator(LogicalKeyboardKey.keyK, control: true):
+      const _SearchIntent(), // Ctrl+K: search in Explore (Ctrl+F searches in Money)
 };
 
 class _HomeShellState extends State<HomeShell> {
@@ -301,6 +307,9 @@ class _HomeShellState extends State<HomeShell> {
 
   /// Counts the Ctrl+F presses; Budget opens its search view on each.
   final _searchRequest = ValueNotifier<int>(0);
+
+  /// Counts the Ctrl+F presses: Money opens its search on each (Ctrl+K keeps Explore's).
+  final _moneySearch = ValueNotifier<int>(0);
 
   /// The payday plan keeps its State (typed text, focus) when Budget changes between one and two columns: its place in the tree moves.
   final _paydayKey = GlobalKey();
@@ -408,22 +417,13 @@ class _HomeShellState extends State<HomeShell> {
             openSpending: () => _go(Tabs.explore, 'today'),
             openSearch: () => _goThen(Tabs.explore, 'today', () => _searchRequest.value++),
             addExpense: _addExpense,
-            openBills: () {
-              _go(Tabs.money, 'today');
-              _billsRequest.request(BillsAnchor.expected); // Overview's Overdue tile: the Overdue chips are on the Expected bills rows
-            },
-            openBillsReview: () {
-              _go(Tabs.money, 'today');
-              _billsRequest.request(BillsAnchor.review);
-            },
             openAccounts: () => widget.wc.openSettings(SettingsSection.accounts, via: 'today'),
-            openSync: () => widget.wc.openSettings(SettingsSection.sync, via: 'today'),
             openIncome: () {
               widget.wc.setPlanView('payday');
               _go(Tabs.plan, 'today');
               _incomeRequest.request(true);
             }),
-        Tabs.money => BillsScreen(wc: widget.wc, request: _billsRequest),
+        Tabs.money => MoneyScreen(wc: widget.wc, request: _billsRequest, searchRequest: _moneySearch),
         Tabs.explore => BudgetScreen(
             wc: widget.wc,
             searchRequest: _searchRequest,
@@ -541,6 +541,7 @@ class _HomeShellState extends State<HomeShell> {
     _AddIntent: CallbackAction<_AddIntent>(onInvoke: (_) => _key('ctrlN', _addExpense)),
     _SyncIntent: CallbackAction<_SyncIntent>(onInvoke: (_) => _key('sync', _syncNow)),
     _SettingsIntent: CallbackAction<_SettingsIntent>(onInvoke: (_) => _key('ctrlComma', () => _go(Tabs.settings, 'key'))),
+    _FindIntent: CallbackAction<_FindIntent>(onInvoke: (_) => _key('find', () => _goThen(Tabs.money, 'key', () => _moneySearch.value++))),
     _SearchIntent:
         CallbackAction<_SearchIntent>(onInvoke: (_) => _key('search', () => _goThen(Tabs.explore, 'key', () => _searchRequest.value++))),
   };
@@ -565,6 +566,7 @@ class _HomeShellState extends State<HomeShell> {
     _sharedSub?.cancel();
     _shortcutSub?.cancel();
     _searchRequest.dispose();
+    _moneySearch.dispose();
     super.dispose();
   }
 
@@ -820,6 +822,9 @@ class _HomeShellState extends State<HomeShell> {
                     ),
                   ),
                 ),
+                // Rail | Overview | Needs you: the queue stands beside Overview from 1280 dp (spec §3).
+                if (!compact && tab == Tabs.overview && MediaQuery.sizeOf(context).width >= needsYouPaneMin)
+                  SizedBox(key: const ValueKey('needsYouPaneSlot'), width: 380, child: NeedsYouPane(wc: widget.wc)),
               ]),
             ),
           ),

@@ -57,12 +57,7 @@ Future<void> todayPage(WidgetTester tester, WalletController wc,
         tester,
         Scaffold(
             body: TodayScreen(
-                view: TodayView(wc),
-                openPlan: () {},
-                clock: () => budgetToday,
-                chooser: const FileChooser(),
-                openBills: () {},
-                openIncome: openIncome)),
+                view: TodayView(wc), openPlan: () {}, clock: () => budgetToday, chooser: const FileChooser(), openIncome: openIncome)),
         size: size,
         textScale: scale);
 

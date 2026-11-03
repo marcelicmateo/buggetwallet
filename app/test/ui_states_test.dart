@@ -5,6 +5,7 @@ import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/logging.dart';
 import 'package:budget_wallet/src/screens/backup_panel.dart';
+import 'package:budget_wallet/src/screens/bills_tab.dart';
 import 'package:budget_wallet/src/screens/review.dart';
 import 'package:budget_wallet/src/screens/sync_panel.dart';
 import 'package:budget_wallet/src/screens/today.dart';
@@ -183,8 +184,16 @@ void main() {
       final wc = habitsWallet(confirmBill: true);
       await pumpFull(t, wc, 2.0);
       await tapTab(t, 'Bills');
+      await t.scrollUntilVisible(find.byKey(const ValueKey('billsOpen')), 200,
+          scrollable: find.descendant(of: find.byKey(const ValueKey('moneyPage')), matching: find.byType(Scrollable)).first);
+      await t.ensureVisible(find.byKey(const ValueKey('billsOpen')));
+      await t.pump();
+      await t.tap(find.byKey(const ValueKey('billsOpen')));
+      await t.pumpAndSettle();
+      expect(find.byType(BillsScreen), findsOneWidget);
       final skip = find.byWidgetPredicate((w) => w.key is ValueKey && '${(w.key! as ValueKey).value}'.startsWith('skip:'));
-      await t.dragUntilVisible(skip, find.byType(Scrollable).first, const Offset(0, -300));
+      await t.dragUntilVisible(
+          skip, find.descendant(of: find.byType(BillsScreen), matching: find.byType(Scrollable)).first, const Offset(0, -300));
       expect(t.getSize(skip).width, greaterThan(120), reason: 'the label "Skip this cycle" must not wrap letter by letter');
       await t.pumpWidget(const SizedBox.shrink());
       await t.pump(const Duration(minutes: 6));
@@ -192,47 +201,27 @@ void main() {
   });
 
   group('I1 setup panel', () {
-    testWidgets('the open steps are one panel; hide leaves one line that opens it again', (t) async {
+    testWidgets('the open steps are cards in the one queue; Overview has one tile and no panel', (t) async {
       final wc = emptyWallet();
       addTearDown(wc.dispose);
       expect(wc.keyBackupRowVisible, isTrue);
       await pumpApp(t, Scaffold(body: TodayScreen(key: ValueKey(wc.dataVersion), view: TodayView(wc), openPlan: () {})),
           size: const Size(400, 1600));
-      expect(key('setupPanel'), findsOneWidget);
-      expect(key('keyBackupRow'), findsOneWidget, reason: 'the key step is inside it');
-      expect(find.textContaining('Planning on'), findsOneWidget, reason: 'the salary step too');
-      await t.tap(key('setupHide'));
-      await t.pump();
-      await pumpApp(t, Scaffold(body: TodayScreen(key: ValueKey(wc.dataVersion), view: TodayView(wc), openPlan: () {})),
-          size: const Size(400, 1600));
       expect(key('setupPanel'), findsNothing);
-      expect(key('setupLine'), findsOneWidget);
-      await t.tap(key('setupLine'));
-      await t.pump();
-      await pumpApp(t, Scaffold(body: TodayScreen(key: ValueKey(wc.dataVersion), view: TodayView(wc), openPlan: () {})),
-          size: const Size(400, 1600));
-      expect(key('setupPanel'), findsOneWidget);
+      expect(key('needsYouTile'), findsOneWidget);
+      await pumpApp(t, needsYouOf(wc), size: const Size(400, 1600));
+      expect(key('needs:keyBackup'), findsOneWidget, reason: 'the key step');
+      expect(find.textContaining('Planning on'), findsNothing);
+      expect(key('needs:salary'), findsOneWidget, reason: 'the salary step too');
     });
 
-    testWidgets('a different set of open steps shows the panel open again', (t) async {
+    testWidgets('a step that is done leaves the queue; the others stay', (t) async {
       final wc = emptyWallet();
       addTearDown(wc.dispose);
-      Future<void> rebuild(WidgetTester t) =>
-          pumpApp(t, Scaffold(body: TodayScreen(key: ValueKey(wc.dataVersion), view: TodayView(wc), openPlan: () {})),
-              size: const Size(400, 1600));
-      await rebuild(t);
-      await t.tap(key('setupHide'));
-      await t.pump();
-      await rebuild(t);
-      expect(key('setupLine'), findsOneWidget);
-      wc.updateSettings({'salaryConfirmed': true}); // one step done: the set changed
-      await rebuild(t);
-      expect(key('setupPanel'), findsOneWidget, reason: 'open again for the changed set');
-      expect(key('setupLine'), findsNothing);
-      expect(wc.setupCollapsedFor(['key']), isFalse);
-      wc.setSetupCollapsed(true, ['key']);
-      expect(wc.setupCollapsedFor(['key']), isTrue);
-      expect(wc.setupCollapsedFor(['key', 'payday']), isFalse, reason: 'a new step opens it again');
+      expect(wc.needsYouItems().map((i) => i.id), containsAll(['keyBackup', 'salary']));
+      wc.updateSettings({'salaryConfirmed': true});
+      expect(wc.needsYouItems().map((i) => i.id), contains('keyBackup'));
+      expect(wc.needsYouItems().map((i) => i.id), isNot(contains('salary')));
       await t.pump(const Duration(seconds: 4));
     });
 

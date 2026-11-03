@@ -13,6 +13,7 @@ import 'package:budget_wallet/src/nudges.dart';
 import 'package:budget_wallet/src/pdf_parse.dart';
 import 'package:budget_wallet/src/screens/bill_sheet.dart';
 import 'package:budget_wallet/src/screens/bills_panel.dart';
+import 'package:budget_wallet/src/screens/needs_you.dart';
 import 'package:budget_wallet/src/screens/scan_bill.dart';
 import 'package:budget_wallet/src/screens/search.dart';
 import 'package:budget_wallet/src/screens/sync_panel.dart';
@@ -113,8 +114,7 @@ Future<void> openSheetFor(WidgetTester tester, WalletController wc, String id,
   await tester.pumpAndSettle();
 }
 
-Widget todayOf(WalletController wc, {VoidCallback? openBillsReview}) =>
-    Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {}, openBillsReview: openBillsReview, clock: () => budgetToday));
+Widget todayOf(WalletController wc) => Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => budgetToday));
 
 void main() {
   late List<String> lines;
@@ -842,21 +842,23 @@ void main() {
   });
 
   group('Today, Spending, Upcoming, Search', () {
-    tw('Today shows "N bills to review" only when there are some, and the tap opens Plan › Bills', (tester) async {
+    tw('"N bills to review" is a Needs-you card each, not an Overview tile; Overview says how many things need you', (tester) async {
       final wc = bw();
       await pumpApp(tester, todayOf(wc), size: const Size(400, 1400));
-      expect(key('billsToReview'), findsNothing);
       addBill(wc, syntheticBill('t1'));
       addBill(wc, syntheticBill('t2', payee: 'Second'));
-      var opened = 0;
-      await pumpApp(tester, todayOf(wc, openBillsReview: () => opened++), size: const Size(400, 1400));
-      expect(find.descendant(of: key('billsToReview'), matching: find.text('2')), findsOneWidget);
-      expect(find.descendant(of: key('billsToReview'), matching: find.text('bills')), findsOneWidget);
-      await tester.tap(key('billsToReview'));
-      expect(opened, 1);
-      wc.confirmBill(wc.billLists().review.first.id);
       await pumpApp(tester, todayOf(wc), size: const Size(400, 1400));
-      expect(find.descendant(of: key('billsToReview'), matching: find.text('bill')), findsOneWidget);
+      expect(key('billsToReview'), findsNothing);
+      expect(wc.needsYouItems().where((i) => i.kind == NeedsYouKind.billReview), hasLength(2));
+      expect(find.descendant(of: key('needsYouTile'), matching: find.text('${wc.needsYouItems().length}')), findsOneWidget);
+      await pumpApp(tester, Scaffold(body: NeedsYouScreen(wc: wc)), size: const Size(400, 1400));
+      for (final b in wc.billLists().review) {
+        expect(key('needs:bill:${b.id}'), findsOneWidget);
+      }
+      wc.confirmBill(wc.billLists().review.first.id);
+      await pumpApp(tester, Scaffold(body: NeedsYouScreen(wc: wc)), size: const Size(400, 1400));
+      expect(key('needs:bill:${wc.billLists().review.single.id}'), findsOneWidget);
+      expect(find.text('Bill to check'), findsOneWidget);
     });
 
     tw('a payment with a linked bill shows the receipt mark and "Open bill"', (tester) async {
@@ -1068,14 +1070,14 @@ void main() {
       expect(key('entrySkip'), findsNothing);
     });
 
-    tw('a heads-up line for a bill opens the bill', (tester) async {
+    tw('a heads-up card for a bill opens the bill', (tester) async {
       final wc = bw();
       wc.saveHeadsUp(cents: 0, days: 14);
       final id = addBill(wc, syntheticBill('up2', due: '2026-10-25'), confirm: true);
       final h = wc.headsUpLines().single;
-      await pumpApp(tester, todayOf(wc), size: const Size(400, 1800));
-      await tester.ensureVisible(key('headsUp:${h.item.key}'));
-      await tester.tap(key('headsUp:${h.item.key}'));
+      await pumpApp(tester, needsYouOf(wc), size: const Size(400, 1800));
+      await tester.ensureVisible(key('needsPrimary:headsUp:${h.item.key}'));
+      await tester.tap(key('needsPrimary:headsUp:${h.item.key}'));
       await tester.pumpAndSettle();
       expect(key('paidBy'), findsOneWidget);
       expect(wc.bill(id), isNotNull);
@@ -1479,15 +1481,18 @@ void main() {
       final w = mixedWallet();
       w.wc.saveHeadsUp(cents: 1000, days: 7);
       await pumpApp(tester, todayOf(w.wc), size: const Size(320, 4000), textScale: 2);
-      final line = key('needsCategory:${WalletRepo.billPlannedId(w.gas)}');
+      expect(key('needsCategory:${WalletRepo.billPlannedId(w.gas)}'), findsNothing,
+          reason: 'a Needs-you card since ENG E7a, not an Overview tile');
+      await pumpApp(tester, needsYouOf(w.wc), size: const Size(320, 4000), textScale: 2);
+      final line = key('needs:category:${WalletRepo.billPlannedId(w.gas)}');
       expect(line, findsOneWidget);
       expect(find.descendant(of: line, matching: find.text('Needs a category')), findsOneWidget);
-      expect(find.text('Needs a category'), findsNWidgets(2), reason: 'its own tile and its heads-up tile');
-      await tester.ensureVisible(line);
-      await tester.tap(line);
+      expect(find.textContaining('Needs a category'), findsNWidgets(2), reason: 'its own card and the suffix of its heads-up card');
+      await tester.ensureVisible(find.byKey(ValueKey('needsPrimary:category:${WalletRepo.billPlannedId(w.gas)}')));
+      await tester.tap(find.byKey(ValueKey('needsPrimary:category:${WalletRepo.billPlannedId(w.gas)}')));
       await tester.pumpAndSettle();
       expect(find.text('Category (needed)'), findsOneWidget, reason: 'the bill sheet of the gas slip');
-      await tester.tap(key('sheetClose')); // the sheet is a route of the app: close it so the next page starts clean
+      await tester.tap(key('sheetClose').last); // the sheet is a route of the app: close it so the next page starts clean
       await tester.pumpAndSettle();
       expect(find.text('Category (needed)'), findsNothing);
 

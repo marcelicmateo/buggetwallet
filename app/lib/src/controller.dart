@@ -71,6 +71,8 @@ part 'controller_setup.dart';
 part 'controller_warmup.dart';
 part 'controller_goals_loans.dart';
 part 'controller_overview.dart';
+part 'controller_needs_you.dart';
+part 'controller_money.dart';
 
 final _log = Logger('bw.app');
 final _sync = Logger('bw.sync');

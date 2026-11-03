@@ -53,6 +53,19 @@ Future<Set<String>> _tour(WidgetTester tester, WalletController wc, {Size size =
     await tester.pump(const Duration(milliseconds: 500));
     await scroll();
   }
+  // The Needs-you queue is a page of its own (ENG E7a): look at its texts too. The tour left Overview scrolled down: back to its header.
+  final down = find.byWidgetPredicate((w) => w is Scrollable && w.axisDirection == AxisDirection.down).hitTestable();
+  if (down.evaluate().isNotEmpty) tester.state<ScrollableState>(down.first).position.jumpTo(0);
+  await tester.pump();
+  if (find.byKey(const ValueKey('overviewNeedsYou')).evaluate().isNotEmpty &&
+      find.byKey(const ValueKey('needsYouPane')).evaluate().isEmpty) {
+    await tester.tap(find.byKey(const ValueKey('overviewNeedsYou')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await scroll();
+    await tester.tap(find.byKey(const ValueKey('sheetClose')));
+    await tester.pump(const Duration(milliseconds: 500));
+  }
   await tester.pump(const Duration(seconds: 4)); // sync debounce
   return seen;
 }

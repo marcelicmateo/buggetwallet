@@ -2,6 +2,7 @@
 import 'package:budget_wallet/main.dart';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/screens/bills_tab.dart';
+import 'package:budget_wallet/src/screens/money.dart';
 import 'package:budget_wallet/src/screens/save.dart';
 import 'package:budget_wallet/src/screens/settings.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
@@ -106,7 +107,7 @@ void main() {
       await _settle(t);
       final spendingState = t.state(find.byType(SpendingScreen, skipOffstage: false));
       final spendingWidget = t.widget(find.byType(SpendingScreen, skipOffstage: false));
-      final billsWidget = t.widget(find.byType(BillsScreen, skipOffstage: false));
+      final billsWidget = t.widget(find.byType(MoneyScreen, skipOffstage: false));
       for (final tab in ['Explore', 'Money', 'Plan', 'Overview', 'Settings', 'Overview', 'Explore']) {
         // Settings is the gear on Overview (a phone-wide shell).
         await t.tap(tab == 'Settings' ? find.byKey(const ValueKey('openSettings')) : find.text(tab).last);
@@ -114,7 +115,7 @@ void main() {
       }
       expect(identical(t.state(find.byType(SpendingScreen)), spendingState), isTrue);
       expect(identical(t.widget(find.byType(SpendingScreen)), spendingWidget), isTrue, reason: 'no new page for a switch');
-      expect(identical(t.widget(find.byType(BillsScreen, skipOffstage: false)), billsWidget), isTrue);
+      expect(identical(t.widget(find.byType(MoneyScreen, skipOffstage: false)), billsWidget), isTrue);
       await _settle(t);
     });
 
@@ -123,7 +124,7 @@ void main() {
       final wc = demoWallet(clock: pinnedNoon);
       await _pumpShell(t, HomeShell(wc: wc));
       await _settle(t);
-      final bills = find.byType(BillsScreen, skipOffstage: false);
+      final bills = find.byType(MoneyScreen, skipOffstage: false);
       final element = t.element(bills);
       await t.tap(find.text('Plan').last);
       for (var i = 0; i < 15; i++) {
@@ -191,7 +192,7 @@ void main() {
       await t.pump(_frame);
       expect(find.byType(SettingsScreen), findsOneWidget);
       await _settle(t);
-      for (final type in [TodayScreen, SpendingScreen, BillsScreen, SaveScreen, SettingsScreen]) {
+      for (final type in [TodayScreen, SpendingScreen, MoneyScreen, SaveScreen, SettingsScreen]) {
         expect(find.byType(type, skipOffstage: false), findsOneWidget, reason: '$type is built by now');
       }
     });
@@ -202,14 +203,14 @@ void main() {
       // the app rebuilds the shell when the wallet changes
       await _pumpShell(t, ListenableBuilder(listenable: wc, builder: (context, child) => HomeShell(wc: wc)));
       await _settle(t);
-      final bills = t.widget(find.byType(BillsScreen, skipOffstage: false));
+      final bills = t.widget(find.byType(MoneyScreen, skipOffstage: false));
       final today = t.widget(find.byType(TodayScreen));
       wc.addExpense(amount: -700, category: 'Groceries', note: 'x', date: wc.today());
       await t.pump();
       expect(identical(t.widget(find.byType(TodayScreen)), today), isFalse, reason: 'the shown page follows the data at once');
-      expect(identical(t.widget(find.byType(BillsScreen, skipOffstage: false)), bills), isTrue, reason: 'a hidden page waits for its turn');
+      expect(identical(t.widget(find.byType(MoneyScreen, skipOffstage: false)), bills), isTrue, reason: 'a hidden page waits for its turn');
       await _settle(t);
-      expect(identical(t.widget(find.byType(BillsScreen, skipOffstage: false)), bills), isFalse);
+      expect(identical(t.widget(find.byType(MoneyScreen, skipOffstage: false)), bills), isFalse);
       // a change schedules a sync 3 s later: the controller goes with the tree
       await t.pumpWidget(const SizedBox());
       wc.dispose();
@@ -321,19 +322,20 @@ void main() {
       await _settle(t);
     });
 
-    testWidgets('a Bills anchor requested before the Bills page exists is delivered when it is built', (t) async {
+    testWidgets('a Bills anchor requested before the Money page exists is delivered when it is built', (t) async {
       _background();
       final wc = demoWallet(clock: pinnedNoon);
       final request = JumpRequest<BillsAnchor>()..request(BillsAnchor.slips);
       t.view.physicalSize = const Size(400, 300);
       t.view.devicePixelRatio = 1;
       addTearDown(t.view.reset);
-      await t.pumpWidget(MaterialApp(theme: buildTheme(Brightness.light), home: Scaffold(body: BillsScreen(wc: wc, request: request))));
+      await t.pumpWidget(MaterialApp(theme: buildTheme(Brightness.light), home: Scaffold(body: MoneyScreen(wc: wc, request: request))));
       for (var i = 0; i < 30; i++) {
         await t.pump(_frame);
       }
-      final scroll = t.state<ScrollableState>(find.descendant(of: find.byType(BillsScreen), matching: find.byType(Scrollable)).first);
-      expect(scroll.position.pixels, greaterThan(0));
+      // Money answers a slips anchor by opening Bills & slips at the bills database.
+      expect(find.byType(BillsScreen), findsOneWidget);
+      expect(t.widget<BillsScreen>(find.byType(BillsScreen)).anchor, BillsAnchor.slips);
       expect(request.takePending(), isNull, reason: 'delivered once');
       await _settle(t);
     });
@@ -376,13 +378,13 @@ void main() {
       addTearDown(current.dispose);
       await _pumpShell(t, ValueListenableBuilder<WalletController>(valueListenable: current, builder: (c, wc, _) => HomeShell(wc: wc)));
       await _settle(t);
-      expect(t.widget<BillsScreen>(find.byType(BillsScreen, skipOffstage: false)).wc, same(first));
+      expect(t.widget<MoneyScreen>(find.byType(MoneyScreen, skipOffstage: false)).wc, same(first));
       current.value = second;
       await t.pump();
-      expect(find.byType(BillsScreen, skipOffstage: false), findsNothing, reason: 'the old controller\'s hidden page is dropped at once');
+      expect(find.byType(MoneyScreen, skipOffstage: false), findsNothing, reason: 'the old controller\'s hidden page is dropped at once');
       expect(t.widget<TodayScreen>(find.byType(TodayScreen)).view, isNotNull);
       await _settle(t);
-      expect(t.widget<BillsScreen>(find.byType(BillsScreen, skipOffstage: false)).wc, same(second));
+      expect(t.widget<MoneyScreen>(find.byType(MoneyScreen, skipOffstage: false)).wc, same(second));
       expect(t.widget<SpendingScreen>(find.byType(SpendingScreen, skipOffstage: false)).wc, same(second));
     });
 
@@ -400,14 +402,14 @@ void main() {
       await _settle(t);
       final done = wc.warmUp.tasksRun;
       expect(done, wc.warmUpTasks().length);
-      final bills = t.widget(find.byType(BillsScreen, skipOffstage: false));
+      final bills = t.widget(find.byType(MoneyScreen, skipOffstage: false));
       now = DateTime(2026, 11, 1, 0, 5);
       wc.checkDay();
       await t.pump();
       expect(wc.warmUp.tasksRun, 0, reason: 'a new run started');
       await _settle(t);
       expect(wc.warmUp.tasksRun, wc.warmUpTasks().length);
-      expect(identical(t.widget(find.byType(BillsScreen, skipOffstage: false)), bills), isFalse, reason: 'built again for the new day');
+      expect(identical(t.widget(find.byType(MoneyScreen, skipOffstage: false)), bills), isFalse, reason: 'built again for the new day');
     });
 
     testWidgets('unmounting the shell in the middle of a run is quiet', (t) async {
@@ -429,11 +431,11 @@ void main() {
       await _settle(t);
       if (!WidgetsBinding.instance.firstFrameRasterized) {
         expect(wc.warmUp.tasksRun, 0, reason: 'the first frame is not rasterized: the warm-up waits');
-        expect(find.byType(BillsScreen, skipOffstage: false), findsNothing);
+        expect(find.byType(MoneyScreen, skipOffstage: false), findsNothing);
       }
       await t.tap(find.text('Money').last);
       await _settle(t); // its data is worked out a task a frame, then the page is built
-      expect(find.byType(BillsScreen), findsOneWidget);
+      expect(find.byType(MoneyScreen), findsOneWidget);
       await _settle(t);
     });
   });

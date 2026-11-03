@@ -293,7 +293,7 @@ void main() {
       expect(deviceStopOf(const SyncException('The relay is full.', failure: TransportFailure.full)), isNull);
     });
 
-    testWidgets('Today shows one line with the code while waiting, and one when removed', (t) async {
+    testWidgets('Needs you shows one card with the code while waiting, and one when removed; Overview only counts it', (t) async {
       final (a, b) = await twoDevices();
       a.mem.locked = true;
       final c = _Install(a.mem, key, 'device-c');
@@ -303,25 +303,28 @@ void main() {
       t.view.devicePixelRatio = 1;
       addTearDown(t.view.reset);
       Future<void> pumpToday(WalletController wc) async {
-        await t.pumpWidget(MaterialApp(
-            theme: buildTheme(Brightness.light),
-            home:
-                ListenableBuilder(listenable: wc, builder: (_, __) => Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {})))));
+        await t.pumpWidget(
+            MaterialApp(theme: buildTheme(Brightness.light), home: ListenableBuilder(listenable: wc, builder: (_, __) => needsYouOf(wc))));
         await t.pump();
       }
 
       await pumpToday(c.wc);
-      expect(find.text('Waiting'), findsOneWidget);
+      expect(_k('needs:deviceStop'), findsOneWidget);
+      expect(find.text('Waiting for approval'), findsOneWidget);
       expect(find.text('Code ${c.fp}'), findsOneWidget);
-      expect(find.text('Needs approval'), findsOneWidget);
       await pumpToday(a.wc);
-      expect(_k('deviceStopLine'), findsNothing);
+      expect(_k('needs:deviceStop'), findsNothing);
       await a.wc.removeDevice(b.fp);
       await b.wc.syncNow();
       await pumpToday(b.wc);
-      expect(find.text('Removed'), findsOneWidget);
-      expect(find.text('No access'), findsOneWidget);
-      expect(find.text('This device'.toUpperCase()), findsOneWidget);
+      expect(find.text('Removed from the wallet'), findsOneWidget);
+      expect(find.text('It has no access now.'), findsOneWidget);
+      expect(find.text('This device'), findsOneWidget);
+      await t.pumpWidget(
+          MaterialApp(theme: buildTheme(Brightness.light), home: Scaffold(body: TodayScreen(view: TodayView(b.wc), openPlan: () {}))));
+      await t.pump();
+      expect(_k('deviceStopLine'), findsNothing, reason: 'Overview has no tile of its own for it');
+      expect(find.descendant(of: _k('needsYouBadge'), matching: find.text('${b.wc.needsYouItems().length}')), findsOneWidget);
       await t.pump(const Duration(seconds: 5));
     });
   });

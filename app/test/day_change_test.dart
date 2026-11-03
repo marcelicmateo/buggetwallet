@@ -150,10 +150,17 @@ void main() {
     final clock = _Clock();
     final wc = _wallet(clock);
     await _pumpApp(t, wc);
-    expect(find.textContaining('Salary landed on'), findsNothing);
+    expect(wc.needsYouItems().map((i) => i.id), isNot(contains('newPayday')));
+    final before = wc.needsYouCount();
     clock.now = DateTime(2026, 11, 1, 0, 1);
     wc.checkDay();
     await t.pump();
+    // The offer is a Needs-you card (ENG E7a): the badge counts it, the page shows it.
+    expect(wc.needsYouItems().map((i) => i.id), contains('newPayday'));
+    expect(wc.needsYouCount(), before + 1);
+    await t.tap(find.byKey(const ValueKey('overviewNeedsYou')));
+    await t.pump(const Duration(milliseconds: 500));
+    await t.pump(const Duration(milliseconds: 500));
     expect(find.textContaining('Salary landed on'), findsOneWidget);
   });
 

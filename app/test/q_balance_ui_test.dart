@@ -6,8 +6,6 @@ import 'dart:typed_data';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/screens/accounts_panel.dart';
-import 'package:budget_wallet/src/screens/today.dart';
-import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -178,20 +176,21 @@ void main() {
   });
 
   group('Today', () {
+    // Since ENG E7a a balance warning is a Needs-you card (Overview only counts it).
     Future<void> today(WidgetTester t, WalletController wc, {double scale = 1, Size? size}) =>
-        pumpApp(t, Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => budgetToday)),
-            textScale: scale, size: size ?? const Size(400, 1600));
+        pumpApp(t, needsYouOf(wc), textScale: scale, size: size ?? const Size(400, 1600));
 
     tw('an untrusted balance shows only "a Check tile", never a warning, and a tap opens the question', (t) async {
       // Opening is old and negative: a number we do not trust must not say "below zero".
       final (wc, id) = await _wallet(openingDate: '2026-07-01', opening: -50000);
       expect(wc.balanceWarningList().map((w) => w.kind), [BalanceWarningKind.checkBalance]);
       await today(t, wc);
-      expect(_key('balanceWarn:$id'), findsOneWidget);
-      expect(find.descendant(of: _key('balanceWarn:$id'), matching: find.text('PBZ CURRENT')), findsOneWidget);
-      expect(find.descendant(of: _key('balanceWarn:$id'), matching: find.text('Check')), findsOneWidget);
-      expect(find.text('Below zero'), findsNothing);
-      await t.tap(_key('balanceWarn:$id'));
+      expect(_key('needs:balance:$id'), findsOneWidget);
+      expect(find.descendant(of: _key('needs:balance:$id'), matching: find.text('PBZ current')), findsOneWidget);
+      expect(find.descendant(of: _key('needs:balance:$id'), matching: find.text('The balance was not confirmed lately.')), findsOneWidget);
+      expect(find.descendant(of: _key('needs:balance:$id'), matching: find.text('Check balance')), findsOneWidget);
+      expect(find.textContaining('Below zero'), findsNothing);
+      await t.tap(_key('needsPrimary:balance:$id'));
       await _settle(t);
       expect(_key('bankCheckSheet'), findsOneWidget);
     }, timeout: _t);
@@ -199,9 +198,8 @@ void main() {
     tw('a confirmed balance below zero says so', (t) async {
       final (wc, id) = await _wallet(openingDate: '2026-10-15', opening: -5000);
       await today(t, wc);
-      expect(find.descendant(of: _key('balanceWarn:$id'), matching: find.text('Below zero')), findsOneWidget);
-      expect(find.descendant(of: _key('balanceWarn:$id'), matching: find.text(moneyExact(-5000, 'EUR'))), findsOneWidget);
-      expect(_key('balanceWarn:$id'), findsOneWidget);
+      expect(find.descendant(of: _key('needs:balance:$id'), matching: find.text('Below zero now.')), findsOneWidget);
+      expect(find.descendant(of: _key('needs:balance:$id'), matching: find.text(moneyExact(-5000, 'EUR'))), findsOneWidget);
     }, timeout: _t);
 
     tw('a balance confirmed by a matching check is trusted: no "Check your balance" line', (t) async {
@@ -209,7 +207,7 @@ void main() {
       wc.recordBalanceCheck(id, date: '2026-10-18', bankCents: 98000);
       expect(wc.balanceWarningList(), isEmpty);
       await today(t, wc);
-      expect(_key('balanceWarn:$id'), findsNothing);
+      expect(_key('needs:balance:$id'), findsNothing);
     }, timeout: _t);
 
     tw('a check that is off does not make the balance trusted', (t) async {
