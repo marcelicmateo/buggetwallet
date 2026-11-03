@@ -119,12 +119,12 @@ payment type (`MerchantPattern.kind` = any `TxKind`, `RuleView.txKind`, empty te
 built-in kind hints); amount ranges match only wallet-currency rows.
 | # | Item | Agent | Worktree | Depends on | Status |
 |---|---|---|---|---|---|
-| RR-core | threshold out, kind rules, currency ranges, ids `merchantPatternId(p, [kind])`, `removeMerchantPattern(p, {kind})` | core-builder ∥ test-writer (`kind_rules_test.dart`) | agent | – | running |
-| RR-ui | Plan row out; rule form payment-type picker (text optional with a type); delete passes `kind:` | ui-builder | agent | RR-core merged | queued |
+| RR-core | threshold out, kind rules, currency ranges, ids `merchantPatternId(p, [kind])`, `removeMerchantPattern(p, {kind})` | core-builder ∥ test-writer (`kind_rules_test.dart`) | agent-a6fee3e8914ce1378 | – | done a840b9c + review fixes 88f0c88 (review: 2 medium doc/build, 3 low → fixed) |
+| RR-ui | Plan row out; rule form payment-type picker (text optional with a type); delete passes `kind:` | ui-builder | agent-aa8667e4b483cc807 (rebased on 88f0c88) | RR-core | done fb48d01 + 04aed50, also `WalletController.syncDelay` 3 s → 10 s (owner 2026-11-03); app + lint + desktop plan/import green; NOT reviewed, NOT merged |
 
 ## Owner work order 2026-11-03 (after the repo audit)
-0. LOG: build logs cleanup (`tests.jsonl` pruning + quiet-mode `last-failed` per run) — devops, worktree — running.
-1. RR-core, then RR-ui (above) — RR-core running.
+0. LOG — done, merged 6ece825 (9692e1b + review fixes 3d456ad). Recovery line: `make Q=1 <cmd> || cat dist/last-failed.<cmd>.txt`.
+1. RR (above) — both halves built; next: reviewer on the UI diff, merge `worktree-agent-aa8667e4b483cc807` (contains core) into v2, remove worktrees a6fee/a9898/aa866, stage run (Haiku watcher), push, STATUS. Open: seed the ATM→Rent rule in `app/integration_test/demo_data.dart` if the demo should keep rent.
 2. Repo cleanup — done: 5 merged worktrees removed, `.claude-flow/` deleted, STATUS hosting = Pi (owner final).
 3. Nice to have: image build lock; Containerfile checksums (cmdline tools, Chrome); `ci publish` exit code; dead code (`cellCents`/`jsRound`, `matchCsvLayout` bytes param, `dueBills()`, `plannedCoveredBy`, `BW_KEEP`) + duplicate helpers (Go `copyFile`/`orDefault`/`quote`/`httpGet`, `pyfmt` vs `report`; importer date/decimal parsers); Python parity layer (owner decides); `merchantKey` 'x' in recurring detection.
 4. Bugs: AUD-A `_ownCutOff` 410/missing → move stream + relay renames an unloadable wallet folder (never deletes) + dated relay backups (`--link-dest`), together; then cash-entry matching same currency, `csvRevive` merge, signing mount only apk/all, export currency column, xls loop caps, file size before `readBytes`.
