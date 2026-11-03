@@ -64,6 +64,6 @@ The Flutter version comes from `environment: flutter:` in app/pubspec.yaml (CI r
 Logs: dist/logs/<step>.log (with start/end stamps) and <step>.status ("seconds exit started"), image builds in
 dist/logs/image-dev.log, per-test timings in dist/logs/tests-<suite>-summary.txt; every step is appended to
 history/steps.jsonl (wallet-build times). dist/logs/last.status has one line per step ("<step> ok|failed <seconds>") and
-dist/logs/last-failed.txt "<step> <log path>" per failed step (empty when green): read these instead of parsing output.
+dist/logs/last-failed.txt "<step> <log path>" per failed step (empty when green): read these instead of parsing output. Per-command copies that later runs do not overwrite: dist/last-failed.<cmd>.txt, dist/last.<cmd>.status (log paths in the run dir).
 The exit code is non-zero if any step failed. BW_NATIVE=1 runs the steps directly on a machine that already has
 the right Flutter installed.

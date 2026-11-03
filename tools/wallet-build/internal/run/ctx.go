@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sys/unix"
 	"wallet-build/internal/sys"
 )
 
@@ -146,18 +147,31 @@ func (c *Ctx) TimingInit(cmd string) {
 	def("BW_WORKTREE", filepath.Base(c.Root))
 }
 
-// AppendLine appends one line with a single write on an O_APPEND file, so concurrent runs never interleave.
+// AppendLine appends one line with a single write on an O_APPEND file, so concurrent runs never interleave. It holds a shared
+// flock on the file and re-checks that the path still names it, so a trim (TrimHistory) that renames a new file over it loses no line.
 func AppendLine(path, line string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
-	if err != nil {
+	for {
+		f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
+		if err != nil {
+			return err
+		}
+		if unix.Flock(int(f.Fd()), unix.LOCK_SH) != nil {
+			f.Close()
+			return fmt.Errorf("lock %s", path)
+		}
+		a, err1 := f.Stat()
+		b, err2 := os.Stat(path)
+		if err1 != nil || err2 != nil || !os.SameFile(a, b) {
+			f.Close() // replaced while we waited for the lock: retry on the new file
+			continue
+		}
+		_, err = f.WriteString(line)
+		f.Close()
 		return err
 	}
-	defer f.Close()
-	_, err = f.WriteString(line)
-	return err
 }
 
 // LogHistory adds one step line to history/steps.jsonl in bash's exact format (no JSON escaping, no spaces).

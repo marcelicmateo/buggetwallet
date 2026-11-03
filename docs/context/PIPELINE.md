@@ -19,7 +19,7 @@ suites stay serialized (one Haiku run per stage); builders run only targeted che
   `grep -n` + line ranges, never whole files, build output by result line + failures, screenshots downscaled to 540 px.
   **Build output: no pipes** (owner 2026-11-01). A pipe reports the last command's status (`build | tail` says 0
   when tests fail). Use quiet mode and branch on the build's own exit code:
-  `tools/build.sh -q <cmd> || cat dist/logs/last-failed.txt` (also `tools/emulator.sh -q`): nothing is printed when it is green,
+  `tools/build.sh -q <cmd> || cat dist/last-failed.<cmd>.txt` (also `tools/emulator.sh -q`): nothing is printed when it is green,
   the failed steps with their log paths when not; read the named log's tail only if needed. Never judge a run by a piped
   command's exit code.
   Measure with `python3 -I tools/token-usage.py` (baseline in memory: ~2.9M tokens/commit before 2026-10-21).
@@ -120,7 +120,7 @@ Next: owner runs `ci` with tests (combined desktop job, lint speed and the ENG s
 Done: F2, UX-C2, CI speed + GO-M6 (d985731 + 13d42c4, merged dcf7804), stage green. Next: owner runs ci with tests (combined desktop job + lint unverified on a runner; lead reads ci-logs with `make ci-log`); APK on the phone when plugged in (`make apk`, then adb install); M6 live test. Unused update* wrappers in core (updateIou, updatePlanned, updateCategory, updateTag) have no app callers: drop in a later core pass.
 
 ## Resume here (end of session 2026-11-02 afternoon) — v2 pushed at d9ad6de
-Done: UX-B (Plan in place, Budget › Tags, Settings = setup, Today tiles) and PS payday auto-save (`PS_SPEC.md`), both reviewed and pushed; phone pages SafeArea fix; reviewer now also runs ponytail-review. Watcher briefs: a step failed when `dist/logs/last-failed.txt` is non-empty (`cmd || cat …` always exits 0).
+Done: UX-B (Plan in place, Budget › Tags, Settings = setup, Today tiles) and PS payday auto-save (`PS_SPEC.md`), both reviewed and pushed; phone pages SafeArea fix; reviewer now also runs ponytail-review. Watcher briefs: a step failed when `dist/last-failed.<cmd>.txt` is non-empty (`cmd || cat …` always exits 0).
 **Next, in order:**
 1. Install the latest APK on the owner's phone when it is plugged in (`adb install -r dist/BudgetWallet-android.apk`; rebuild with `tools/build.sh -q apk` first if v2 moved).
 2. ~~Owner answer pending~~ answered 2026-11-02: two offline devices taking out the same goal money is allowed (goal shows Below zero after sync, owner fixes by hand); no block, no warning.
