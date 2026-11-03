@@ -88,8 +88,9 @@ void main() {
     expect(after.allowanceToday, before.allowanceToday, reason: "today's spending doesn't change today's allowance");
     expect(after.safeToday, before.safeToday - 2347);
     expect(safeText(t), moneyExact(after.safeToday, 'EUR'));
-    // The hero's sub line (the "Spent … today" sentence is gone since RX3): what the period has used of its flexible budget.
-    expect(find.text('${moneyExact(after.spent, 'EUR')} of ${moneyExact(after.flexBudget, 'EUR')}'), findsOneWidget);
+    // The hero's sub line (the "Spent … today" sentence is gone since RX3): what the period has used of its flexible budget; the
+    // "Tomorrow … · pace …" line follows in the same text.
+    expect(find.textContaining('${moneyExact(after.spent, 'EUR')} of ${moneyExact(after.flexBudget, 'EUR')}'), findsOneWidget);
 
     await scrollTo(t, find.text('Lunch synthetic note'), TodayScreen);
     expect(tileOn(today, 'Eating out'), findsOneWidget);

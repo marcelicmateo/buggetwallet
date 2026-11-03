@@ -42,10 +42,14 @@ extension RulesDb on WalletController {
       () => timed('rules.view', () => rulesView(settings, repo.payeeRules(), tagContext.ruleTags, tagTable, categoryTable)));
 
   /// How many live payments in the wallet's currency each rule decided the main tag of (rule id -> count), once per data version.
-  Map<String, int> ruleUseCounts() => memo(
-      const MemoKey('rules.hits'),
-      () => timed('rules.hits', () => ruleHits([for (final t in wholeTxs) t.tx], categorizer, currency: currency),
-          fields: {'tx': wholeTxs.length}, warnMs: 50));
+  /// Right after a data change the last counts stay until the idle warm-up has the new ones (`_heavy`; [force] works them out now).
+  Map<String, int> ruleUseCounts({bool force = false}) => _heavy(
+      'rules.hits',
+      () => memo(
+          const MemoKey('rules.hits'),
+          () => timed('rules.hits', () => ruleHits([for (final t in wholeTxs) t.tx], categorizer, currency: currency),
+              fields: {'tx': wholeTxs.length}, warnMs: 50)),
+      force: force);
 
   /// The payees of the most recent payments (newest first, one each), for the payee picker. Once per data version.
   List<RulePayee> recentPayees({int limit = 40}) => memo(MemoKey('rules.payees', limit), () {

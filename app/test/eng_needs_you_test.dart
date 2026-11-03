@@ -13,6 +13,7 @@ import 'package:budget_wallet/src/screens/rules_panel.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/theme.dart';
+import 'package:budget_wallet/src/warm_up.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -184,6 +185,38 @@ void main() {
       await _undo(t);
       expect(_card(id), findsOneWidget);
       expect(wc.ruleSuggestOff, isEmpty);
+    });
+
+    tw('with the background work on, a data change keeps the last payee and rule cards until the warm-up step has the new ones', (t) async {
+      WarmUp.enabled = true;
+      addTearDown(() => WarmUp.enabled = false);
+      final wc = _wallet();
+      void shop(String desc) {
+        wc.repo.importBatch(ImportBatch(source: 'pbz', transactions: [
+          syntheticTx('2026-10-02', -1850, 'POS plaćanje', desc),
+          syntheticTx('2026-10-05', -940, 'POS plaćanje', desc),
+          syntheticTx('2026-10-08', -1200, 'POS plaćanje', desc),
+        ]));
+        for (final r in wc.repo.transactions()) {
+          wc.repo.setCategory(r.id, 'Eating out');
+        }
+        wc.reload();
+      }
+
+      shop('POS KONZUM 0000 ZAGREB');
+      expect(_ids(wc), ['rule:konzum_zagreb'], reason: 'the first queue is worked out at once');
+      shop('POS TISAK 0000 ZAGREB');
+      expect(_ids(wc), ['rule:konzum_zagreb'], reason: 'the frame after a data change does not read every row again');
+      var heard = 0;
+      wc.addListener(() => heard++);
+      wc.payeeCandidates(force: true); // the idle steps, in their order
+      wc.ruleSuggestionsNow(force: true);
+      wc.warmNeedsYou();
+      expect(_ids(wc), hasLength(2));
+      expect(_ids(wc), contains('rule:konzum_zagreb'));
+      expect(heard, 1, reason: 'the screens hear that the queue changed');
+      wc.warmNeedsYou();
+      expect(heard, 1, reason: 'an unchanged queue is not announced again');
     });
 
     tw('a payee with no main tag: Make rule opens the rule form; Dismiss hides it, Undo shows it again', (t) async {

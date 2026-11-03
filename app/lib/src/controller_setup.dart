@@ -115,6 +115,7 @@ extension SetupWizardDb on WalletController {
   void makePayeeRule(String merchantKey, String category) {
     if (!categoryTable.isLive(category)) return;
     repo.setMerchantRule(merchantKey, category);
+    _heavyLast.clear(); // the cards just used must not come back from the last values
     logEvent(_setupLog, Level.INFO, 'setup.payeeRule', {'category': _logCategory(category)});
     _changed();
   }

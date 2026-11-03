@@ -902,6 +902,22 @@ class _TabFadeState extends State<TabFade> with SingleTickerProviderStateMixin {
     super.dispose();
   }
 
+  /// The constraints the page had while it was shown.
+  BoxConstraints? _shownBox;
+
+  /// A hidden page keeps the constraints it had while shown: when the window around it changes (the Needs-you pane comes and goes
+  /// with the tab, 380 dp), the four pages nobody sees are not laid out again (about 40 ms on a big wallet); a page is laid out
+  /// afresh when it is shown. The same widgets at every state, so the child keeps its State.
   @override
-  Widget build(BuildContext context) => FadeTransition(opacity: _c, child: widget.child);
+  Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
+        if (widget.active) _shownBox = box;
+        final b = widget.active ? box : (_shownBox ?? box);
+        return OverflowBox(
+            alignment: Alignment.topLeft,
+            minWidth: b.minWidth,
+            maxWidth: b.maxWidth,
+            minHeight: b.minHeight,
+            maxHeight: b.maxHeight,
+            child: FadeTransition(opacity: _c, child: widget.child));
+      });
 }

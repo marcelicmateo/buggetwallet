@@ -1,10 +1,11 @@
 // Adaptive layout on a desktop window: screenshots of every tab and the Add expense dialog at 1280x800, 1920x1080 and
 // 800x1280, plus the rail, shortcuts and window resizing on the real app. Desktop only (a resized phone view hangs the
 // screenshot). Run: make desktop-test N=adaptive -> dist/screens/linux/adaptive/<size>-<screen>.png
-import 'package:budget_wallet/src/controller.dart' show TagsDb;
+import 'package:budget_wallet/src/controller.dart' show DeviceSettings, TagsDb;
 import 'package:budget_wallet/src/layout.dart';
 import 'package:budget_wallet/src/platform.dart';
 import 'package:budget_wallet/src/screens/category_detail.dart';
+import 'package:budget_wallet/src/screens/explore.dart';
 import 'package:budget_wallet/src/screens/insights.dart';
 import 'package:budget_wallet/src/screens/project.dart';
 import 'package:budget_wallet/src/screens/settings.dart';
@@ -118,7 +119,6 @@ void main() {
     }
     await t.pumpAndSettle();
     final plan = t.state(find.byType(SettingsScreen, skipOffstage: false));
-    final spending = t.state(find.byType(SpendingScreen, skipOffstage: false));
 
     Future<void> ctrl(LogicalKeyboardKey k) async {
       await t.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
@@ -130,7 +130,12 @@ void main() {
     await ctrl(LogicalKeyboardKey.comma);
     expect(find.byType(SettingsScreen), findsOneWidget);
     await ctrl(LogicalKeyboardKey.digit3);
+    expect(find.byType(ExploreScreen), findsOneWidget);
+    // Spending is built only while shown (Explore | Spending switch), so its State is taken once it is open.
+    wc.setBudgetView('spending');
+    await t.pumpAndSettle();
     expect(find.byType(SpendingScreen), findsOneWidget);
+    final spending = t.state(find.byType(SpendingScreen, skipOffstage: false));
     await ctrl(LogicalKeyboardKey.keyN);
     expect(find.byType(AddExpenseSheet), findsOneWidget);
     await t.sendKeyEvent(LogicalKeyboardKey.escape);

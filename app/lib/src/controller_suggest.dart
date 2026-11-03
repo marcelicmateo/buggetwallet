@@ -170,12 +170,15 @@ extension SuggestDb on WalletController {
   List<PayeeCount> payeeRecommendations({int limit = 5}) {
     final off = _localKeys('payeeRecOff');
     return [
-      for (final p in uncategorisedPayeeList(limit: 50))
+      for (final p in payeeCandidates())
         if (p.count >= _recurring && !off.contains(p.merchantKey)) p
     ].take(limit).toList();
   }
 
   static const _recurring = 2;
+
+  /// The payees with no main tag ([uncategorisedPayeeList]), the last ones right after a data change (`_heavy`).
+  List<PayeeCount> payeeCandidates({bool force = false}) => _heavy('payees', () => uncategorisedPayeeList(limit: 50), force: force);
 
   /// Hides the "no main tag" recommendation for payee [key] on this device (never synced); nothing else changes.
   void dismissPayeeRecommendation(String key) {
@@ -186,13 +189,16 @@ extension SuggestDb on WalletController {
   }
 
   /// The payee rules to offer in Rules › Suggested. Cached per data version and dismissal list.
-  List<RuleSuggestion> get ruleSuggestionList {
-    final off = ruleSuggestOff;
-    return memo(
-        MemoKey('rules.suggest', (off.toList()..sort()).join('|')),
-        () => timed('rules.suggest', () => ruleSuggestions([for (final t in wholeTxs) t.tx], categorizer, off: off),
-            fields: {'tx': wholeTxs.length}, warnMs: 50));
-  }
+  List<RuleSuggestion> get ruleSuggestionList => ruleSuggestionsNow();
+
+  /// [ruleSuggestionList]; `force` works it out now even right after a data change (the idle warm-up step).
+  List<RuleSuggestion> ruleSuggestionsNow({bool force = false}) => _heavy('rules.suggest', () {
+        final off = ruleSuggestOff;
+        return memo(
+            MemoKey('rules.suggest', (off.toList()..sort()).join('|')),
+            () => timed('rules.suggest', () => ruleSuggestions([for (final t in wholeTxs) t.tx], categorizer, off: off),
+                fields: {'tx': wholeTxs.length}, warnMs: 50));
+      }, force: force);
 
   /// Hides the suggestion for [key] on this device (never synced); nothing else changes.
   void dismissRuleSuggestion(String key) {
@@ -205,6 +211,7 @@ extension SuggestDb on WalletController {
   /// Makes the payee rule [s] (a tap on Make rule in Rules › Suggested). The payments keep their own main tag.
   void makeSuggestedRule(RuleSuggestion s) {
     repo.setMerchantRule(s.merchantKey, s.category);
+    _heavyLast.clear(); // the cards just used must not come back from the last values
     logEvent(_suggestLog, Level.INFO, 'ruleSuggest.make', {'from': 'panel', 'category': _logCategory(s.category)});
     _changed();
   }
