@@ -21,6 +21,7 @@ extension WarmUpTasks on WalletController {
           ('reviewState', this.reviewState),
           ('balanceWarnings', balanceWarningList),
           ('headsUps', headsUpLines),
+          ('needsYou', needsYouItems),
           ('deliveries', () => deliveries),
           ('deliveryOrders90', () => deliveryOrders90),
           ('latestBySource', () => latestBySource),
@@ -44,6 +45,8 @@ extension WarmUpTasks on WalletController {
           ('expectedIncomes', expectedIncomes),
           ('recurringPayments', recurringPayments),
           ('billsCost', billsCost),
+          ('accountBalances', accountBalanceList),
+          ('moneyTimeline', () => moneyTimeline(MoneyFilter.all)), // Money's first build
         ],
       Tabs.plan => <WarmTask>[
           ('budgetVsActual', () => this.budgetVsActual(month)),

@@ -40,8 +40,8 @@ enum SettingsSection {
       ];
 }
 
-/// Places on the Money page a link can scroll to.
-enum BillsAnchor { comingUp, review, expected, slips }
+/// Places on Bills & slips a link can open Money at.
+enum BillsAnchor { expected, slips }
 
 /// A "go there" request: a section or place to show. Each [request] notifies, also for the same value twice.
 /// A request made while no page listens (the tab's page is not built yet: the shell builds hidden pages one by one) is kept as

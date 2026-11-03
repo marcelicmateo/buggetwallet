@@ -1491,7 +1491,7 @@ void main() {
       final line = key('needs:category:${WalletRepo.billPlannedId(w.gas)}');
       expect(line, findsOneWidget);
       expect(find.descendant(of: line, matching: find.text('Needs a category')), findsOneWidget);
-      expect(find.textContaining('Needs a category'), findsNWidgets(2), reason: 'its own card and the suffix of its heads-up card');
+      expect(find.textContaining('Needs a category'), findsOneWidget, reason: 'one card: its heads-up is not a second one');
       await tester.ensureVisible(find.byKey(ValueKey('needsPrimary:category:${WalletRepo.billPlannedId(w.gas)}')));
       await tester.tap(find.byKey(ValueKey('needsPrimary:category:${WalletRepo.billPlannedId(w.gas)}')));
       await tester.pumpAndSettle();

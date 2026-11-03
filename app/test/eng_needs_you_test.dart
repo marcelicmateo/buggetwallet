@@ -14,6 +14,7 @@ import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
 import 'package:wallet_importer/wallet_importer.dart';
@@ -65,6 +66,26 @@ Future<void> _undo(WidgetTester t) async {
   await t.tap(_key('toastUndo'));
   await t.pump(const Duration(milliseconds: 500));
   await t.pump(const Duration(milliseconds: 500));
+}
+
+/// The texts under [root] that break inside a word (a line ends between two non-space characters).
+List<String> _brokenWords(WidgetTester t, Finder root) {
+  final out = <String>[];
+  for (final rp in t.renderObjectList<RenderParagraph>(find.descendant(of: root, matching: find.byType(RichText)))) {
+    final text = rp.text.toPlainText();
+    final tp = TextPainter(text: rp.text, textDirection: TextDirection.ltr, textScaler: rp.textScaler, maxLines: rp.maxLines)
+      ..layout(maxWidth: rp.size.width + 1);
+    var pos = 0;
+    while (pos < text.length) {
+      final end = tp.getLineBoundary(TextPosition(offset: pos)).end;
+      if (end <= pos || end >= text.length) break;
+      if (text[end - 1] != '-' && !RegExp(r'\s').hasMatch(text[end - 1]) && !RegExp(r'\s').hasMatch(text[end])) {
+        out.add('${text.substring(0, end)} | ${text.substring(end)}');
+      }
+      pos = end;
+    }
+  }
+  return out;
 }
 
 /// The tests end with the controller's 3 s sync debounce run out (no timer may be pending).
@@ -272,9 +293,9 @@ void main() {
       for (final label in ['Import', 'Decide', 'Pace', 'Done']) {
         expect(find.textContaining(label), findsWidgets);
       }
-      final now = wc.needsYouReviewSteps().where((s) => s.state == 1);
+      final now = wc.needsYouReviewSteps(wc.needsYouItems()).where((s) => s.state == 1);
       expect(now, hasLength(1));
-      expect(wc.needsYouReviewSteps().last.state, isNot(2), reason: 'Done only once the review is done');
+      expect(wc.needsYouReviewSteps(wc.needsYouItems()).last.state, isNot(2), reason: 'Done only once the review is done');
       await _tap(t, _primary('review'));
       expect(find.byType(ReviewScreen), findsOneWidget);
     });
@@ -332,6 +353,27 @@ void main() {
       await _undo(t);
       expect(wc.loanView(id)!.payments, isEmpty);
       expect(wc.loanAsks(id), isEmpty, reason: 'Undo answers No: the row is not asked about again');
+    });
+
+    tw('a loan payment Undo says it is not matched to that loan (core has no unanswered state)', (t) async {
+      final wc = budgetWallet();
+      wc.snoozeKeyBackup();
+      final id = wc.addLoan(Loan(
+          id: '',
+          name: 'Car loan',
+          principal: 1200000,
+          rateBp: 600,
+          months: 12,
+          firstDue: '2026-09-15',
+          payeeKey: wc.payeeKeyOf('LENDER SYNTHETIC')))!;
+      wc.repo.importBatch(
+          ImportBatch(source: 'pbz', transactions: [syntheticTx('2026-09-15', -103000, 'Trajni nalog', 'LENDER SYNTHETIC 123')]));
+      wc.reload();
+      final tx = wc.loanAsks(id).single.payment.txId;
+      await _pump(t, wc);
+      await _tap(t, _primary('loanAsk:$tx'));
+      await _undo(t);
+      expect(find.text('Undone. Not matched to Car loan.'), findsOneWidget);
     });
 
     tw('a loan that ended: the freed payment goes to a goal, Undo puts it back', (t) async {
@@ -487,11 +529,96 @@ void main() {
       expect(wc.needsYouItems().any((i) => i.kind == NeedsYouKind.keyBackup), isFalse);
     });
 
+    tw('beside the pane the badge scrolls the pane to its top and focuses its first card instead of opening a page', (t) async {
+      final wc = busy();
+      await pumpFull(t, wc, 1.0, size: const Size(1440, 700));
+      await t.pump(const Duration(milliseconds: 600));
+      final list = find.descendant(of: _key('needsYouPane'), matching: find.byType(Scrollable)).first;
+      await t.drag(list, const Offset(0, -400));
+      await t.pump(const Duration(milliseconds: 300));
+      final before = wc.needsYouFocus.value;
+      await t.tap(_key('overviewNeedsYou'));
+      await t.pump(const Duration(milliseconds: 600));
+      for (var i = 0; i < 4; i++) {
+        await t.pump(const Duration(milliseconds: 150));
+      }
+      expect(wc.needsYouFocus.value, before + 1, reason: 'the badge asks the pane');
+      expect(find.byType(NeedsYouScreen), findsNothing, reason: 'no dialog beside the pane');
+      expect(t.state<ScrollableState>(list).position.pixels, 0);
+      final first = t.widget<FilledButton>(find
+          .byWidgetPredicate(
+              (w) => w is FilledButton && w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('needsPrimary:'))
+          .first);
+      expect(first.focusNode?.hasFocus, isTrue);
+    });
+
+    tw('at 1280 x 720 Overview beside the pane keeps one column, at 1440 it has two', (t) async {
+      final wc = busy();
+      await pumpFull(t, wc, 1.0, size: const Size(1280, 720));
+      await t.pump(const Duration(milliseconds: 600));
+      expect(_key('needsYouPane'), findsOneWidget);
+      expect(t.getTopLeft(_key('foundSection')).dy, greaterThan(t.getBottomLeft(_key('heroTile')).dy), reason: 'found sits under the hero');
+      await pumpFull(t, wc, 1.0, size: const Size(1600, 900));
+      await t.pump(const Duration(milliseconds: 600));
+      expect(t.getTopLeft(_key('foundSection')).dx, greaterThan(t.getTopRight(_key('heroTile')).dx), reason: 'two columns');
+    });
+
     tw('below 1280 dp there is no pane', (t) async {
       final wc = busy();
       await overview(t, wc, size: const Size(1100, 900));
       expect(_key('needsYouPane'), findsNothing);
       expect(_key('needsYouTile'), findsOneWidget);
+    });
+  });
+
+  group('details', () {
+    tw('the review steps at 320 dp x 2.0 are a 2 x 2 grid and no label breaks inside a word; at 400 dp they are one row of four',
+        (t) async {
+      final wc = habitsWallet();
+      wc.snoozeKeyBackup();
+      await _pump(t, wc, size: const Size(320, 900), scale: 2);
+      final box = _key('needsYouReview');
+      expect(box, findsOneWidget);
+      expect(_brokenWords(t, box), isEmpty);
+      final ys = {
+        for (final l in ['1 · Import', '2 · Decide', '3 · Pace', '4 · Done']) t.getTopLeft(find.text(l)).dy
+      };
+      expect(ys.length, 2, reason: 'two rows of two');
+      await _pump(t, wc, size: const Size(400, 900));
+      expect(
+          {
+            for (final l in ['1 · Import', '2 · Decide', '3 · Pace', '4 · Done']) t.getTopLeft(find.text(l)).dy
+          }.length,
+          1);
+    });
+
+    tw('a bill that needs a category is one card; its heads-up is not a second one', (t) async {
+      final repo = WalletRepo.inMemory(now: () => budgetToday.millisecondsSinceEpoch);
+      final wc = seamedController(repo, key: VaultKey.generate(), clock: () => budgetToday);
+      addTearDown(wc.dispose);
+      repo.updateSettings({'salary': 150000, 'salaryConfirmed': true, 'periodStart': '2026-10-01', 'paydayDay': 1});
+      final (billId, _) = repo.importBill(const NormalizedBill(
+          source: BillSource.manual, externalId: 'q-gas2', payee: 'Synth Gas', total: 2500, dueDate: '2026-10-26', date: '2026-10-20'));
+      repo.linkBill(billId, repo.addTransaction(date: '2026-10-19', amount: 2500, category: 'Groceries'));
+      repo.confirmBill(billId);
+      repo.unlinkBill(billId);
+      wc.snoozeKeyBackup();
+      wc.markReviewDone();
+      wc.saveHeadsUp(cents: 1000, days: 14);
+      wc.reload();
+      expect(wc.headsUpLines().any((h) => h.item.planned?.needsCategory ?? false), isTrue, reason: 'core does list it as a heads-up');
+      final kinds = [for (final i in wc.needsYouItems()) i.kind];
+      expect(kinds.where((k) => k == NeedsYouKind.plannedCategory), hasLength(1));
+      expect(kinds.where((k) => k == NeedsYouKind.headsUp), isEmpty);
+    });
+
+    tw('the queue is built once per data version and notification: the same list until something changes', (t) async {
+      final wc = _wallet();
+      final a = wc.needsYouItems();
+      expect(identical(wc.needsYouItems(), a), isTrue);
+      wc.unsnoozeKeyBackup();
+      expect(identical(wc.needsYouItems(), a), isFalse);
+      expect(wc.needsYouItems().map((i) => i.id), contains('keyBackup'));
     });
   });
 

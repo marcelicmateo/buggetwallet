@@ -76,7 +76,6 @@ class TodayView implements Listenable {
   bool isMatchedBank(String bankId) => _wc.isMatchedBank(bankId);
   int splitCount(String txId) => _wc.splitCount(txId);
   bool splitIsBroken(String txId) => _wc.splitIsBroken(txId);
-  bool setupCollapsedFor(List<String> steps) => _wc.setupCollapsedFor(steps);
 
   // ---------- Overview (E2) ----------
   /// The € | hours switch: Overview listens to it, so a toggle rebuilds Overview only.
@@ -106,7 +105,6 @@ class TodayView implements Listenable {
   // ---------- actions ----------
   void startNewMonth(String date) => _wc.startNewMonth(date);
   void updateSettings(Map<String, Object?> changes) => _wc.updateSettings(changes);
-  void setSetupCollapsed(bool v, List<String> steps) => _wc.setSetupCollapsed(v, steps);
   void snoozeKeyBackup() => _wc.snoozeKeyBackup();
   void declineSetupWizard() => _wc.declineSetupWizard();
   void openCurrencies() => _wc.openCurrencies();

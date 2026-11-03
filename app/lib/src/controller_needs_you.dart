@@ -62,6 +62,15 @@ extension NeedsYou on WalletController {
   /// The whole queue, ordered by urgency. The parts that read the wallet are cached per data version; the ones that read device-local
   /// state (sync stop, key prompt, setup, dismissed suggestions) are read on each call, so a tap shows at once.
   List<NeedsYouItem> needsYouItems() {
+    final key = (dataVersion, notifyCount, today());
+    if (_needsKey != key || _needsVal == null) {
+      _needsVal = List.unmodifiable(_buildNeedsYou());
+      _needsKey = key;
+    }
+    return _needsVal!;
+  }
+
+  List<NeedsYouItem> _buildNeedsYou() {
     final items = [..._needsYouLive(), ..._cached(const MemoKey('needsYouData'), _needsYouData)];
     // List.sort is not stable: the index keeps the order the sources gave within one kind.
     final order = {for (var i = 0; i < items.length; i++) items[i]: i};
@@ -274,11 +283,16 @@ extension NeedsYou on WalletController {
           data: (e, open.isEmpty ? null : open.first.id)));
     }
     for (final h in headsUpLines()) {
+      // A bill that needs a category already has its own card.
+      if (h.item.planned?.needsCategory ?? false) continue;
       out.add(NeedsYouItem(NeedsYouKind.headsUp, 'headsUp:${h.item.key}',
           tag: 'Coming up',
           title: h.item.title.isEmpty ? 'Planned cost' : h.item.title,
-          why:
-              '${h.daysLeft == 0 ? 'Today' : h.daysLeft == 1 ? 'Tomorrow' : 'In ${h.daysLeft} days'}${(h.item.planned?.needsCategory ?? false) ? ' · Needs a category' : ''}',
+          why: h.daysLeft == 0
+              ? 'Today'
+              : h.daysLeft == 1
+                  ? 'Tomorrow'
+                  : 'In ${h.daysLeft} days',
           cents: h.item.amount,
           primary: 'Open',
           data: h));
@@ -287,13 +301,12 @@ extension NeedsYou on WalletController {
   }
 
   /// The weekly review as four steps (import, decide, pace, done) while one is due; empty otherwise. The first step not done is "now".
-  List<NeedsYouStep> needsYouReviewSteps() {
+  List<NeedsYouStep> needsYouReviewSteps(List<NeedsYouItem> queue) {
     final r = this.reviewState();
     if (!r.due) return const [];
     final done = [
       lastImport.any((l) => l.ok),
-      !needsYouItems()
-          .any((i) => i.kind != NeedsYouKind.review && i.kind.index < NeedsYouKind.headsUp.index && i.kind != NeedsYouKind.salary),
+      !queue.any((i) => i.kind != NeedsYouKind.review && i.kind.index < NeedsYouKind.headsUp.index && i.kind != NeedsYouKind.salary),
       r.count('pace') == 0,
       false,
     ];

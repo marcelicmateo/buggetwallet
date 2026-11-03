@@ -119,44 +119,6 @@ void main() {
     });
   });
 
-  group('calendar cells', () {
-    Future<void> strip(WidgetTester t, List<CalDay> days, {Size size = const Size(320, 700), double scale = 2}) async {
-      t.view.physicalSize = size;
-      t.view.devicePixelRatio = 1;
-      addTearDown(t.view.reset);
-      await t.pumpWidget(MaterialApp(
-        theme: buildTheme(Brightness.light),
-        builder: (context, c) => MediaQuery(data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(scale)), child: c!),
-        home: Scaffold(body: Padding(padding: const EdgeInsets.all(28), child: CalendarStrip(days: days, startWeekday: 1))),
-      ));
-      await t.pump();
-    }
-
-    double ratio(WidgetTester t, String label) {
-      final text = find.text(label);
-      final box = find.ancestor(of: text, matching: find.byType(FittedBox)).first;
-      return t.getSize(box).width / t.getSize(text).width;
-    }
-
-    testWidgets('320 dp at 2.0: a long amount is left out and the day number keeps the size it has without one', (t) async {
-      await withErrors((errors) async {
-        await strip(t, const [CalDay('25', kind: CalKind.bill, amount: '1,234.57 €'), CalDay('26', kind: CalKind.bill)]);
-        expect(find.text('1,234.57 €'), findsNothing, reason: 'it would shrink below 80 %: left out');
-        expect(ratio(t, '25'), closeTo(ratio(t, '26'), 0.001));
-        expect(t.takeException(), isNull);
-        errors.check();
-      });
-    });
-
-    testWidgets('400 dp at 1.0: a short amount shows at its own size beside an unchanged day number', (t) async {
-      await strip(t, const [CalDay('25', kind: CalKind.bill, amount: '30 €'), CalDay('26', kind: CalKind.bill)],
-          size: const Size(400, 700), scale: 1);
-      expect(find.text('30 €'), findsOneWidget);
-      expect(ratio(t, '25'), closeTo(ratio(t, '26'), 0.001));
-      expect(ratio(t, '30 €'), greaterThanOrEqualTo(0.8));
-    });
-  });
-
   group('layout', () {
     const sizes = {
       '320 dp x 2.0': (Size(320, 640), 2.0),

@@ -15,6 +15,9 @@ class MoneyUpRow {
   final bool late;
   final UpcomingItem? item;
   final IncomeCycle? income;
+
+  /// A payment dated after today (a bank row with a later date): it sits above the Today line, not among the past ones.
+  final CategorizedTx? tx;
   const MoneyUpRow(
       {required this.key,
       required this.date,
@@ -23,7 +26,8 @@ class MoneyUpRow {
       this.cents,
       this.late = false,
       this.item,
-      this.income});
+      this.income,
+      this.tx});
 }
 
 class MoneyDay {
@@ -91,7 +95,6 @@ extension MoneyData on WalletController {
                   income: x));
             }
           }
-          up.sort((a, b) => a.date.compareTo(b.date));
         }
         final onAccount = accountId == null
             ? null
@@ -101,6 +104,7 @@ extension MoneyData on WalletController {
                     for (final r in b.rows) r.id
               };
         final past = <CategorizedTx>[];
+        final future = <MoneyUpRow>[];
         if (filter != MoneyFilter.planned) {
           for (final x in wholeTxs) {
             if (onAccount != null && !onAccount.contains(x.tx.id)) continue;
@@ -112,9 +116,18 @@ extension MoneyData on WalletController {
               MoneyFilter.bills => billForTx(x.tx.id) != null,
               MoneyFilter.planned => false,
             };
-            if (keep) past.add(x);
+            if (!keep) continue;
+            if (x.date.compareTo(t) > 0) {
+              future.add(
+                  MoneyUpRow(key: 'tx:${x.tx.id}', date: x.date, title: merchantName(x.tx), tag: 'dated ahead', cents: x.amount, tx: x));
+            } else {
+              past.add(x);
+            }
           }
         }
+        up
+          ..addAll(future)
+          ..sort((a, b) => a.date.compareTo(b.date));
         past.sort((a, b) => b.date.compareTo(a.date));
         final days = <MoneyDay>[];
         for (final x in past) {

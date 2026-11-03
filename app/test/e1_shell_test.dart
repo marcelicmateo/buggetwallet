@@ -27,8 +27,12 @@ void main() {
     Set<String> keys(int tab) => {for (final task in wc.warmUpTasksFor(tab)) task.$1};
     expect(keys(Tabs.explore), containsAll(['period', 'payPeriods', 'monthSummary', 'averageSpending', 'spending', 'budgetVsActual']));
     expect(keys(Tabs.plan), containsAll(['budgetVsActual', 'paceRows', 'paydayForecast', 'owedTotals', 'goalTargetTotal']));
-    expect(keys(Tabs.money), containsAll(['billLists', 'expectedBills', 'expectedIncomes', 'recurringPayments', 'billsCost']));
-    expect(keys(Tabs.overview), containsAll(['period', 'periodDays', 'heldTotals', 'tightestBudget', 'comingUp', 'reviewState']));
+    expect(
+        keys(Tabs.money),
+        containsAll(
+            ['billLists', 'expectedBills', 'expectedIncomes', 'recurringPayments', 'billsCost', 'accountBalances', 'moneyTimeline']));
+    expect(
+        keys(Tabs.overview), containsAll(['period', 'periodDays', 'heldTotals', 'tightestBudget', 'comingUp', 'reviewState', 'needsYou']));
     expect(keys(Tabs.settings), isEmpty);
   });
 

@@ -588,12 +588,20 @@ class _HomeShellState extends State<HomeShell> {
         onPressed: () => _key('gear', () => _go(Tabs.settings, 'gear')),
       );
 
-  Widget _searchButton() => IconButton(
-        key: const ValueKey('appBarSearch'),
-        tooltip: _hint('Search', 'Ctrl+F'),
-        icon: const Icon(Icons.search),
-        onPressed: () => _key('appBarSearch', () => _goThen(Tabs.explore, 'appbar', () => _searchRequest.value++)),
-      );
+  /// The one search of a screen: on Money it searches Money (Ctrl+F), anywhere else it goes to Explore (Ctrl+K).
+  Widget _searchButton() {
+    final inMoney = tab == Tabs.money;
+    return IconButton(
+      key: const ValueKey('appBarSearch'),
+      tooltip: _hint('Search', inMoney ? 'Ctrl+F' : 'Ctrl+K'),
+      icon: const Icon(Icons.search),
+      onPressed: () => _key(
+          'appBarSearch',
+          () => inMoney
+              ? _goThen(Tabs.money, 'appbar', () => _moneySearch.value++)
+              : _goThen(Tabs.explore, 'appbar', () => _searchRequest.value++)),
+    );
+  }
 
   /// The pay period as a small boxed label for the rail (the wide layouts have no app bar): one line when the rail is extended,
   /// two short lines when it is narrow. It scales down rather than growing the rail.

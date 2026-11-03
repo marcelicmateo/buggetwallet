@@ -289,6 +289,21 @@ void main() {
       expect(identical(wc.period(), period), isTrue, reason: 'the memo is still there: warming up again recomputes nothing');
     });
 
+    testWidgets('the warm-up fills the Needs-you queue and Money\'s first build, so both first builds are cache hits', (t) async {
+      _background();
+      final wc = demoWallet(clock: pinnedNoon);
+      expect({for (final x in wc.warmUpTasksFor(Tabs.overview)) x.$1}, contains('needsYou'));
+      expect({for (final x in wc.warmUpTasksFor(Tabs.money)) x.$1}, containsAll(['moneyTimeline', 'accountBalances']));
+      wc.startWarmUp();
+      await t.pump(_frame);
+      final queue = wc.needsYouItems(), line = wc.moneyTimeline(MoneyFilter.all), balances = wc.accountBalanceList();
+      expect(identical(wc.needsYouItems(), queue), isTrue, reason: 'one list until the data or a local value changes');
+      expect(identical(wc.moneyTimeline(MoneyFilter.all), line), isTrue);
+      expect(identical(wc.accountBalanceList(), balances), isTrue);
+      wc.snoozeKeyBackup();
+      expect(identical(wc.needsYouItems(), queue), isFalse, reason: 'a local value changed: the queue is built again');
+    });
+
     testWidgets('a reload during the run stops it', (t) async {
       _background();
       final wc = demoWallet(clock: pinnedNoon);

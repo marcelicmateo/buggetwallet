@@ -77,10 +77,11 @@ class TodayScreen extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) =>
-      ValueListenableBuilder<bool>(valueListenable: view.hoursMode, builder: (context, _, __) => _content(context));
+  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
+      valueListenable: view.hoursMode,
+      builder: (context, _, __) => LayoutBuilder(builder: (context, box) => _content(context, box.maxWidth)));
 
-  Widget _content(BuildContext context) {
+  Widget _content(BuildContext context, double contentWidth) {
     final f = _TodayFigures(view, clock?.call() ?? view.now);
     final p = f.p;
     final review = view.reviewState();
@@ -104,7 +105,8 @@ class TodayScreen extends StatelessWidget {
     // From 1280 dp, with something to put in it, two columns (safe to spend and held | found and pinned); the Needs-you pane comes with E7.
     // From needsYouPaneMin the shell stands the queue beside the page (main.dart), so the tile would repeat it.
     final pane = width >= needsYouPaneMin;
-    final twoCol = width >= 1280 && (hasFound || hasPins || hasGoal);
+    // Two columns need room: the content beside the pane (680 dp at 1280) stays one column, 1440 dp has two.
+    final twoCol = width >= 1280 && contentWidth >= 800 && (hasFound || hasPins || hasGoal);
     final wide = sizeFor(width) == LayoutSize.expanded && !twoCol;
     final recent = view.wholeTxs.where((t) => t.kind != BudgetKind.transfer || t.iou).take(wide ? 8 : 3).toList();
     final today = view.today();
@@ -133,7 +135,8 @@ class TodayScreen extends StatelessWidget {
       eyebrow: overviewEyebrow(today, p),
       needsYou: needs,
       onPeriod: () => view.showPeriodReport(context),
-      onNeedsYou: () => openNeedsYou(context, view.controller, chooser: chooser),
+      // Beside the standing pane the badge takes you to it; without one it opens the page.
+      onNeedsYou: () => pane ? view.controller.needsYouFocus.value++ : openNeedsYou(context, view.controller, chooser: chooser),
     );
     void openFound() => view.showFindings(context, openExplore: explore);
     final found = FoundSection(view: view, onOpen: openFound);

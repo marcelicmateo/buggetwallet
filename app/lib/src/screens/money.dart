@@ -10,7 +10,6 @@ import '../file_chooser.dart';
 import '../format.dart';
 import '../layout.dart';
 import '../logging.dart';
-import '../platform.dart';
 import '../tabs.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -20,7 +19,6 @@ import '../widgets/rebuild_when_shown.dart';
 import '../widgets/sheets.dart';
 import 'bill_sheet.dart';
 import 'bills_tab.dart';
-import 'needs_you.dart';
 import 'planned_sheets.dart' show plannedEntryToast;
 import 'recurring_sheet.dart';
 import 'search.dart';
@@ -59,7 +57,6 @@ class _Entry {
 
 class _MoneyScreenState extends State<MoneyScreen> {
   final _scroll = ScrollController();
-  final _comingKey = GlobalKey();
   MoneyFilter _filter = MoneyFilter.all;
   String? _account;
   bool _searching = false;
@@ -101,21 +98,13 @@ class _MoneyScreenState extends State<MoneyScreen> {
     if (mounted && !_searching) setState(() => _searching = true);
   }
 
-  /// comingUp scrolls to the coming-up rows, review opens Needs you, expected and slips open Bills & slips.
+  /// A link to the bills (the Explore search's expected bill) opens Bills & slips at the place it names.
   Future<void> _jump() async {
     final a = widget.request?.value;
     if (a == null) return;
     await WidgetsBinding.instance.endOfFrame;
     if (!mounted) return;
-    switch (a) {
-      case BillsAnchor.comingUp:
-        final c = _comingKey.currentContext;
-        if (c != null && c.mounted) await Scrollable.ensureVisible(c, duration: const Duration(milliseconds: 250));
-      case BillsAnchor.review:
-        await openNeedsYou(context, widget.wc, chooser: widget.chooser);
-      case BillsAnchor.expected || BillsAnchor.slips:
-        await openBillsPage(context, widget.wc, chooser: widget.chooser, anchor: a);
-    }
+    await openBillsPage(context, widget.wc, chooser: widget.chooser, anchor: a);
   }
 
   @override
@@ -148,20 +137,7 @@ class _MoneyScreenState extends State<MoneyScreen> {
         if (b.lastRowDate != null) b.lastRowDate!
     ].fold<String?>(null, (a, d) => a == null || d.compareTo(a) > 0 ? d : a);
     final head = <Widget>[
-      HeadingRow(
-        const Text('Money', style: BwType.title),
-        Tooltip(
-          message: hasKeyboard ? 'Search payments (Ctrl+F)' : 'Search payments',
-          child: IconButton(
-              key: const ValueKey('moneySearch'),
-              constraints: const BoxConstraints(minWidth: touchMin, minHeight: touchMin),
-              icon: const Icon(Icons.search),
-              onPressed: () {
-                logNav('money.search');
-                setState(() => _searching = true);
-              }),
-        ),
-      ),
+      const Text('Money', style: BwType.title),
       if (accounts.isNotEmpty)
         SingleChildScrollView(
           key: const ValueKey('moneyAccounts'),
@@ -215,9 +191,7 @@ class _MoneyScreenState extends State<MoneyScreen> {
             sliver: SliverList.builder(
               itemCount: _entries.length + 1,
               itemBuilder: (context, i) => i == 0
-                  ? KeyedSubtree(
-                      key: _comingKey,
-                      child: _ComingHead(held: tl.held, cur: cur, n: tl.up.length, onTap: () => openUpcoming(context, UpcomingView(wc))))
+                  ? _ComingHead(held: tl.held, cur: cur, n: tl.up.length, onTap: () => openUpcoming(context, UpcomingView(wc)))
                   : _row(context, _entries[i - 1], cur),
             ),
           ),
@@ -243,7 +217,11 @@ class _MoneyScreenState extends State<MoneyScreen> {
             padding: const EdgeInsets.only(bottom: 6),
             child: _UpRow(row: e.up!, cur: cur, today: wc.today(), onTap: () => _openUp(context, e.up!)));
       case 'today':
-        return _TodayLine(date: wc.today(), none: _entries.length == 1 ? _emptyNote : null);
+        return _TodayLine(
+            date: wc.today(),
+            none: _entries.length == 1
+                ? (_filter != MoneyFilter.all || _account != null ? 'Nothing matches this filter.' : _emptyNote)
+                : null);
       case 'day':
         return Padding(
             padding: const EdgeInsets.fromLTRB(4, 14, 4, 6),
@@ -280,6 +258,11 @@ class _MoneyScreenState extends State<MoneyScreen> {
     final wc = widget.wc;
     logNav('money.openUp', {'tag': r.tag});
     final i = r.item;
+    if (r.tx != null) {
+      final res = await showSheet<String>(context, TxSheet(wc: wc, t: r.tx!));
+      if (context.mounted) txSheetToast(context, wc, res);
+      return;
+    }
     if (r.income != null) return openRecurringForm(context, wc, edit: r.income!.bill, income: true);
     if (i == null) return;
     if (i.billDb != null) return openBill(context, wc, i.billDb!.id, chooser: widget.chooser);

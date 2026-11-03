@@ -2,6 +2,8 @@
 // suggestion and open question. A card has one filled action, an outline alternative where the app already has one, and an Undo toast
 // for an answer that can be taken back. Every action is the call the old tile or panel made; nothing new is written here. The list is
 // the controller's `needsYouItems()`.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:wallet_core/wallet_core.dart';
 
@@ -52,13 +54,41 @@ class NeedsYouScreen extends StatelessWidget {
 }
 
 /// The standing right pane of Overview from 1280 dp.
-class NeedsYouPane extends StatelessWidget {
+class NeedsYouPane extends StatefulWidget {
   final WalletController wc;
   final FileChooser chooser;
   const NeedsYouPane({super.key, required this.wc, this.chooser = const FileChooser()});
   @override
+  State<NeedsYouPane> createState() => _NeedsYouPaneState();
+}
+
+class _NeedsYouPaneState extends State<NeedsYouPane> {
+  final _scroll = ScrollController();
+  final _first = FocusNode(debugLabel: 'needsYouFirst');
+
+  @override
+  void initState() {
+    super.initState();
+    widget.wc.needsYouFocus.addListener(_focus);
+  }
+
+  @override
+  void dispose() {
+    widget.wc.needsYouFocus.removeListener(_focus);
+    _scroll.dispose();
+    _first.dispose();
+    super.dispose();
+  }
+
+  /// The Overview badge while this pane stands: back to the first card, which takes focus.
+  void _focus() {
+    if (_scroll.hasClients) unawaited(_scroll.animateTo(0, duration: const Duration(milliseconds: 250), curve: Curves.easeOut));
+    _first.requestFocus();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final c = context.c;
+    final c = context.c, wc = widget.wc;
     return DecoratedBox(
       key: const ValueKey('needsYouPane'),
       decoration: BoxDecoration(color: c.surface, border: Border(left: BorderSide(color: c.line))),
@@ -69,7 +99,7 @@ class NeedsYouPane extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
             child: HeadingRow(const Text('Needs you', style: BwType.title), _Count(wc.needsYouCount())),
           ),
-          Expanded(child: NeedsYouList(wc: wc, chooser: chooser)),
+          Expanded(child: NeedsYouList(wc: wc, chooser: widget.chooser, scroll: _scroll, firstFocus: _first)),
         ]),
       ),
     );
@@ -89,17 +119,22 @@ class NeedsYouList extends StatelessWidget {
   final WalletController wc;
   final FileChooser chooser;
   final VoidCallback? onLeave;
-  const NeedsYouList({super.key, required this.wc, this.chooser = const FileChooser(), this.onLeave});
+
+  /// The pane's scroll and the focus node of its first card's filled action (the Overview badge uses them).
+  final ScrollController? scroll;
+  final FocusNode? firstFocus;
+  const NeedsYouList({super.key, required this.wc, this.chooser = const FileChooser(), this.onLeave, this.scroll, this.firstFocus});
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: wc,
         builder: (context, _) {
           final items = wc.needsYouItems();
-          final steps = wc.needsYouReviewSteps();
+          final steps = wc.needsYouReviewSteps(items);
           final embedded = onLeave == null;
           return ListView(
             key: const ValueKey('needsYouList'),
+            controller: scroll,
             padding: EdgeInsets.fromLTRB(embedded ? 20 : pagePad, 12, embedded ? 20 : pagePad, pageBottomPad),
             children: gapped([
               if (steps.isNotEmpty) _ReviewProgress(steps: steps),
@@ -109,7 +144,8 @@ class NeedsYouList extends StatelessWidget {
                   Muted('Nothing needs you now.', align: TextAlign.center),
                 ])
               else
-                for (final it in items) NeedsYouCard(wc: wc, item: it, chooser: chooser, onLeave: onLeave),
+                for (final (i, it) in items.indexed)
+                  NeedsYouCard(wc: wc, item: it, chooser: chooser, onLeave: onLeave, focusNode: i == 0 ? firstFocus : null),
             ], gap: 12),
           );
         },
@@ -125,30 +161,34 @@ class _ReviewProgress extends StatelessWidget {
     final c = context.c;
     return Panel(key: const ValueKey('needsYouReview'), children: [
       const HeadingRow(Text('Weekly review', style: BwType.heading), Muted('about 5 min')),
-      Row(children: [
-        for (final (i, s) in steps.indexed) ...[
-          if (i > 0) const SizedBox(width: 8),
-          Expanded(
-            child: Semantics(
-              label: '${s.label}, ${const ['to do', 'now', 'done'][s.state]}',
-              excludeSemantics: true,
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Container(
-                    key: ValueKey('reviewStep:${s.label}:${s.state}'),
-                    height: 4,
-                    decoration: BoxDecoration(
-                        color: s.state == 2 ? c.good : (s.state == 1 ? c.ink : c.line), borderRadius: BorderRadius.circular(2))),
-                const SizedBox(height: 6),
-                Text('${i + 1} · ${s.label}${s.state == 2 ? ' ✓' : ''}',
-                    style: TextStyle(
-                        fontSize: BwType.metaSize,
-                        color: s.state == 1 ? c.ink : c.ink2,
-                        fontWeight: s.state == 1 ? FontWeight.w600 : FontWeight.w400)),
-              ]),
+      // One row of four while each label fits, else a 2 x 2 grid (320 dp at text 2.0): a label never breaks inside a word.
+      LayoutBuilder(builder: (context, box) {
+        final four = (box.maxWidth - 24) / 4 >= MediaQuery.textScalerOf(context).scale(72);
+        final w = four ? (box.maxWidth - 24) / 4 : (box.maxWidth - 8) / 2;
+        return Wrap(spacing: four ? 8 : 8, runSpacing: 10, children: [
+          for (final (i, s) in steps.indexed)
+            SizedBox(
+              width: w,
+              child: Semantics(
+                label: '${s.label}, ${const ['to do', 'now', 'done'][s.state]}',
+                excludeSemantics: true,
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Container(
+                      key: ValueKey('reviewStep:${s.label}:${s.state}'),
+                      height: 4,
+                      decoration: BoxDecoration(
+                          color: s.state == 2 ? c.good : (s.state == 1 ? c.ink : c.line), borderRadius: BorderRadius.circular(2))),
+                  const SizedBox(height: 6),
+                  Text('${i + 1} · ${s.label}${s.state == 2 ? ' ✓' : ''}',
+                      style: TextStyle(
+                          fontSize: BwType.metaSize,
+                          color: s.state == 1 ? c.ink : c.ink2,
+                          fontWeight: s.state == 1 ? FontWeight.w600 : FontWeight.w400)),
+                ]),
+              ),
             ),
-          ),
-        ],
-      ]),
+        ]);
+      }),
     ]);
   }
 }
@@ -174,7 +214,8 @@ class NeedsYouCard extends StatelessWidget {
   final NeedsYouItem item;
   final FileChooser chooser;
   final VoidCallback? onLeave;
-  const NeedsYouCard({super.key, required this.wc, required this.item, this.chooser = const FileChooser(), this.onLeave});
+  final FocusNode? focusNode;
+  const NeedsYouCard({super.key, required this.wc, required this.item, this.chooser = const FileChooser(), this.onLeave, this.focusNode});
 
   @override
   Widget build(BuildContext context) {
@@ -200,6 +241,7 @@ class NeedsYouCard extends StatelessWidget {
             Wrap(spacing: 8, runSpacing: 8, children: [
               FilledButton(
                   key: ValueKey('needsPrimary:$id'),
+                  focusNode: focusNode,
                   style: FilledButton.styleFrom(minimumSize: const Size(0, touchMin)),
                   onPressed: () => _run(context, null),
                   child: Text(item.primary)),
@@ -306,7 +348,12 @@ class NeedsYouCard extends StatelessWidget {
             toast(context, err);
           } else {
             // Core has no "unanswered" state: Undo answers No for this loan, so the row is not asked about again.
-            _undo(context, 'Marked as a payment on ${to.name}', () => wc.unlinkLoanPayment([to.id], tx));
+            final messenger = ScaffoldMessenger.of(context);
+            final wide = layoutOf(context) != LayoutSize.compact, accessible = MediaQuery.accessibleNavigationOf(context);
+            _undo(context, 'Marked as a payment on ${to.name}', () {
+              wc.unlinkLoanPayment([to.id], tx);
+              toastOn(messenger, 'Undone. Not matched to ${to.name}.', wide: wide, accessible: accessible);
+            });
           }
         }
       case NeedsYouKind.goalReady:

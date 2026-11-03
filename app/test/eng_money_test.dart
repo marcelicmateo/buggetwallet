@@ -5,7 +5,6 @@ import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/screens/bills_tab.dart';
 import 'package:budget_wallet/src/screens/money.dart';
-import 'package:budget_wallet/src/screens/needs_you.dart';
 import 'package:budget_wallet/src/screens/search.dart';
 import 'package:budget_wallet/src/tabs.dart';
 import 'package:budget_wallet/src/theme.dart';
@@ -139,6 +138,51 @@ void main() {
       final held = find.byKey(ValueKey('upcomingHeld:${wc.recurringBills().single.id}'));
       await t.scrollUntilVisible(held, 200, scrollable: find.byType(Scrollable).last);
       expect(held, findsOneWidget);
+    });
+
+    tw('a payment dated after today sits above the Today line with the coming-up rows and opens its sheet', (t) async {
+      final wc = _wallet();
+      _rows(wc);
+      wc.repo.importBatch(
+          ImportBatch(source: 'pbz', transactions: [syntheticTx('2026-10-25', -3300, 'POS plaćanje', 'POS FUTURESHOP ZAGREB')]));
+      wc.reload();
+      await _pump(t, wc);
+      final row = find.byKey(ValueKey('up:tx:${wc.wholeTxs.firstWhere((x) => x.date == '2026-10-25').tx.id}'));
+      expect(row, findsOneWidget);
+      expect(t.getTopLeft(row).dy, lessThan(t.getTopLeft(_key('moneyToday')).dy));
+      expect(_keyStarts('moneyTx:'), findsNWidgets(4), reason: 'the future row is not among the past ones');
+      await t.tap(row);
+      await t.pump(const Duration(milliseconds: 600));
+      expect(find.byType(TxSheet), findsOneWidget);
+    });
+
+    tw('a filter or account with nothing in it says so', (t) async {
+      final wc = _wallet();
+      _rows(wc);
+      await _pump(t, wc);
+      await t.tap(_key('moneyFilter:planned'));
+      await t.pump();
+      expect(find.text('Nothing matches this filter.'), findsOneWidget);
+      await t.tap(_key('moneyFilter:all'));
+      await t.pump();
+      expect(find.text('Nothing matches this filter.'), findsNothing);
+      final empty = _wallet();
+      await _pump(t, empty);
+      expect(find.textContaining('No payments yet'), findsOneWidget);
+    });
+
+    tw('a big amount in the head (1,234,567.89 held, a big balance) does not overflow at 320 dp x 2.0', (t) async {
+      final wc = _wallet();
+      await wc.addAccount(name: 'Current', source: 'pbz', currency: 'EUR', opening: 123456789, openingDate: '2026-01-01');
+      wc.addPlannedCost(title: 'Synthetic yacht', date: '2026-10-28', amount: 123456789, category: 'Groceries');
+      await withErrors((errors) async {
+        await _pump(t, wc, size: const Size(320, 700), scale: 2);
+        expect(wc.period().beforePayday, 123456789);
+        expect(find.text('${moneyExact(123456789, wc.currency)} held'), findsOneWidget);
+        expect(find.text(moneyExact(123456789, 'EUR')), findsOneWidget, reason: 'the balance');
+        expect(t.takeException(), isNull);
+        errors.check();
+      });
     });
 
     tw('a covered bill (Rent) is a row but not in the held figure', (t) async {
@@ -306,32 +350,6 @@ void main() {
   });
 
   group('anchors', () {
-    tw('comingUp scrolls to the coming-up head', (t) async {
-      final wc = _wallet();
-      _rows(wc);
-      final request = JumpRequest<BillsAnchor>();
-      addTearDown(request.dispose);
-      await _pump(t, wc, request: request, size: const Size(400, 500));
-      request.request(BillsAnchor.comingUp);
-      await t.pump(const Duration(milliseconds: 600));
-      await t.pump(const Duration(milliseconds: 600));
-      expect(find.textContaining('COMING UP TO PAYDAY'), findsOneWidget);
-      expect(t.takeException(), isNull);
-    });
-
-    tw('review opens Needs you', (t) async {
-      final wc = _wallet();
-      _rows(wc);
-      final request = JumpRequest<BillsAnchor>();
-      addTearDown(request.dispose);
-      await _pump(t, wc, request: request, size: const Size(400, 500));
-      request.request(BillsAnchor.review);
-      for (var i = 0; i < 4; i++) {
-        await t.pump(const Duration(milliseconds: 300));
-      }
-      expect(find.byType(NeedsYouScreen), findsOneWidget);
-    });
-
     for (final a in [BillsAnchor.expected, BillsAnchor.slips]) {
       tw('${a.name} opens Bills & slips there', (t) async {
         final wc = _wallet();
@@ -359,14 +377,16 @@ void main() {
   });
 
   group('search', () {
-    tw('the search button and Ctrl+F (the request) open the search pane inside Money; close brings the timeline back', (t) async {
+    tw('the shell search (app bar, rail, Ctrl+F: the request) opens the search pane inside Money, which has no search icon of its own',
+        (t) async {
       final wc = _wallet();
       _rows(wc);
       final press = ValueNotifier<int>(0);
       addTearDown(press.dispose);
       await _pump(t, wc, search: press);
       expect(find.byType(SearchPane), findsNothing);
-      await t.tap(_key('moneySearch'));
+      expect(_key('moneySearch'), findsNothing, reason: 'one search per screen');
+      press.value++;
       await t.pump(const Duration(milliseconds: 300));
       expect(find.byType(SearchPane), findsOneWidget);
       await t.tap(find.byTooltip('Close search').first);
