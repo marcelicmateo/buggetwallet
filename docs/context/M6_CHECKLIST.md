@@ -9,7 +9,7 @@ Tabs: Today, Budget, Bills, Save, Settings. Settings has the sections (Accounts,
 - [ ] Do not leave one device on an older build for long -> an old build can miss newer data.
 - [ ] Have the wallet key saved in your password manager (Settings > Sync > Show wallet key) -> you can read it back.
 - [ ] Settings > Backup and export > Back up now first -> a `.bwb` file is saved.
-- [ ] Relay on the Raspberry Pi is up (setup pending: model, OS, name, router forward 80/443, SSD) -> Settings > Sync > Test connection says OK.
+- [ ] Relay on the Raspberry Pi is up (setup pending: model, OS, name, router forward 80/443, SSD) -> Settings > Sync > Save relay says "Saved. Relay reachable.".
 - [ ] Uninstall any old APK built before the signing fix, once -> later updates install in place.
 
 ## 1. First run on a fresh install
@@ -146,7 +146,7 @@ Tabs: Today, Budget, Bills, Save, Settings. Settings has the sections (Accounts,
 - [ ] On the laptop: check the chart is not grainy; the rail at 1280 and 1920 wide (search, period badge, no top bar); the phone in landscape has no top bar.
 
 ## 8. Sync between phone and laptop
-- [ ] Settings > Sync: relay address `https://<name>` -> Save address -> Test connection -> Sync now -> "Up to date"; the fingerprint shows under the address.
+- [ ] Settings > Sync: relay address `https://<name>` (+ creation token) -> Save relay (checks the relay) -> Sync now -> "Up to date"; the fingerprint shows under the address.
 - [ ] Type a public `http://` address -> refused with an https hint (a home address still works).
 - [ ] Sync shows "X of Y used".
 - [ ] Laptop joins with the key and the same address -> it sees the phone's data.

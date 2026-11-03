@@ -540,13 +540,14 @@ class WalletController extends ChangeNotifier {
   /// The relay's creation token, device-local (`relayCreateToken`, never synced, never logged); empty when none.
   String get relayCreateToken => repo.localValue(relayCreateTokenKey) ?? '';
 
-  /// Saves (or, empty, removes) the creation token and syncs again when a relay is set. Logs `sync.createToken {set}` only.
-  Future<void> setRelayCreateToken(String token) async {
+  /// Saves (or, empty, removes) the creation token and syncs again when a relay is set (not with [sync] false: the caller saves
+  /// the address next, which syncs once for both). Logs `sync.createToken {set}` only.
+  Future<void> setRelayCreateToken(String token, {bool sync = true}) async {
     final t = token.trim();
     repo.setLocalValue(relayCreateTokenKey, t.isEmpty ? null : t);
     logEvent(_sync, Level.INFO, 'sync.createToken', {'set': t.isNotEmpty});
     notifyListeners();
-    if (t.isNotEmpty && relayUrl != null) await syncNow(trigger: 'token');
+    if (sync && t.isNotEmpty && relayUrl != null) await syncNow(trigger: 'token');
   }
 
   bool get syncing => sync.running;

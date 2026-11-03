@@ -16,8 +16,8 @@ import 'sync_devices.dart';
 
 final _log = Logger('bw.sync');
 
-/// Plan › Sync: the relay address, "Test connection", "Sync now", the state of the last sync, the devices the relay knows and
-/// the wallet key. The address is never logged (only set / unset).
+/// Plan › Sync: the relay address and creation token with one Save (it checks the relay first), "Sync now", the state of the last
+/// sync, the devices the relay knows and the wallet key. The address and the token are never logged (only set / unset).
 String _size(int bytes) => bytes < 1024 * 1024
     ? '${(bytes / 1024).round()} KB'
     : (bytes < 1073741824 ? '${(bytes / 1048576).round()} MB' : '${(bytes / 1073741824).toStringAsFixed(1)} GB');
@@ -36,10 +36,14 @@ class _SyncPanelState extends State<SyncPanel> {
   late final TextEditingController _address = TextEditingController(text: widget.wc.relayUrl?.toString() ?? '');
   late final TextEditingController _token = TextEditingController(text: widget.wc.relayCreateToken);
   String? _addressError;
-  bool _testing = false;
+  bool _saving = false;
 
-  /// The last "Test connection" answer: text and whether it was good; cleared when the address is edited.
-  ({String text, bool good})? _testResult;
+  /// Whether the creation token is shown as text (a long mixed-case token cannot be checked otherwise); hidden again on Save.
+  bool _showToken = false;
+
+  /// The last Save answer: text, whether it was good, and (when the sync after saving failed) that sync error's text, so the
+  /// panel does not print it twice; cleared when a field is edited.
+  ({String text, bool good, String? syncError})? _result;
 
   @override
   void initState() {
@@ -72,51 +76,41 @@ class _SyncPanelState extends State<SyncPanel> {
     return (true, WalletController.parseRelayAddress(t));
   }
 
+  /// One Save for both fields. A bad address is refused under the field; with an address the relay is checked first (nothing is
+  /// saved when it is unreachable or speaks another API); then token and address are saved and the sync after it says whether the
+  /// relay accepts the token. An empty address removes the relay (the token stays on this device).
   Future<void> _save() async {
     final (ok, url) = _read();
     if (!ok) return;
     setState(() {
       _addressError = null;
-      _testResult = null;
+      _result = null;
+      _saving = true;
     });
-    logNav('sync.relaySave', {'set': url != null}); // never the address
-    await widget.wc.setRelay(url);
-    if (mounted && url != null) _address.text = widget.wc.relayUrl.toString();
-  }
-
-  Future<void> _saveToken() async {
-    logNav('sync.tokenSave', {'set': _token.text.trim().isNotEmpty}); // never the token
-    await widget.wc.setRelayCreateToken(_token.text);
-  }
-
-  Future<void> _test() async {
-    final (ok, typed) = _read();
-    if (!ok) return;
-    final url = typed ?? widget.wc.relayUrl;
-    if (url == null) {
-      setState(() => _addressError = 'Enter the relay address first.');
-      return;
-    }
-    logNav('sync.test');
-    setState(() {
-      _addressError = null;
-      _testing = true;
-      _testResult = null;
-    });
-    ({String text, bool good}) result;
+    logNav('sync.relaySave', {'set': url != null, 'token': _token.text.trim().isNotEmpty}); // never the address or the token
+    ({String text, bool good, String? syncError}) result;
     try {
-      await widget.wc.testRelay(url);
-      result = (text: 'Relay reachable', good: true);
+      if (url != null) await widget.wc.testRelay(url);
+      await widget.wc.setRelayCreateToken(_token.text, sync: false); // setRelay syncs once for both
+      await widget.wc.setRelay(url);
+      final err = widget.wc.syncError;
+      result = url == null
+          ? (text: 'Saved.', good: true, syncError: null)
+          : err == null
+              ? (text: 'Saved. Relay reachable.', good: true, syncError: null)
+              : (text: 'Saved. $err', good: false, syncError: err);
     } on TransportException catch (e) {
-      result = (text: relayTestFailureText(e.failure), good: false);
+      result = (text: 'Not saved. ${relayTestFailureText(e.failure)}', good: false, syncError: null);
     } catch (e, st) {
-      logError(_log, 'sync.testFailed', e, st, fields: {'type': e.runtimeType.toString()});
-      result = (text: "Can't reach the relay", good: false);
+      logError(_log, 'sync.saveFailed', e, st, fields: {'type': e.runtimeType.toString()});
+      result = (text: "Not saved. Can't reach the relay", good: false, syncError: null);
     }
     if (!mounted) return;
+    if (url != null && widget.wc.relayUrl != null) _address.text = widget.wc.relayUrl.toString();
     setState(() {
-      _testing = false;
-      _testResult = result;
+      _saving = false;
+      _showToken = false;
+      _result = result;
     });
   }
 
@@ -137,7 +131,7 @@ class _SyncPanelState extends State<SyncPanel> {
         autocorrect: false,
         onChanged: (_) => setState(() {
           _addressError = null;
-          _testResult = null;
+          _result = null;
         }),
         onSubmitted: (_) => _save(),
         decoration: InputDecoration(
@@ -147,10 +141,31 @@ class _SyncPanelState extends State<SyncPanel> {
           errorMaxLines: 3,
         ),
       ),
+      TextField(
+        key: const ValueKey('relayCreateToken'),
+        controller: _token,
+        obscureText: !_showToken,
+        enableSuggestions: false,
+        autocorrect: false,
+        onChanged: (_) => setState(() => _result = null),
+        onSubmitted: (_) => _save(),
+        decoration: InputDecoration(
+          labelText: 'Creation token (only if the relay asks)',
+          helperText: 'Kept on this device only. Never synced.',
+          helperMaxLines: 2,
+          suffixIcon: IconButton(
+            key: const ValueKey('relayCreateTokenReveal'),
+            tooltip: _showToken ? 'Hide token' : 'Show token',
+            icon: Icon(_showToken ? Icons.visibility_off : Icons.visibility),
+            onPressed: () => setState(() => _showToken = !_showToken),
+          ),
+        ),
+      ),
       Wrap(spacing: 8, runSpacing: 8, children: [
-        FilledButton(key: const ValueKey('relaySave'), onPressed: wc.syncing ? null : _save, child: const Text('Save address')),
-        OutlinedButton(
-            key: const ValueKey('relayTest'), onPressed: _testing ? null : _test, child: Text(_testing ? 'Testing…' : 'Test connection')),
+        FilledButton(
+            key: const ValueKey('relaySave'),
+            onPressed: wc.syncing || _saving ? null : _save,
+            child: Text(_saving ? 'Saving…' : 'Save relay')),
         Tooltip(
           message: hasKeyboard ? 'Sync now (F5)' : '',
           child: OutlinedButton(
@@ -168,16 +183,16 @@ class _SyncPanelState extends State<SyncPanel> {
       if (wc.relayFingerprintText != null)
         Muted('Relay fingerprint ${wc.relayFingerprintText}. It should read the same on every device.',
             key: const ValueKey('relayFingerprint')),
-      if (_testResult != null) StatusLabel(key: const ValueKey('relayTestResult'), good: _testResult!.good, text: _testResult!.text),
+      if (_result != null) StatusLabel(key: const ValueKey('relaySaveResult'), good: _result!.good, text: _result!.text),
       if (hasRelay && WalletController.relayAddressIssue(wc.relayUrl.toString()) == RelayAddressIssue.needsHttps)
         const StatusLabel(key: ValueKey('relayNeedsHttps'), good: false, text: storedAddressNeedsHttpsText),
       if (!hasRelay)
         const Muted('No relay set: nothing is sent or received. The wallet works without it.')
       else ...[
         DeviceStopNotice(wc: wc),
-        if (wc.syncError != null)
+        if (wc.syncError != null && wc.syncError != _result?.syncError)
           StatusLabel(key: const ValueKey('syncError'), good: false, text: wc.syncError!)
-        else if (last != null)
+        else if (wc.syncError == null && last != null)
           StatusLabel(key: const ValueKey('syncStatus'), good: status.good, text: status.text),
         if (last != null) Muted('Last sync ${clockText(last)}'),
         if (wc.syncRelayBytes != null && wc.syncRelayMaxBytes != null)
@@ -221,23 +236,6 @@ class _SyncPanelState extends State<SyncPanel> {
                   ? '1 sync file could not be read. It was skipped and will be tried again.'
                   : '${wc.syncBadFiles - wc.syncBlockedFiles.length} sync files could not be read. They were skipped and will be tried again.'),
       ],
-      TextField(
-        key: const ValueKey('relayCreateToken'),
-        controller: _token,
-        obscureText: true,
-        enableSuggestions: false,
-        autocorrect: false,
-        onSubmitted: (_) => _saveToken(),
-        decoration: const InputDecoration(
-          labelText: 'Creation token (only if the relay asks)',
-          helperText: 'Kept on this device only. Never synced.',
-          helperMaxLines: 2,
-        ),
-      ),
-      Align(
-        alignment: Alignment.centerLeft,
-        child: OutlinedButton(key: const ValueKey('relayCreateTokenSave'), onPressed: _saveToken, child: const Text('Save token')),
-      ),
       if (hasRelay) SyncDevicesBlock(wc: wc),
       RecentChanges(wc: wc),
       if (!isWeb)

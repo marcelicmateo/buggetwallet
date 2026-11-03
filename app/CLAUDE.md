@@ -179,11 +179,11 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   `SectionHead` underlines, `TotalRule`'s top line, header rules and the rail border; the double rule (1 px, 2 px gap) sits under totals only. Values: `docs/design/ledger-spec.md` §1.
 - Sync (R5): `controller.dart` keeps `relayUrl` (device-local `relayUrl` value; `setRelay(Uri?)` validates http/https + host, saves, syncs with trigger `relay`;
   `parseRelayAddress(text)`), `syncRunner(Uri relay, key, repo)` (default: `SyncEngine` over `RelayTransport`; tests inject a fake or a `MemoryTransport` run),
-  `healthCheck(Uri)` / `testRelay(Uri)` ("Test connection"), `syncNow`, and after each run `syncCaughtUp`, `syncWaiting`, `syncDevices`, `syncError`
+  `healthCheck(Uri)` / `testRelay(Uri)` (the check inside Plan › Sync's one Save), `syncNow`, and after each run `syncCaughtUp`, `syncWaiting`, `syncDevices`, `syncError`
   (a `SyncException` shows its message, anything else a generic one), `syncBadFiles`, `lastSync`. Runs: start, resume, 3 s after a change, every 5 min (the
   2-minute timer only checks the day), Ctrl+R/F5 (toast without an address), on web too. Logs say `sync.relay {set}`, never the address.
   `sync_status.dart` = pure texts (`syncStatusLine`, `lastSeenText`, `clockText`, `relayTestFailureText`); `screens/sync_panel.dart` = Plan › Sync (address field, Save
-  address, Test connection, Sync now, status line, devices, Show wallet key). Onboarding join takes the key plus an optional relay address (`joinWallet(…, relay:)`).
+  address and creation token under it, ONE `relaySave` button, label "Save relay" (not plain "Save": the Plan page tests find the plan's `FilledButton` by that text) (checks the relay with `testRelay`, then `setRelayCreateToken(sync: false)` + `setRelay`; answer line `relaySaveResult`: "Saved. Relay reachable." / "Not saved. <reason>" / "Saved. <sync error>"; a bad address shows under the field), Sync now, status line, devices, Show wallet key). Onboarding join takes the key plus an optional relay address (`joinWallet(…, relay:)`).
   Android: INTERNET permission; no storage permission, no `budget_wallet/storage` channel. **Address rule (D5, HU 10):** the relay is reached over HTTPS
   on the owner's domain (Caddy + Let's Encrypt, no VPN). Plain `http://` is accepted only for this device (`localhost`, `127.x`, `::1`), the emulator's `10.0.2.2`,
   private IPv4 (10/8, 172.16/12, 192.168/16), `.local` names and names without a dot (`homeserver`); any other `http://` host is refused with "Use the https://
@@ -193,7 +193,7 @@ Flutter UI for Android, iOS, Windows, macOS, Linux. **No money logic here**: cal
   address), `syncRelayChanged` (device-local notice kept until OK, like `syncDeviceIdInUse`; a new address clears both; "This relay is new or was reset; this device sent everything again."), `syncProblems` (`syncDeviceIdInUse`: information only, "Another
   install used this device id; this device now syncs under a new stream."; `syncClockDrift`: "A device's clock is ahead; its changes wait until the clocks
   agree."); `TransportFailure.createToken` → "The relay needs its creation token." (`relayTestFailureText`; a sync run says it through core's message). Creation token:
-  device-local value `relayCreateToken` (`relayCreateToken`, `setRelayCreateToken`; obscured field `relayCreateToken` + `relayCreateTokenSave` in Plan › Sync),
+  device-local value `relayCreateToken` (`relayCreateToken`, `setRelayCreateToken`; field `relayCreateToken` under the address in Plan › Sync, hidden until the eye `relayCreateTokenReveal` is tapped and hidden again on Save; saved by the one `relaySave`),
   passed to `RelayTransport(createToken:)`, never synced, in no backup, never logged (`sync.createToken {set}`). **Clock behind (H7):** an owner write refused with
   `ClockBehindException` is caught by the error hooks in `logging.dart` (`clock_notice.dart` `noticeClockBehind`; logged `write.clockBehind`, not a crash) and
   `BudgetWalletApp` shows one dialog sentence (`clockBehindDialog`): "This device's clock is behind. Set the date and time, then try again.". Catch-alls around owner writes (`importFiles`, bill imports → `BillImportKind.clockBehind`, `skipRecurring`) catch `ClockBehindException` first and call `noticeClockBehind`.

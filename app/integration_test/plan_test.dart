@@ -440,18 +440,15 @@ void main() {
         SyncReport(0, 0, 0, caughtUp: true, devices: [SyncDevice('ab12f3', lastSeen: DateTime.now(), isThis: true)]);
     wc.seams.healthCheck = (relay) async {};
     await settingsSection(t, SettingsSection.sync);
-    await scrollTo(t, find.text('Test connection'), SettingsScreen, delta: -250);
+    await scrollTo(t, find.byKey(const ValueKey('relaySave')), SettingsScreen, delta: -250);
     final field = find.byKey(const ValueKey('relayAddress'));
     await t.enterText(field, 'gopher://nope');
-    await tapVisible(t, find.text('Save address'));
+    await tapVisible(t, find.byKey(const ValueKey('relaySave')));
     await t.pumpAndSettle();
     expect(find.text('Enter an address like http://homeserver:8787'), findsOneWidget);
     expect(wc.relayUrl, isNull);
     await t.enterText(field, 'http://it-relay.local:8787');
-    await tapVisible(t, find.text('Test connection'));
-    await t.pumpAndSettle();
-    expect(status('Relay reachable'), findsOneWidget);
-    await tapVisible(t, find.text('Save address'));
+    await tapVisible(t, find.byKey(const ValueKey('relaySave'))); // checks the relay, then saves
     await waitFor(t, () => wc.lastSync != null || wc.syncError != null, what: 'the first sync');
     expect(wc.syncError, isNull);
     expect(wc.relayUrl, Uri.parse('http://it-relay.local:8787'));

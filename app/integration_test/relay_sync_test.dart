@@ -96,13 +96,11 @@ void main() {
         expect(b.deviceStop, isNull, reason: 'B is approved');
       }
 
-      // A: Settings › Sync: type the address, test it, save (the first sync runs).
+      // A: Settings › Sync: type the address, Save (checks the relay, saves, the first sync runs).
       await goSettings(t, SettingsSection.sync);
       await scrollTo(t, _address, SettingsScreen);
       await t.enterText(_address, addr);
-      await tapVisible(t, find.text('Test connection'));
-      await waitFor(t, () => status('Relay reachable').evaluate().isNotEmpty, what: 'Relay reachable');
-      await tapVisible(t, find.text('Save address'));
+      await tapVisible(t, find.byKey(const ValueKey('relaySave'))); // checks the relay, then saves
       await waitFor(t, () => a.lastSync != null || a.syncError != null, what: 'the first sync');
       expect(a.syncError, isNull);
       expect(a.relayUrl, Uri.parse(addr));

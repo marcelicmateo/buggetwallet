@@ -26,7 +26,6 @@ const _token = 'tok-SYNTHETIC-123';
 Finder get _address => find.byKey(const ValueKey('relayAddress'));
 Finder get _save => find.byKey(const ValueKey('relaySave'));
 Finder get _tokenField => find.byKey(const ValueKey('relayCreateToken'));
-Finder get _tokenSave => find.byKey(const ValueKey('relayCreateTokenSave'));
 
 Future<void> _pumpSync(WidgetTester t, WalletController wc, {Size size = const Size(400, 2000), double scale = 1}) =>
     pumpApp(t, Scaffold(body: SingleChildScrollView(child: SyncPanel(wc: wc, onShowKey: () {}))), size: size, textScale: scale);
@@ -349,7 +348,7 @@ void main() {
       await _pumpSync(t, wc);
       expect(t.widget<TextField>(_tokenField).obscureText, isTrue);
       await t.enterText(_tokenField, '  $_token ');
-      await t.tap(_tokenSave);
+      await t.tap(_save);
       await t.pump();
       expect(wc.relayCreateToken, _token);
       expect(wc.repo.localValue(relayCreateTokenKey), _token);
@@ -359,10 +358,36 @@ void main() {
       expect(log(), isNot(contains(_token)));
       expect(log(), contains('sync.createToken'));
       await t.enterText(_tokenField, '');
-      await t.tap(_tokenSave);
+      await t.tap(_save);
       await t.pump();
       expect(wc.relayCreateToken, '');
       expect(wc.repo.localValue(relayCreateTokenKey), isNull);
+    });
+
+    testWidgets('the eye shows and hides the typed token; it starts hidden, Save hides it again, nothing is logged', (t) async {
+      final wc = emptyWallet();
+      await _pumpSync(t, wc);
+      final eye = find.byKey(const ValueKey('relayCreateTokenReveal'));
+      await t.enterText(_tokenField, _token);
+      expect(t.widget<TextField>(_tokenField).obscureText, isTrue);
+      await t.tap(eye);
+      await t.pump();
+      expect(t.widget<TextField>(_tokenField).obscureText, isFalse);
+      expect(t.widget<TextField>(_tokenField).controller!.text, _token);
+      expect(find.byTooltip('Hide token'), findsOneWidget);
+      await t.tap(eye);
+      await t.pump();
+      expect(t.widget<TextField>(_tokenField).obscureText, isTrue);
+      expect(find.byTooltip('Show token'), findsOneWidget);
+      expect(log(), isNot(contains(_token)));
+      // Save hides it again
+      await t.tap(eye);
+      await t.pump();
+      expect(t.widget<TextField>(_tokenField).obscureText, isFalse);
+      await t.tap(_save);
+      await t.pump();
+      expect(t.widget<TextField>(_tokenField).obscureText, isTrue);
+      expect(wc.relayCreateToken, _token);
     });
 
     testWidgets('submitting from the keyboard saves too, and the saved value is shown again on the next visit', (t) async {

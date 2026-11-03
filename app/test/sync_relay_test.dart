@@ -6,6 +6,7 @@ import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/screens/onboarding.dart';
 import 'package:budget_wallet/src/screens/sync_panel.dart';
 import 'package:budget_wallet/src/sync_status.dart';
+import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -19,8 +20,15 @@ final _relay = Uri.parse('http://homeserver.local:8787');
 
 Finder get _address => find.byKey(const ValueKey('relayAddress'));
 Finder get _save => find.byKey(const ValueKey('relaySave'));
-Finder get _test => find.byKey(const ValueKey('relayTest'));
+Finder get _token => find.byKey(const ValueKey('relayCreateToken'));
 Finder get _syncNow => find.byKey(const ValueKey('syncNow'));
+
+/// The text of the Save answer line (null when none is shown).
+String? _saveAnswer(WidgetTester t) {
+  final f = find.byKey(const ValueKey('relaySaveResult'));
+  return f.evaluate().isEmpty ? null : t.widget<StatusLabel>(f).text;
+}
+
 bool _enabled(WidgetTester t, Finder f) => t.widget<ButtonStyleButton>(f).onPressed != null;
 
 Future<void> _pumpSync(WidgetTester t, WalletController wc, {Size size = const Size(400, 1200), double scale = 1}) =>
@@ -264,6 +272,7 @@ void main() {
 
     testWidgets('a good address is saved (trimmed), synced, and the status shows', (t) async {
       final wc = emptyWallet();
+      wc.seams.healthCheck = (relay) async {};
       wc.seams.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, caughtUp: true);
       await _pumpSync(t, wc);
       await t.enterText(_address, '  http://homeserver.local:8787/ ');
@@ -285,36 +294,83 @@ void main() {
       expect(find.textContaining('No relay set'), findsOneWidget);
     });
 
+    // One Save checks the relay first: a relay that cannot be reached (or speaks another API) saves nothing, the text says why.
     for (final (name, failure, text) in <(String, TransportFailure?, String)>[
-      ('reachable', null, 'Relay reachable'),
-      ('unreachable', TransportFailure.unreachable, "Can't reach the relay"),
-      ('newer API', TransportFailure.newerApi, 'This relay needs a newer app'),
+      ('reachable', null, 'Saved. Relay reachable.'),
+      ('unreachable', TransportFailure.unreachable, "Not saved. Can't reach the relay"),
+      ('newer API', TransportFailure.newerApi, 'Not saved. This relay needs a newer app'),
+      ('older API', TransportFailure.olderApi, 'Not saved. This relay is older than the app'),
     ]) {
-      testWidgets('Test connection: $name', (t) async {
+      testWidgets('Save checks the relay: $name', (t) async {
         final wc = emptyWallet();
         Uri? asked;
         wc.seams.healthCheck = (relay) async {
           asked = relay;
           if (failure != null) throw TransportException(failure, 'x');
         };
+        wc.seams.syncRunner = (relay, k, r) async => const SyncReport(0, 0, 0, caughtUp: true);
         await _pumpSync(t, wc);
         await t.enterText(_address, 'homeserver.local:8787');
-        await t.tap(_test);
+        await t.tap(_save);
         await t.pumpAndSettle();
         expect(find.textContaining(text), findsOneWidget);
         expect(asked, _relay, reason: 'a bare host gets http://');
-        expect(wc.relayUrl, isNull, reason: 'testing does not save');
+        expect(wc.relayUrl, failure == null ? _relay : isNull, reason: 'only a relay that answers is saved');
         await t.enterText(_address, 'homeserver.local:8788'); // editing clears the old answer
         await t.pump();
         expect(find.textContaining(text), findsNothing);
       });
     }
 
-    testWidgets('Test connection with no address asks for one', (t) async {
-      await _pumpSync(t, emptyWallet());
-      await t.tap(_test);
-      await t.pump();
-      expect(find.textContaining('Enter the relay address first.'), findsOneWidget);
+    testWidgets('Save keeps the token and the address together, and syncs once for both', (t) async {
+      final wc = emptyWallet();
+      wc.seams.healthCheck = (relay) async {};
+      var runs = 0;
+      wc.seams.syncRunner = (relay, k, r) async {
+        runs++;
+        return const SyncReport(0, 0, 0, caughtUp: true);
+      };
+      await _pumpSync(t, wc);
+      await t.enterText(_address, 'http://homeserver.local:8787');
+      await t.enterText(_token, 'tok/en+1');
+      await t.tap(_save);
+      await t.pumpAndSettle();
+      expect(wc.relayUrl, _relay);
+      expect(wc.relayCreateToken, 'tok/en+1');
+      expect(runs, 1);
+    });
+
+    testWidgets('Save with a token the relay refuses: both are saved and the sync error is the one line shown', (t) async {
+      final wc = emptyWallet();
+      wc.seams.healthCheck = (relay) async {};
+      wc.seams.syncRunner = (relay, k, r) async => throw const SyncException(createTokenText, failure: TransportFailure.createToken);
+      await _pumpSync(t, wc);
+      await t.enterText(_address, 'http://homeserver.local:8787');
+      await t.enterText(_token, 'wrong');
+      await t.tap(_save);
+      await t.pumpAndSettle();
+      expect(wc.relayUrl, _relay);
+      expect(wc.relayCreateToken, 'wrong');
+      expect(_saveAnswer(t), 'Saved. $createTokenText');
+      expect(find.byKey(const ValueKey('syncError')), findsNothing, reason: 'the sync error is not printed a second time');
+    });
+
+    testWidgets('Save with no address only keeps the token; an unreachable relay keeps the old token too', (t) async {
+      final wc = emptyWallet();
+      await _pumpSync(t, wc);
+      await t.enterText(_token, 'tok1');
+      await t.tap(_save);
+      await t.pumpAndSettle();
+      expect(wc.relayCreateToken, 'tok1');
+      expect(wc.relayUrl, isNull);
+      expect(_saveAnswer(t), 'Saved.');
+      wc.seams.healthCheck = (relay) async => throw const TransportException(TransportFailure.unreachable, 'x');
+      await t.enterText(_address, 'http://homeserver.local:8787');
+      await t.enterText(_token, 'tok2');
+      await t.tap(_save);
+      await t.pumpAndSettle();
+      expect(wc.relayCreateToken, 'tok1', reason: 'nothing is saved when the relay cannot be reached');
+      expect(find.textContaining("Not saved. Can't reach the relay"), findsOneWidget);
     });
 
     testWidgets('status: waiting for a file, not caught up, and the last sync time', (t) async {
@@ -390,8 +446,8 @@ void main() {
         await withErrors((errors) async {
           await _pumpSync(t, wc, size: Size(w, h), scale: scale);
           await t.enterText(_address, 'http://a-rather-long-host-name-for-the-home-server.local:8787');
-          await t.ensureVisible(_test);
-          await t.tap(_test);
+          await t.ensureVisible(_save);
+          await t.tap(_save);
           await t.pump();
           scanFlex(t);
           errors.check();

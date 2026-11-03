@@ -496,7 +496,7 @@ void main() {
       await pumpPlan(t, w.wc);
       expect(find.text('SYNC'), findsOneWidget);
       expect(find.byKey(const ValueKey('syncNow')), findsOneWidget);
-      expect(find.byKey(const ValueKey('relayTest')), findsOneWidget);
+      expect(find.byKey(const ValueKey('relaySave')), findsOneWidget);
       expect(find.text('NUDGES'), findsNothing);
       expect(find.text('Choose folder'), findsNothing);
       expect(find.text('BACKUP'), findsOneWidget);

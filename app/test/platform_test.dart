@@ -43,7 +43,8 @@ void main() {
         try {
           await pumpApp(tester, Scaffold(body: PlanPage(wc: demoWallet())), size: const Size(400, 8000)); // all rows built
           expect(find.widgetWithText(TextField, 'Relay address'), findsOneWidget);
-          expect(find.text('Test connection'), findsOneWidget);
+          expect(find.byKey(const ValueKey('relaySave')), findsOneWidget);
+          expect(find.text('Test connection'), findsNothing);
           expect(find.text('Show wallet key'), findsOneWidget);
           for (final gone in ['Choose folder', 'Type path', 'Use the app folder', 'Allow file access']) {
             expect(find.text(gone), findsNothing);

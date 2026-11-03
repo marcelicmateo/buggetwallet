@@ -288,7 +288,7 @@ void main() {
         ]);
     await wc.setRelay(Uri.parse('http://homeserver:8787'));
     await tester.pumpAndSettle();
-    await settings(SettingsSection.sync, find.text('Test connection'), '5-settings-sync');
+    await settings(SettingsSection.sync, find.byKey(const ValueKey('relaySave')), '5-settings-sync');
     await settings(SettingsSection.backup, find.text('Back up now'), '5-settings-backup');
     // "Back up now" opens the system save dialog (no portal or activity to drive here), so run the part before it: it logs backup.done.
     await wc.backupDownload();
