@@ -229,21 +229,4 @@ extension TagsDb on WalletController {
   /// The payments behind [tag]'s total over [r], newest first (they add up to it).
   List<CategorizedTx> rowsOfTag(String tag, DateRange r) =>
       memo(MemoKey('ins.tagrows', (r.start, r.end, tag)), () => rowsForTag(tag, txs, r, currency: currency));
-
-  /// [tag]'s total over [r] and the payments behind it. Core's slice when the tag has net spending; a tag whose rows are refunds only
-  /// has no slice, so its total is the rows' sum (negative), the same rows [rowsOfTag] lists.
-  ({int spent, int count}) tagTotalFor(String tag, DateRange r) => memo(MemoKey('ins.tagtotal', (r.start, r.end, tag)), () {
-        final slice = tagShareFor(r).slices.where((s) => s.tag == tag).firstOrNull;
-        if (slice != null) return (spent: slice.spent, count: slice.count);
-        final rows = rowsOfTag(tag, r);
-        return (spent: -rows.fold<int>(0, (s, t) => s + t.amount), count: {for (final t in rows) t.tx.id}.length);
-      });
-
-  /// [tag] in the month of [r] (`monthIn`) against the month before and the 6-month average.
-  CategoryCompare compareTagFor(String tag, DateRange r) =>
-      memo(MemoKey('ins.tagcompare', (r.start, r.end, tag)), () => compareTag(tag, txs, monthIn(r), today: today(), currency: currency));
-
-  /// [tag]'s spending per month over [r].
-  List<MonthBar> tagBars(String tag, DateRange r) =>
-      memo(MemoKey('ins.tagtrend', (r.start, r.end, tag)), () => tagTrend(tag, txs, r, today: today(), currency: currency));
 }

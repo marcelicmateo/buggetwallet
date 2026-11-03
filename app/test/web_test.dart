@@ -716,7 +716,7 @@ void main() {
 
     webTest('fits 320 dp at text scale 2.0, first screen and passphrase step', (t) async {
       final w = webWallet(withKey: false);
-      await pumpOnboarding(t, w.wc, size: const Size(320, 1600), scale: 2); // tall: the width is what is tested
+      await pumpOnboarding(t, w.wc, size: const Size(320, 2000), scale: 2); // tall: the width is what is tested
       expect(find.byKey(const ValueKey('startWallet')), findsOneWidget);
       await t.tap(find.byKey(const ValueKey('startWallet')));
       await t.pump();

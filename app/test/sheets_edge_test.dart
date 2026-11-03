@@ -139,12 +139,26 @@ void main() {
       await tester.enterText(find.byType(TextField).first, '1.234,56');
       await _tap(tester, _primary);
       expect(wc.txs, isEmpty);
-      expect(find.textContaining('wishlist first?'), findsOneWidget);
+      expect(find.textContaining('hours first?'), findsOneWidget);
       expect(o.done, isFalse);
       await _tap(tester, _primary);
       await _settle(tester);
       expect(wc.txs, hasLength(1));
       expect(wc.txs.single.amount, -123456);
+      expect(o.result, 'added');
+    });
+
+    testWidgets('the impulse check: "Add anyway" saves the expense, Put on wishlist is the other way (ENG E7b)', (tester) async {
+      final wc = _wc();
+      final o = await _open(tester, AddExpenseSheet(wc: wc));
+      await tester.enterText(find.byType(TextField).first, '75');
+      await _tap(tester, _primary);
+      expect(find.byKey(const ValueKey('impulseCheck')), findsOneWidget);
+      expect(find.byKey(const ValueKey('putOnWishlist')), findsOneWidget);
+      expect(wc.txs, isEmpty);
+      await _tap(tester, find.byKey(const ValueKey('addAnyway')));
+      await _settle(tester);
+      expect(wc.txs.single.amount, -7500);
       expect(o.result, 'added');
     });
 
@@ -162,15 +176,15 @@ void main() {
       expect(wc.txs.single.amount, -5000);
     });
 
-    testWidgets('the "wishlist first?" warning disappears when the amount is lowered to the limit', (tester) async {
+    testWidgets('the "hours first?" warning disappears when the amount is lowered to the limit', (tester) async {
       final wc = _wc();
       await _open(tester, AddExpenseSheet(wc: wc));
       await tester.enterText(find.byType(TextField).first, '50.01');
       await _tap(tester, _primary);
-      expect(find.textContaining('wishlist first?'), findsOneWidget);
+      expect(find.textContaining('hours first?'), findsOneWidget);
       await tester.enterText(find.byType(TextField).first, '50');
       await tester.pump();
-      expect(find.textContaining('wishlist first?'), findsNothing);
+      expect(find.textContaining('hours first?'), findsNothing);
     });
 
     testWidgets('an amount beyond 1 billion (core\'s cap) is refused like any other bad amount', (tester) async {
@@ -202,11 +216,11 @@ void main() {
       await _open(tester, AddExpenseSheet(wc: wc));
       await tester.enterText(find.byType(TextField).first, '99');
       await _tap(tester, _primary);
-      expect(find.textContaining('wishlist first?'), findsOneWidget);
+      expect(find.textContaining('hours first?'), findsOneWidget);
       await tester.enterText(find.byType(TextField).first, '');
       await _tap(tester, _primary);
       expect(find.textContaining(_invalidAmount), findsOneWidget);
-      expect(find.textContaining('wishlist first?'), findsNothing);
+      expect(find.textContaining('hours first?'), findsNothing);
       expect(wc.txs, isEmpty);
       await _settle(tester);
     });
@@ -385,7 +399,7 @@ void main() {
         expect(find.textContaining(_invalidAmount), findsOneWidget);
         await tester.enterText(find.byType(TextField).first, '99999');
         await _tap(tester, _primary);
-        expect(find.textContaining('wishlist first?'), findsOneWidget);
+        expect(find.textContaining('hours first?'), findsOneWidget);
         await tester.ensureVisible(find.byKey(const ValueKey('putOnWishlist')));
         await tester.pump();
         expect(tester.takeException(), isNull);

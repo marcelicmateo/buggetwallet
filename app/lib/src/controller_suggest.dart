@@ -147,7 +147,7 @@ extension SuggestDb on WalletController {
   }
 
   // ---------- Q6: payee rules offered ----------
-  /// Payee keys the owner dismissed in Budget › Tags › Recommendations (device-local `ruleSuggestOff`, a JSON list).
+  /// Payee keys the owner dismissed in Settings › Tags and rules › Recommendations (device-local `ruleSuggestOff`, a JSON list).
   Set<String> get ruleSuggestOff => _localKeys('ruleSuggestOff');
 
   Set<String> _localKeys(String name) {

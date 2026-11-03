@@ -47,7 +47,6 @@ class _ExportPanelState extends State<ExportPanel> with AsyncAction {
   @override
   Widget build(BuildContext context) => Panel(children: [
         const SectionHead('Export'),
-        Explainer(widget.wc, 'export', 'CSV files for your spreadsheet: date, amount, main tag, tags, description, source and note.'),
         Wrap(spacing: 6, runSpacing: 6, children: [
           for (final r in ExportRange.values)
             ChoiceChip(

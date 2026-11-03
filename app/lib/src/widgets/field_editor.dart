@@ -407,7 +407,7 @@ class _FieldEditorState extends State<FieldEditor> {
 
   Widget _textField({TextInputType? keyboard, String? suffix}) {
     final money = _col is MoneyCol;
-    final deco = InputDecoration(
+    final plain = InputDecoration(
         labelText: _label,
         helperText: widget.helper,
         helperMaxLines: 2,
@@ -416,6 +416,7 @@ class _FieldEditorState extends State<FieldEditor> {
         counterText: widget.maxLength == null ? null : '',
         errorText: _shownError,
         errorMaxLines: 3);
+    final deco = widget.helper == null ? plain : withAttention(context, plain);
     final style = money ? (widget.large ? numStyle.copyWith(fontSize: BwType.displaySize, fontWeight: FontWeight.w500) : numStyle) : null;
     final field = money
         ? MoneyField(fieldKey: ValueKey(_id), controller: _text, onChanged: _typed, style: style, decoration: deco)

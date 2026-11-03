@@ -4,12 +4,12 @@ import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/format.dart';
 import 'package:budget_wallet/src/screens/bill_sheet.dart';
 import 'package:budget_wallet/src/screens/bills_tab.dart';
+import 'package:budget_wallet/src/screens/explore.dart';
 import 'package:budget_wallet/src/screens/goals.dart';
 import 'package:budget_wallet/src/screens/money.dart';
 import 'package:budget_wallet/src/screens/plan_screen.dart';
 import 'package:budget_wallet/src/screens/save.dart';
 import 'package:budget_wallet/src/screens/settings.dart';
-import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/screens/wishlist.dart';
 import 'package:budget_wallet/src/tabs.dart';
@@ -122,12 +122,12 @@ void main() {
   });
 
   group('Explore', () {
-    tw('Explore opens on Spending with Insights and search', (t) async {
+    tw('Explore opens on Explore with Insights and search', (t) async {
       await pumpFull(t, _wallet(), 1.0, size: const Size(400, 900));
       await tapTab(t, 'Explore');
-      expect(find.byType(SpendingScreen), findsOneWidget);
+      expect(find.byType(ExploreScreen), findsOneWidget);
       expect(_key('budgetSwitch'), findsOneWidget);
-      expect(_key('outTile'), findsOneWidget);
+      expect(_key('outTile'), findsNothing, reason: 'the month tiles are behind the Spending segment');
       expect(_key('budgetPlan'), findsNothing, reason: 'the payday plan moved to Plan');
       expect(_key('insightsOpen'), findsOneWidget);
       expect(_key('searchOpen'), findsOneWidget);
@@ -618,7 +618,7 @@ void main() {
       }
 
       final screens = <(LogicalKeyboardKey, Type)>[
-        (LogicalKeyboardKey.digit3, SpendingScreen),
+        (LogicalKeyboardKey.digit3, ExploreScreen),
         (LogicalKeyboardKey.digit2, MoneyScreen),
         (LogicalKeyboardKey.digit4, PlanScreen),
         (LogicalKeyboardKey.digit1, TodayScreen),

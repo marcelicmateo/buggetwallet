@@ -768,6 +768,16 @@ class EmptyNote extends StatelessWidget {
 
 /// A date picker that looks like a text field: floating [label], the date inside, a calendar icon (or a clear button with
 /// [onClear]). A tap calls [onPick]; the sheet opens `showDatePicker` there.
+/// [d] as a field that needs a look (an unsure value): a 2 dp `warnInk` outline and a bold `warnInk` helper. The words stay in [d]'s
+/// helper text, so colour is never the only signal.
+InputDecoration withAttention(BuildContext context, InputDecoration d) {
+  final c = context.c;
+  final border = Theme.of(context).inputDecorationTheme.enabledBorder;
+  return d.copyWith(
+      helperStyle: TextStyle(color: c.warnInk, fontWeight: FontWeight.w600),
+      enabledBorder: border is OutlineInputBorder ? border.copyWith(borderSide: BorderSide(color: c.warnInk, width: 2)) : null);
+}
+
 class DateField extends StatelessWidget {
   final String label;
 
@@ -778,6 +788,8 @@ class DateField extends StatelessWidget {
   final String? helper;
   const DateField({super.key, required this.label, required this.value, required this.onPick, this.onClear, this.helper});
 
+  InputDecoration _attend(BuildContext context, InputDecoration d) => helper == null ? d : withAttention(context, d);
+
   @override
   Widget build(BuildContext context) {
     final v = value;
@@ -787,7 +799,8 @@ class DateField extends StatelessWidget {
         child: InkWell(
           onTap: onPick,
           child: InputDecorator(
-            decoration: InputDecoration(labelText: label, helperText: helper, suffixIcon: const Icon(Icons.event, size: 18)),
+            decoration:
+                _attend(context, InputDecoration(labelText: label, helperText: helper, suffixIcon: const Icon(Icons.event, size: 18))),
             child: Text(text, overflow: TextOverflow.ellipsis, style: v == null ? TextStyle(color: context.c.muted) : null),
           ),
         ),

@@ -69,6 +69,7 @@ part 'controller_iou.dart';
 part 'controller_suggest.dart';
 part 'controller_setup.dart';
 part 'controller_warmup.dart';
+part 'controller_explore.dart';
 part 'controller_goals_loans.dart';
 part 'controller_overview.dart';
 part 'controller_needs_you.dart';

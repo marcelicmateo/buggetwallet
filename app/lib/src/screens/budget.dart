@@ -3,12 +3,13 @@ import 'package:flutter/material.dart';
 import '../controller.dart';
 import '../layout.dart';
 import '../logging.dart';
+import 'explore.dart';
 import 'spending.dart';
-import 'tags_window.dart';
 
-/// Explore (ENG E1): two pages behind a **Spending | Tags** switch. Spending answers "where did it go?" (with Insights and search);
-/// the payday plan moved to Plan. The choice is remembered on the device (`wc.budgetView`, default Spending); a search (Ctrl+K, Ctrl+F,
-/// the app bar) always lands on Spending. Tags is built only while shown.
+/// The Explore tab (ENG E1, E4): two pages behind an **Explore | Spending** switch. Explore (`explore.dart`) is the query screen
+/// and holds Insights and search; Spending is the old month page, kept until E7 moves its tiles. The choice is remembered on the device
+/// (`wc.budgetView`, default Explore); a search (Ctrl+K, Ctrl+F, the app bar) always lands on Explore. Spending is built only while shown. Tags and rules live in
+/// Settings (E7b).
 class BudgetScreen extends StatefulWidget {
   final WalletController wc;
 
@@ -57,7 +58,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
     if (mounted && widget.wc.budgetView != _shown) setState(() {});
   }
 
-  void _search() => widget.wc.setBudgetView('spending');
+  void _search() => widget.wc.setBudgetView('explore');
 
   @override
   Widget build(BuildContext context) {
@@ -69,30 +70,36 @@ class _BudgetScreenState extends State<BudgetScreen> {
           logNav('budget.view', {'view': v});
           wc.setBudgetView(v);
         });
-    return IndexedStack(index: view == 'tags' ? 1 : 0, sizing: StackFit.expand, children: [
-      SpendingScreen(wc: wc, searchRequest: widget.searchRequest, openTab: widget.openTab, openBills: widget.openBills, switcher: switcher),
-      // Built only while shown: three long lists need not be laid out behind the other page.
-      view == 'tags' ? TagsWindow(wc: wc, switcher: switcher) : const SizedBox.shrink(),
+    return IndexedStack(index: const {'explore': 0, 'spending': 1}[view]!, sizing: StackFit.expand, children: [
+      ExploreScreen(wc: wc, searchRequest: widget.searchRequest, openTab: widget.openTab, openBills: widget.openBills, switcher: switcher),
+      // Built only while shown: long lists need not be laid out behind the other page.
+      view == 'spending'
+          ? SpendingScreen(wc: wc, openTab: widget.openTab, openBills: widget.openBills, switcher: switcher)
+          : const SizedBox.shrink(),
     ]);
   }
 }
 
-/// The Spending | Tags switch (`budgetSwitch`; segments `budgetSpending`, `budgetTags`).
+/// The Explore | Spending switch (`budgetSwitch`; segments `budgetExplore`, `budgetSpending`). It scrolls sideways when
+/// the labels do not fit (320 dp at large text).
 class BudgetSwitch extends StatelessWidget {
   final String view;
   final ValueChanged<String> onChanged;
   const BudgetSwitch({super.key, required this.view, required this.onChanged});
 
   @override
-  Widget build(BuildContext context) => SegmentedButton<String>(
-        key: const ValueKey('budgetSwitch'),
-        style: SegmentedButton.styleFrom(minimumSize: const Size(0, touchMin)),
-        showSelectedIcon: true,
-        segments: const [
-          ButtonSegment(value: 'spending', label: Text('Spending', key: ValueKey('budgetSpending'), maxLines: 1)),
-          ButtonSegment(value: 'tags', label: Text('Tags', key: ValueKey('budgetTags'), maxLines: 1)),
-        ],
-        selected: {view},
-        onSelectionChanged: (s) => onChanged(s.first),
+  Widget build(BuildContext context) => SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SegmentedButton<String>(
+          key: const ValueKey('budgetSwitch'),
+          style: SegmentedButton.styleFrom(minimumSize: const Size(0, touchMin), padding: const EdgeInsets.symmetric(horizontal: 10)),
+          showSelectedIcon: true,
+          segments: const [
+            ButtonSegment(value: 'explore', label: Text('Explore', key: ValueKey('budgetExplore'), maxLines: 1)),
+            ButtonSegment(value: 'spending', label: Text('Spending', key: ValueKey('budgetSpending'), maxLines: 1)),
+          ],
+          selected: {view},
+          onSelectionChanged: (s) => onChanged(s.first),
+        ),
       );
 }

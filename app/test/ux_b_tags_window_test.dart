@@ -1,7 +1,9 @@
-// UX-B2: Budget › Tags. The third Budget segment holds the Recommendations, Main tags, Tags and Rules sections and one Add button
+// UX-B2: Settings › Tags and rules (moved from the Explore switch in ENG E7b). The section holds the Recommendations, Main tags, Tags and Rules sections and one Add button
 // (main tag / tag / rule). A recommendation changes nothing until Accept; Dismiss hides it on this device for good. SYNTHETIC data.
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/screens/budget.dart';
+import 'package:budget_wallet/src/screens/settings.dart';
+import 'package:budget_wallet/src/tabs.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wallet_core/wallet_core.dart';
@@ -40,16 +42,18 @@ WalletController untaggedWallet() {
 }
 
 void main() {
-  group('the Tags segment', () {
-    testWidgets('second segment of the Explore switch; the window has its sections and one add button', (t) async {
+  group('the Tags and rules section', () {
+    testWidgets('a Settings section; the window has its sections and one add button; the Explore switch has no Tags segment', (t) async {
       final wc = untaggedWallet();
       addTearDown(wc.dispose);
       await pumpApp(t, Scaffold(body: BudgetScreen(wc: wc)), size: const Size(400, 3000));
-      expect(k('budgetTags'), findsOneWidget);
-      expect(k('tagsAdd'), findsNothing, reason: 'built only while shown');
-      await t.tap(k('budgetTags'));
+      expect(k('budgetTags'), findsNothing, reason: 'Tags and rules moved to Settings');
+      await t.tap(k('budgetSpending'));
       await t.pump(const Duration(milliseconds: 300));
-      expect(wc.budgetView, 'tags');
+      expect(wc.budgetView, 'spending');
+      await pumpApp(t, Scaffold(body: SettingsScreen(wc: wc)), size: const Size(400, 6000));
+      wc.openSettings(SettingsSection.tags);
+      await t.pump(const Duration(milliseconds: 600));
       expect(k('tagsRecommendations'), findsOneWidget);
       expect(k('categoriesPanel'), findsOneWidget);
       expect(k('tagsPanel'), findsOneWidget);
@@ -58,9 +62,21 @@ void main() {
       for (final gone in ['categoryAdd', 'rulesAdd']) {
         expect(k(gone), findsNothing, reason: 'the panels have no add button of their own');
       }
-      await t.tap(k('budgetSpending'));
+      await settle(t);
+    }, timeout: _timeout);
+
+    testWidgets('the Settings list and the phone page group their sections under headings (ENG E7b)', (t) async {
+      final wc = untaggedWallet();
+      addTearDown(wc.dispose);
+      await pumpApp(t, Scaffold(body: SettingsScreen(wc: wc)), size: const Size(1200, 900));
       await t.pump(const Duration(milliseconds: 300));
-      expect(wc.budgetView, 'spending');
+      for (final g in ['YOUR MONEY', 'DEVICES AND SAFETY', 'REMINDERS', 'APP']) {
+        expect(find.text(g), findsOneWidget, reason: g);
+      }
+      expect(k('settingsNav:tags'), findsOneWidget);
+      await pumpApp(t, Scaffold(body: SettingsScreen(wc: wc)), size: const Size(400, 900));
+      await t.pump(const Duration(milliseconds: 300));
+      expect(find.text('YOUR MONEY'), findsOneWidget, reason: 'the phone page shows the groups too');
       await settle(t);
     }, timeout: _timeout);
 

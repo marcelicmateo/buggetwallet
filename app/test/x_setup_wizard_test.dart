@@ -448,8 +448,12 @@ void main() {
       wc.repo.setLocalValue('setupWizard', 'done');
       await pumpApp(t, Scaffold(body: SettingsScreen(wc: wc)), size: const Size(400, 900));
       await t.pump(const Duration(milliseconds: 300));
+      await t.scrollUntilVisible(find.byKey(const ValueKey('setupAgain')), 400,
+          scrollable: find.byType(Scrollable).first); // the last row of the page
       await tapKey(t, 'setupAgain');
       expect(onStep(1), isTrue);
+      final bars = find.descendant(of: find.byKey(const ValueKey('setupProgress')), matching: find.byType(Expanded));
+      expect(bars, findsNWidgets(setupWizardSteps), reason: 'one bar per step');
       await tapKey(t, 'setupNext');
       await tapKey(t, 'setupSkip');
       expect(onStep(3), isTrue);

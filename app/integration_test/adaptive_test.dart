@@ -6,9 +6,9 @@ import 'package:budget_wallet/src/layout.dart';
 import 'package:budget_wallet/src/platform.dart';
 import 'package:budget_wallet/src/screens/category_detail.dart';
 import 'package:budget_wallet/src/screens/insights.dart';
+import 'package:budget_wallet/src/screens/project.dart';
 import 'package:budget_wallet/src/screens/settings.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
-import 'package:budget_wallet/src/screens/tag_detail.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:flutter/material.dart';
@@ -90,7 +90,7 @@ void main() {
       // The tag's detail (RX8) from the tags panel of Insights.
       await scrollTo(t, find.byKey(const ValueKey('insightPanel_tags')), InsightsScreen);
       await tapVisible(t, find.byKey(ValueKey('tagRow_$tag')));
-      expect(find.byType(TagDetailScreen), findsOneWidget);
+      expect(find.byType(ProjectScreen), findsOneWidget);
       await Harness.shot(t, '$name-tag-detail');
       await t.tap(find.byKey(const ValueKey('sheetClose')).last);
       await t.pumpAndSettle();

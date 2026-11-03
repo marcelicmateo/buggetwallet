@@ -47,7 +47,7 @@ Future<void> _pumpApp(WidgetTester t, WalletController wc) async {
 void main() {
   test('today() follows the clock', () {
     final clock = _Clock();
-    final wc = _wallet(clock);
+    final wc = _wallet(clock)..setBudgetView('spending'); // the month tiles are the Spending page
     expect(wc.today(), '2026-10-31');
     clock.now = DateTime(2026, 11, 1, 0, 5);
     expect(wc.today(), '2026-11-01');
@@ -55,7 +55,7 @@ void main() {
 
   test('period(), payPeriods() and spending() are recomputed after the date moves', () {
     final clock = _Clock();
-    final wc = _wallet(clock);
+    final wc = _wallet(clock)..setBudgetView('spending'); // the month tiles are the Spending page
     final period = wc.period(), periods = wc.payPeriods(), spending = wc.spending();
     expect(identical(wc.period(), period), isTrue, reason: 'same day: cached');
     expect(spending.month, '2026-10');
@@ -80,7 +80,7 @@ void main() {
 
   test('a payday crossing: the new salary is offered once its day has come', () {
     final clock = _Clock();
-    final wc = _wallet(clock);
+    final wc = _wallet(clock)..setBudgetView('spending'); // the month tiles are the Spending page
     expect(wc.newPayday(wc.period().start), isNull);
     clock.now = DateTime(2026, 11, 1, 8);
     expect(wc.newPayday(wc.period().start), '2026-11-01');
@@ -88,7 +88,7 @@ void main() {
 
   test('cached values of an old day are dropped, not kept', () {
     final clock = _Clock();
-    final wc = _wallet(clock);
+    final wc = _wallet(clock)..setBudgetView('spending'); // the month tiles are the Spending page
     final first = wc.period();
     clock.now = DateTime(2026, 11, 1, 8);
     wc.period();
@@ -98,7 +98,7 @@ void main() {
 
   test('checkDay notifies once per new day and not on the same day', () {
     final clock = _Clock();
-    final wc = _wallet(clock);
+    final wc = _wallet(clock)..setBudgetView('spending'); // the month tiles are the Spending page
     var n = 0;
     wc.addListener(() => n++);
     wc.checkDay();
@@ -115,7 +115,7 @@ void main() {
 
   testWidgets('Spending shows the new month after a tab switch, without any data change', (t) async {
     final clock = _Clock();
-    final wc = _wallet(clock);
+    final wc = _wallet(clock)..setBudgetView('spending'); // the month tiles are the Spending page
     await pumpApp(t, HomeShell(wc: wc));
     await t.tap(find.text('Explore').last);
     await t.pump();
@@ -133,7 +133,7 @@ void main() {
 
   testWidgets('a new day shows on the open tab when the app resumes', (t) async {
     final clock = _Clock();
-    final wc = _wallet(clock);
+    final wc = _wallet(clock)..setBudgetView('spending'); // the month tiles are the Spending page
     await _pumpApp(t, wc);
     await t.tap(find.text('Explore').last);
     await t.pump();
@@ -148,7 +148,7 @@ void main() {
 
   testWidgets('a payday crossing shows the new-month offer on Today when the day is checked', (t) async {
     final clock = _Clock();
-    final wc = _wallet(clock);
+    final wc = _wallet(clock)..setBudgetView('spending'); // the month tiles are the Spending page
     await _pumpApp(t, wc);
     expect(wc.needsYouItems().map((i) => i.id), isNot(contains('newPayday')));
     final before = wc.needsYouCount();
@@ -208,7 +208,7 @@ void main() {
 
   test('a day change inside a computation does not store the old day\'s value under the new day', () {
     final clock = _Clock();
-    final wc = _wallet(clock);
+    final wc = _wallet(clock)..setBudgetView('spending'); // the month tiles are the Spending page
     // The date moves past midnight on the second read, while period() is computing (effectiveSettings asks for the day).
     var reads = 0;
     final racing = seamedController(wc.repo, key: VaultKey.generate(), clock: () {

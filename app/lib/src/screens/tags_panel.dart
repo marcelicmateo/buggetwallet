@@ -1,4 +1,4 @@
-// Budget › Tags (tags) (T1): the owner's extra tags, with how many payments each has. Add / rename / hide / move / delete with Undo. A tag only
+// Settings › Tags and rules (tags) (T1): the owner's extra tags, with how many payments each has. Add / rename / hide / move / delete with Undo. A tag only
 // tracks: the main tag (the Main tags section) decides the money. The name rules (1-40 characters, unique, not a main tag's name, at most
 // 500) are core's; its `ArgumentError` text is shown under the field or in a toast.
 import 'package:flutter/material.dart';

@@ -51,7 +51,7 @@ Future<T?> showSheet<T>(BuildContext context, Widget child, {bool scrolls = true
         name,
         showDialog<T>(
           context: context,
-          barrierColor: Colors.black.withValues(alpha: 0.4),
+          barrierColor: Theme.of(context).colorScheme.scrim.withValues(alpha: 0.4),
           // Dialog itself fills the window (it aligns its card), so the 480 limit is also set around it.
           builder: (ctx) => Center(
               child: ConstrainedBox(
@@ -89,7 +89,7 @@ Future<T?> showSheet<T>(BuildContext context, Widget child, {bool scrolls = true
         context: context,
         isScrollControlled: true,
         useSafeArea: true,
-        barrierColor: Colors.black.withValues(alpha: 0.4),
+        barrierColor: Theme.of(context).colorScheme.scrim.withValues(alpha: 0.4),
         builder: (ctx) => Padding(
           padding: EdgeInsets.only(left: 16, right: 16, bottom: MediaQuery.viewInsetsOf(ctx).bottom + 20),
           child: scrolls
@@ -172,7 +172,7 @@ Future<T?> openPageOrDialog<T>(BuildContext context, Widget screen, {required do
   if (MediaQuery.sizeOf(context).width >= dialogMin) {
     route = showDialog<T>(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.4),
+      barrierColor: Theme.of(context).colorScheme.scrim.withValues(alpha: 0.4),
       builder: (ctx) => Dialog(
         insetPadding: const EdgeInsets.all(24),
         clipBehavior: Clip.antiAlias,
@@ -333,8 +333,8 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Column(key: const ValueKey('suggestChips'), crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Muted('Suggested main tag', size: BwType.metaSize),
-        const SizedBox(height: 4),
+        const Eyebrow('Suggested main tag'),
+        const SizedBox(height: 6),
         Wrap(spacing: 8, runSpacing: 4, children: [
           for (final id in _suggested)
             ChoiceChip(
@@ -349,6 +349,27 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
         ]),
       ]),
     );
+  }
+
+  /// The Add button, also "Add anyway" in the impulse check: checks the amount, shows the check once over the limit, else writes the expense.
+  void _save() {
+    final s = widget.wc.settings;
+    final a = parseMoney(amount.text);
+    if (a == null || a <= 0) {
+      logNav('expense.invalid');
+      setState(() => error = invalidAmountMessage);
+      return;
+    }
+    if (a > s.impulse && !warned) {
+      logNav('expense.impulseWarning');
+      setState(() {
+        warned = true;
+        error = null;
+      });
+      return;
+    }
+    widget.wc.addExpense(amount: a, category: cat!, note: note.text.trim(), date: isoDate(date), tags: tags.toList());
+    Navigator.pop(context, 'added');
   }
 
   @override
@@ -407,10 +428,10 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
       if (error != null) ...[const SizedBox(height: 10), StatusLabel(good: false, text: error!)],
       if (warned && !widget.skipImpulse && (parseMoney(amount.text) ?? 0) > s.impulse) ...[
         const SizedBox(height: 12),
-        Panel(color: context.c.warnBg, children: [
-          Text('Over ${money(s.impulse, cur, decimals: 0)}: wishlist first?',
-              style: TextStyle(fontWeight: FontWeight.w600, color: context.c.warnInk)),
-          Text('Your rule says big buys wait ${s.coolHours} hours. If you already paid, tap Add expense again.',
+        Panel(key: const ValueKey('impulseCheck'), color: context.c.warnBg, children: [
+          Text('Over ${money(s.impulse, cur, decimals: 0)}: wait ${s.coolHours} hours first?',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: BwType.bodySize, color: context.c.warnInk)),
+          Text('Big buys go on the wishlist and you decide when the ${s.coolHours} hours are over. If you already paid, add it anyway.',
               style: TextStyle(color: context.c.warnInk, fontSize: BwType.metaSize)),
           // A wish takes its name from the note; with no note the owner names it (never the category).
           if (note.text.trim().isEmpty)
@@ -419,19 +440,25 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
                 controller: wishName,
                 onChanged: (_) => setState(() {}),
                 decoration: const InputDecoration(labelText: 'Name of the wish', hintText: 'Running shoes')),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton(
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            OutlinedButton(
+              key: const ValueKey('addAnyway'),
+              style: OutlinedButton.styleFrom(minimumSize: const Size(0, buttonMin)),
+              onPressed: cat == null ? null : _save,
+              child: const Text('Add anyway'),
+            ),
+            OutlinedButton(
+              key: const ValueKey('putOnWishlist'),
+              style: accentOutlined(context).merge(OutlinedButton.styleFrom(minimumSize: const Size(0, buttonMin))),
               onPressed: (note.text.trim().isEmpty ? wishName.text.trim() : note.text.trim()).isEmpty
                   ? null
                   : () {
                       widget.wc.addWish(note.text.trim().isEmpty ? wishName.text.trim() : note.text.trim(), parseMoney(amount.text)!);
                       Navigator.pop(context, 'wish');
                     },
-              key: const ValueKey('putOnWishlist'),
               child: const Text('Put on wishlist'),
             ),
-          ),
+          ]),
         ]),
       ],
       const SizedBox(height: 14),
@@ -444,26 +471,7 @@ class _AddExpenseSheetState extends State<AddExpenseSheet> {
         key: const ValueKey('addExpenseSave'),
         icon: const Icon(Icons.add),
         label: const Text('Add expense', style: TextStyle(fontSize: BwType.headingSize)),
-        onPressed: cat == null
-            ? null
-            : () {
-                final a = parseMoney(amount.text);
-                if (a == null || a <= 0) {
-                  logNav('expense.invalid');
-                  setState(() => error = invalidAmountMessage);
-                  return;
-                }
-                if (a > s.impulse && !warned) {
-                  logNav('expense.impulseWarning');
-                  setState(() {
-                    warned = true;
-                    error = null;
-                  });
-                  return;
-                }
-                widget.wc.addExpense(amount: a, category: cat!, note: note.text.trim(), date: isoDate(date), tags: tags.toList());
-                Navigator.pop(context, 'added');
-              },
+        onPressed: cat == null ? null : _save,
       ),
     ]);
   }
@@ -667,6 +675,7 @@ class _TxSheetState extends State<TxSheet> {
     final t = row.tx;
     final manual = t.source == 'manual';
     final bill = widget.wc.billForTx(t.id);
+    final loan = _loanSection(context), iou = _iouSection(context);
     final src = switch (t.source) { 'pbz' => 'PBZ', 'revolut' => 'Revolut', _ => 'Added by you' };
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Heading(merchantName(t)),
@@ -696,58 +705,66 @@ class _TxSheetState extends State<TxSheet> {
         Padding(
             padding: const EdgeInsets.only(top: 8),
             child: SelectableText(t.description, style: const TextStyle(fontSize: BwType.metaSize))),
-      if (_accountSection(context) case final w?) w,
-      if (accountError != null) StatusLabel(key: const ValueKey('txAccountError'), good: false, text: accountError!),
-      if (bill != null) ...[
-        const SizedBox(height: 10),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: OutlinedButton.icon(
-              key: const ValueKey('openBill'),
-              style: accentOutlined(context),
-              icon: const Icon(Icons.receipt_long_outlined, size: 18),
-              label: const Text('Open bill'),
-              onPressed: () => openBill(context, widget.wc, bill.id)),
+      const SizedBox(height: 12),
+      Panel(children: [
+        MainTagPicker(
+          dropdown: true,
+          table: widget.wc.categoryTable,
+          ids: mainIds,
+          selected: cat,
+          onPick: (v) => setState(() => cat = v),
         ),
+        if (!manual)
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            value: always,
+            onChanged: (v) => setState(() => always = v),
+            title: Text('Always use this main tag for ${merchantName(t)}', style: const TextStyle(fontSize: BwType.bodySize)),
+          ),
+        if (tagPayee(t) != null)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+                key: const ValueKey('makeRule'),
+                style: TextButton.styleFrom(minimumSize: const Size(0, touchMin)),
+                onPressed: () => openRuleForm(context, widget.wc, payee: tagPayee(t), category: cat, from: t),
+                child: const Text('Make a rule…')),
+          ),
+        ExtraTagsEditor(
+            wc: widget.wc,
+            tx: row,
+            payeeRule: !manual && tagPayee(t) != null,
+            onChanged: (on, rule) {
+              tagOn = on;
+              tagRule = rule;
+            }),
+      ]),
+      const SizedBox(height: 12),
+      Panel(children: [
+        if (bill != null)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+                key: const ValueKey('openBill'),
+                style: accentOutlined(context),
+                icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                label: const Text('Open bill'),
+                onPressed: () => openBill(context, widget.wc, bill.id)),
+          ),
+        AttachmentsSection(wc: widget.wc, txId: t.id, chooser: widget.chooser),
+      ]),
+      if (_accountSection(context) case final acct?) ...[
+        const SizedBox(height: 12),
+        Panel(children: [
+          acct,
+          if (accountError != null) StatusLabel(key: const ValueKey('txAccountError'), good: false, text: accountError!),
+        ])
       ],
-      AttachmentsSection(wc: widget.wc, txId: t.id, chooser: widget.chooser),
-      const SizedBox(height: 14),
-      MainTagPicker(
-        dropdown: true,
-        table: widget.wc.categoryTable,
-        ids: mainIds,
-        selected: cat,
-        onPick: (v) => setState(() => cat = v),
-      ),
-      if (!manual)
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          value: always,
-          onChanged: (v) => setState(() => always = v),
-          title: Text('Always use this main tag for ${merchantName(t)}', style: const TextStyle(fontSize: BwType.bodySize)),
-        ),
-      if (tagPayee(t) != null)
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton(
-              key: const ValueKey('makeRule'),
-              style: TextButton.styleFrom(minimumSize: const Size(0, touchMin)),
-              onPressed: () => openRuleForm(context, widget.wc, payee: tagPayee(t), category: cat, from: t),
-              child: const Text('Make a rule…')),
-        ),
-      const SizedBox(height: 8),
-      ExtraTagsEditor(
-          wc: widget.wc,
-          tx: row,
-          payeeRule: !manual && tagPayee(t) != null,
-          onChanged: (on, rule) {
-            tagOn = on;
-            tagRule = rule;
-          }),
-      if (canSplit) _splitSection(context),
-      if (_loanSection(context) case final w?) w,
-      if (_iouSection(context) case final w?) w,
-      const SizedBox(height: 8),
+      if (canSplit || loan != null || iou != null) ...[
+        const SizedBox(height: 12),
+        Panel(children: [if (canSplit) _splitSection(context), if (loan != null) loan, if (iou != null) iou]),
+      ],
+      const SizedBox(height: 12),
       Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 8, children: [
         FilledButton(
           onPressed: saving

@@ -198,7 +198,22 @@ class _SetupWizardState extends State<SetupWizard> {
               padding: const EdgeInsets.fromLTRB(pagePad, 12, pagePad, 4),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Eyebrow('Step $_step of $setupWizardSteps'),
-                const SizedBox(height: 2),
+                const SizedBox(height: 6),
+                // One bar per step, filled up to this one (the words above carry the state; the bars are the picture).
+                ExcludeSemantics(
+                  child: Row(key: const ValueKey('setupProgress'), children: [
+                    for (var i = 1; i <= setupWizardSteps; i++)
+                      Expanded(
+                        child: Container(
+                          height: 4,
+                          margin: EdgeInsets.only(right: i < setupWizardSteps ? 4 : 0),
+                          decoration:
+                              BoxDecoration(color: i <= _step ? context.c.accent : context.c.line, borderRadius: BorderRadius.circular(2)),
+                        ),
+                      ),
+                  ]),
+                ),
+                const SizedBox(height: 8),
                 Semantics(header: true, child: Heading(_titles[_step]!, key: const ValueKey('setupTitle'))),
               ]),
             ),

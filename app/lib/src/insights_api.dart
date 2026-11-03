@@ -222,7 +222,7 @@ extension WalletInsights on WalletController {
   /// The per-day index of this data version (ZC): every graph window and bar size reads sums from it.
   DayIndex get dayIndex => memo(
       const MemoKey('ins.dayIndex'),
-      () => timed('insights.dayIndex', () => DayIndex(txs, currency: currency, table: categoryTable),
+      () => timed('insights.dayIndex', () => DayIndex(txs, currency: currency, table: categoryTable, accounts: accountsAll()),
           fields: {'tx': txs.length}, warnMs: 50));
 
   /// Where a window may go: from the first day with data (at most 5 years back) to today.

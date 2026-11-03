@@ -7,6 +7,7 @@ import '../logging.dart';
 import '../platform.dart';
 import '../tabs.dart';
 import '../theme.dart';
+import '../widgets/common.dart';
 import '../widgets/jump_when_built.dart';
 import '../widgets/rebuild_when_shown.dart';
 import '../widgets/scroll_to.dart';
@@ -23,6 +24,7 @@ import 'look_panel.dart';
 import 'settings_panels.dart';
 import 'setup_wizard.dart';
 import 'sync_panel.dart';
+import 'tags_window.dart';
 import 'today_tiles_panel.dart';
 
 /// The panels of [section], unchanged from the Plan tab. The first one carries the section's key from [keys] (the one page scrolls to it).
@@ -34,6 +36,7 @@ List<Widget> settingsPanels(BuildContext context, WalletController wc, SettingsS
         keyed(AccountsPanel(wc: wc)),
         KeyedSubtree(key: keys?[SettingsSection.currencies], child: CurrenciesPanel(wc: wc)),
       ],
+    SettingsSection.tags => [keyed(TagsWindow(wc: wc))],
     SettingsSection.import => [keyed(ImportPanel(wc: wc, chooser: chooser)), CsvLayoutsPanel(wc: wc, chooser: chooser)],
     SettingsSection.sync => [
         keyed(SyncPanel(wc: wc, onShowKey: () => showWalletKey(context, wc))),
@@ -52,7 +55,7 @@ List<Widget> settingsPanels(BuildContext context, WalletController wc, SettingsS
   };
 }
 
-/// The Settings tab (P5): every section that used to be in Plan, apart from the payday plan (Budget) and the bills (Bills).
+/// The Settings tab (P5; ENG E7b adds Tags and rules and the groups of the index): every section that used to be in Plan, apart from the payday plan (Budget) and the bills (Bills).
 /// A phone and a narrow window show one page with all sections in order; from [twoColMin] wide the section list is on the
 /// left and the chosen section on the right. A link ([WalletController.openSettings]) selects its section, or scrolls to it.
 class SettingsScreen extends StatefulWidget {
@@ -132,12 +135,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
             return _twoPane ? _twoPanes(context) : _onePage(context);
           }));
 
+  SettingsSection _before(SettingsSection s) => SettingsSection.listed[SettingsSection.listed.indexOf(s) - 1];
+
   Widget _onePage(BuildContext context) => NarrowPage(
         child: ListView(
           key: const ValueKey('settingsPage'),
           controller: _scroll,
           padding: const EdgeInsets.fromLTRB(pagePad, 8, pagePad, pageBottomPad),
-          children: gapped([_SetupAgainRow(wc: widget.wc, chooser: widget.chooser), for (final s in SettingsSection.listed) ..._panels(s)]),
+          children: gapped([
+            for (final s in SettingsSection.listed) ...[
+              // A visual grouping only (each panel below names itself): left out of the semantics because Flutter's contrast guideline
+              // samples a partly scrolled-out text node at the wrong place (its y offset is lost) and fails it on any scroll position.
+              if (s == SettingsSection.listed.first || s.group != _before(s).group) ExcludeSemantics(child: Eyebrow(s.group)),
+              ..._panels(s),
+            ],
+            _NavGroup([_SetupAgainRow(wc: widget.wc, chooser: widget.chooser)]),
+          ]),
         ),
       );
 
@@ -145,16 +158,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           SizedBox(
             width: 300,
-            // A plain column in a scroll view: all twelve rows are built (a short window just scrolls).
+            // A plain column in a scroll view: all rows are built (a short window just scrolls).
             child: SingleChildScrollView(
               key: const ValueKey('settingsList'),
               padding: const EdgeInsets.fromLTRB(pagePad, 8, 8, pageBottomPad),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (final s in SettingsSection.listed) _NavRow(s, selected: s == selected, onTap: () => _select(s)),
-                  _SetupAgainRow(wc: widget.wc, chooser: widget.chooser),
-                ],
+                children: gapped([
+                  for (final g in [...SettingsSection.listed.map((s) => s.group).toSet()])
+                    Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: gapped([
+                          Eyebrow(g),
+                          _NavGroup([
+                            for (final s in SettingsSection.listed.where((s) => s.group == g))
+                              _NavRow(s, selected: s == selected, onTap: () => _select(s)),
+                            if (g == 'App') _SetupAgainRow(wc: widget.wc, chooser: widget.chooser),
+                          ]),
+                        ], gap: 8)),
+                ]),
               ),
             ),
           ),
@@ -171,45 +193,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
 }
 
-/// "Set up my wallet again": opens the setup wizard from step 1 with the wallet's current values (not a section).
-class _SetupAgainRow extends StatelessWidget {
-  final WalletController wc;
-  final FileChooser chooser;
-  const _SetupAgainRow({required this.wc, required this.chooser});
+/// The rows of one group in a bordered panel (radius 18, hairlines between the rows).
+class _NavGroup extends StatelessWidget {
+  final List<Widget> rows;
+  const _NavGroup(this.rows);
   @override
   Widget build(BuildContext context) {
     final c = context.c;
-    return InkWell(
-      key: const ValueKey('setupAgain'),
-      onTap: () => openSetupWizard(context, wc, chooser: chooser, restart: true),
-      hoverColor: c.surface2,
-      focusColor: c.accentSoft,
-      child: Container(
-        constraints: const BoxConstraints(minHeight: 56),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.line))),
-        child: Row(children: [
-          Icon(Icons.auto_fix_high, size: 18, color: c.ink),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Set up my wallet again', style: TextStyle(fontWeight: FontWeight.w500)),
-              Text('Files, accounts, plan, bills, tags, budgets', style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
-            ]),
-          ),
-          Icon(Icons.chevron_right, size: 20, color: c.ink2),
-        ]),
-      ),
+    return Material(
+      color: c.surface,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(cardRadius), side: BorderSide(color: c.line)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        for (var i = 0; i < rows.length; i++) ...[if (i > 0) Divider(height: 1, thickness: 1, color: c.line), rows[i]],
+      ]),
     );
   }
 }
 
-/// One entry of the section list: title and a one-line sub; the chosen one is tinted, bold and has an arrow.
-class _NavRow extends StatelessWidget {
-  final SettingsSection section;
+/// One row of the list: an icon tile, a title and a one-line sub; the chosen one is tinted, bold and has an arrow.
+class _IndexRow extends StatelessWidget {
+  final Key rowKey;
+  final IconData icon;
+  final String title, sub;
   final bool selected;
   final VoidCallback onTap;
-  const _NavRow(this.section, {required this.selected, required this.onTap});
+  const _IndexRow(
+      {required this.rowKey, required this.icon, required this.title, required this.sub, required this.onTap, this.selected = false});
   @override
   Widget build(BuildContext context) {
     final c = context.c;
@@ -217,22 +227,26 @@ class _NavRow extends StatelessWidget {
       selected: selected,
       button: true,
       child: InkWell(
-        key: ValueKey('settingsNav:${section.name}'),
+        key: rowKey,
         onTap: onTap,
         hoverColor: c.surface2,
         focusColor: c.accentSoft,
         child: Container(
-          constraints: const BoxConstraints(minHeight: 56),
+          constraints: const BoxConstraints(minHeight: 60),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: selected ? c.accentSoft : null,
-            border: Border(left: BorderSide(color: selected ? c.ink : Colors.transparent, width: 3), bottom: BorderSide(color: c.line)),
-          ),
+          color: selected ? c.accentSoft : null,
           child: Row(children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(color: c.surface2, borderRadius: BorderRadius.circular(10), border: Border.all(color: c.line)),
+              child: Icon(icon, size: 20, color: c.ink2),
+            ),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(section.title, style: TextStyle(fontWeight: selected ? FontWeight.w700 : FontWeight.w500)),
-                Text(section.sub, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
+                Text(title, style: TextStyle(fontWeight: selected ? FontWeight.w700 : FontWeight.w600)),
+                Text(sub, style: TextStyle(fontSize: BwType.metaSize, color: c.ink2)),
               ]),
             ),
             if (selected) Icon(Icons.chevron_right, size: 20, color: c.ink),
@@ -241,4 +255,50 @@ class _NavRow extends StatelessWidget {
       ),
     );
   }
+}
+
+/// "Set up my wallet again": opens the setup wizard from step 1 with the wallet's current values (not a section).
+class _SetupAgainRow extends StatelessWidget {
+  final WalletController wc;
+  final FileChooser chooser;
+  const _SetupAgainRow({required this.wc, required this.chooser});
+  @override
+  Widget build(BuildContext context) => _IndexRow(
+        rowKey: const ValueKey('setupAgain'),
+        icon: Icons.auto_fix_high,
+        title: 'Set up my wallet again',
+        sub: 'Files, accounts, plan, bills, tags, budgets',
+        onTap: () => openSetupWizard(context, wc, chooser: chooser, restart: true),
+      );
+}
+
+/// One entry of the section list.
+class _NavRow extends StatelessWidget {
+  final SettingsSection section;
+  final bool selected;
+  final VoidCallback onTap;
+  const _NavRow(this.section, {required this.selected, required this.onTap});
+  @override
+  Widget build(BuildContext context) => _IndexRow(
+        rowKey: ValueKey('settingsNav:${section.name}'),
+        icon: section.nav.icon,
+        title: section.title,
+        sub: section.sub,
+        selected: selected,
+        onTap: onTap,
+      );
+}
+
+extension on SettingsSection {
+  /// The icon of the section's row in the list (a section that is only a place inside another uses that one's).
+  IconData get icon => switch (this) {
+        SettingsSection.accounts || SettingsSection.currencies => Icons.account_balance_wallet_outlined,
+        SettingsSection.tags => Icons.sell_outlined,
+        SettingsSection.import => Icons.file_download_outlined,
+        SettingsSection.sync => Icons.sync,
+        SettingsSection.backup => Icons.save_outlined,
+        SettingsSection.calendars => Icons.notifications_none,
+        SettingsSection.look => Icons.contrast,
+        SettingsSection.diagnostics => Icons.notes,
+      };
 }
