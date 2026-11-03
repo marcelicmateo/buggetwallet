@@ -125,8 +125,6 @@ void main() {
         findsOneWidget);
     expect(
         find.descendant(of: find.byKey(const ValueKey('planPerDay')), matching: find.text(moneyExact(p.planDaily, 'EUR'))), findsOneWidget);
-    debugPrint(
-        'DBG tab=${t.widget<IndexedStack>(find.byWidgetPredicate((w) => w is IndexedStack && w.children.length == 5)).index} plan=${find.byType(PlanScreen).evaluate().length} payday=${find.byKey(const ValueKey('planPayday')).evaluate().length} saving=${find.byKey(const ValueKey('planSaving')).evaluate().length}');
     await goTab(t, 'Save');
     expect(find.text('Over 80\u00A0€ waits 48 h'), findsOneWidget);
     await goTab(t, 'Today');
