@@ -209,7 +209,8 @@ remote_native_status() {
   cat <<'REMOTE'
 systemctl is-active bw-relay caddy || true
 if /usr/local/bin/bw-relay --health-check; then echo "healthcheck: healthy"; else echo "healthcheck: failed"; fi
-sed -n 's/^BW_RELAY_DOMAIN=//p' /etc/bw-relay/bw-relay.env 2>/dev/null || true
+S=; [ "$(id -u)" = 0 ] || S=sudo
+$S sed -n 's/^BW_RELAY_DOMAIN=//p' /etc/bw-relay/bw-relay.env 2>/dev/null || true
 REMOTE
 }
 
@@ -371,6 +372,9 @@ native_self_test() {
     "$(tr '\n' ' ' <<<"$out")"
   out=$("$me" --dry-run native-status pi) || rc=1
   chk native-status 'is-active bw-relay caddy' "$out"
+  # the env file is root:root 0640: reading it without sudo gave an empty domain (false "no BW_RELAY_DOMAIN")
+  # shellcheck disable=SC2016  # the pattern is literal text of the remote script
+  chk native-status-sudo '\$S sed -n .s/\^BW_RELAY_DOMAIN=' "$out"
   if "$me" --dry-run native-install >/dev/null 2>&1; then echo "relay-deploy self-test: native missing args accepted" >&2; rc=1; fi
   if "$me" --dry-run native-status 2001:db8::1 >/dev/null 2>&1; then echo "relay-deploy self-test: native IPv6 host accepted" >&2; rc=1; fi
   grep -q '^ExecStart=.*--data ' "$NDIR/bw-relay.service" || { echo "relay-deploy self-test: native unit has no ExecStart --data" >&2; rc=1; }
