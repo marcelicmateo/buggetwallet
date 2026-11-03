@@ -28,7 +28,7 @@ Open the app → **Start a new wallet**. Then Plan → **Show wallet key** and s
 Devices sync through a small server you run yourself (see §5). It stores only encrypted files and cannot read them.
 
 1. Start the relay (§5; for a try-out on one computer `make relay-start`).
-2. In the app: Plan › Sync → **Relay address**, enter `https://<your relay name>` (§5; `http://<server>:8787` only for a try-out on your home network), tap **Save address**, then **Test connection** and **Sync now**.
+2. In the app: Plan › Sync → **Relay address**, enter `https://<your relay name>` (§5; `http://<server>:8787` only for a try-out on your home network), and the **Creation token** below it (only when the relay asks), then tap **Save relay**. It checks the relay first, saves both and syncs; it says what failed (address, relay unreachable, token refused). **Sync now** syncs again at any time.
 3. Each additional device: **Join my wallet from another device**, enter the key and the same address. A relay set up as in §5 also asks
    for its **create token** once, when the wallet is first created on it (not for devices that join an existing wallet).
 
@@ -81,6 +81,9 @@ Alternative: a rented server instead of one at home (§6, the same binary, units
    `native-status` use sudo the same way (they install files, stop and start services, read the data folder). It is full root for that
    login, so use an ssh key only (no password login). To lock down between uses, delete the file and add it again before the next one.
 5. On the laptop add an ssh alias for it in `~/.ssh/config` (`Host <pi-host>`, `HostName`, `User`), or use `user@address`.
+6. **Not Alpine Linux:** the install script needs systemd and `apt` or `dnf`; Alpine has OpenRC and `apk`. Use Raspberry Pi OS Lite, Debian or Fedora.
+   Deploy as a normal user with the passwordless sudo of step 4, not as `root`. Preparing the card by hand (ssh, user, key, Wi-Fi) without the Imager,
+   the router form and the other gotchas of the first install: `docs/context/PI_RELAY_SESSION_2026-11-03.md`.
 
 ### 5.3 A name and the router
 You need a name that points at your home router: an `A` (and `AAAA`) record of a domain of your own, or a dynamic-DNS name if your
@@ -203,7 +206,7 @@ log in as `ssh bw@<server IP>` (or add an ssh alias).
    ```
    It shows the creation token once: save it. Then `curl -sI https://<your name>/v2/health` should answer `HTTP/2 200`.
 
-In the app the relay address is `https://<your name>` (Plan › Sync › Test connection).
+In the app the relay address is `https://<your name>` (Plan › Sync › Save checks the relay).
 
 ### 6.4 Upgrading
 As in 5.6: `make relay-bin ARCH=arm64 && tools/relay-deploy.sh native-upgrade bw@<server IP>`. The system updates itself

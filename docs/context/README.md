@@ -12,6 +12,8 @@ update them here, on the `v2` branch.
 | `ARCHITECTURE.md` | v2 requirements and the decisions behind them (transport options etc.). The as-built design is `docs/architecture.md`. |
 | `IMPORT_FORMATS.md` | PBZ and Revolut export formats the importer has to handle. |
 | `DESIGN_DECISIONS.md` | 2026-10-19 planning session: decisions, data-flow gaps, web plan, proposals (bank profiles, bills, calendar, projects), kept UI directions, task order. |
+| `PI_RELAY_SESSION_2026-11-03.md` | First relay install on the Pi: card preparation from the laptop, gotchas (Alpine, root vs user, router form, DNS), DuckDNS timer, state at the end. |
+| `BUGS_OPEN_2026-11-03.md` | Three bugs from the first phone test (balance after a Revolut import, Save under the navigation bar, "5 things need you") with cause and planned fix, and what was fixed. |
 | `PATH_FORWARD.md` | 2026-10-22 plan from the six outside reviews (`docs/review/`): stages G (structure + practices) → H (hardening) → I (UI quick wins) → M6 (owner live test) → J (deeper structure) → P (product); every review KEEP/CHANGE placed (§10 index), KEEP register for the reviewer (§5), delegation, trade-offs, owner decisions D1–D7. |
 
 ## Privacy
