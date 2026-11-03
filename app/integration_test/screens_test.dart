@@ -80,7 +80,14 @@ void main() {
     await binding.convertFlutterSurfaceToImage();
     await tester.pumpAndSettle();
     await binding.takeScreenshot('1-today');
-    // The save-key step sits in the one setup panel under the hero; the button may be below the fold.
+    // Needs you (ENG E7a): the first-run steps are cards in the queue, one tile on Overview; from 1280 dp the queue is the right pane.
+    // The save-key step is one of them; its button may be below the fold.
+    final pane = find.byKey(const ValueKey('needsYouPane')).evaluate().isNotEmpty;
+    if (!pane) {
+      expect(find.byKey(const ValueKey('needsYouTile')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('overviewNeedsYou')));
+      await tester.pumpAndSettle();
+    }
     await tester.ensureVisible(find.text('Save now'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Save now'));
@@ -88,13 +95,6 @@ void main() {
     await binding.takeScreenshot('1-today-key');
     Navigator.of(tester.element(find.byType(KeyBackupSheet))).pop();
     await tester.pumpAndSettle();
-    // Needs you (ENG E7a): the first-run steps are cards in the queue, one tile on Overview; from 1280 dp the queue is the right pane.
-    final pane = find.byKey(const ValueKey('needsYouPane')).evaluate().isNotEmpty;
-    if (!pane) {
-      expect(find.byKey(const ValueKey('needsYouTile')), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('overviewNeedsYou')));
-      await tester.pumpAndSettle();
-    }
     expect(find.byKey(const ValueKey('needs:wizard')), findsOneWidget);
     await binding.takeScreenshot('1-needs-you');
     if (!pane) {
