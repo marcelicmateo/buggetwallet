@@ -111,7 +111,10 @@ entry points). Agents: scout → devops (sonnet/high for the rewrite) + test-wri
 | EC2/E4 | Explore: query, year buckets, `view` entity, heatmap; Explore UI | core ∥ test-writer, then ui | eng-core-2 / eng-ui-3 | EC1 / E1 | EC2 core done 49bfe15..fbe8554 (review 2 medium + 4 low fixed), merged f30d355; E4+E5 UI done (review: pins refresh Overview, Project Undo crash, so far/partial), merged 2214471 |
 | E5 | project stats + Project screen | core then ui | eng-5 | E4 (ui) | core done 5d0dbd1 + 0e496a2 (review: merchantKey regexes hoisted, isEmpty, clamps), merged 0b499d3; UI running in eng-ui-3 ("still coming" deferred: planned has no tag) |
 | E6 | big purchases + loans (§5.5/§6.5): core eng-6 merged 53d9b23, loan matching eng-6c merged 8f1a003, helpers eng-6d merged 9680e6f, UI eng-ui-6 merged 459c6ab | core ∥ test-writer, then ui | eng-6* | E1 (ui only) | redo running to the widened §6.5 (any big purchase + loans: loan/loanrate/loancheck entities; spec edits by the design session were swept into fd821fd/96dc998, first build followed the old house-only text) |
-| E7 | E7a Money timeline + Needs you (eng-7a) running; E7b restyle rest + Tags → Settings + delete TagDetailScreen (eng-7b) running | ui-builder ×2 | eng-7a/b | E1–E6 | running |
+| E7 | E7a Money timeline + Needs you merged 7434135; E7b restyle + Tags → Settings + TagDetailScreen deleted merged 2bf51bf; stage fixes merged 993fb7a | ui-builder ×2 | eng-7a/b | E1–E6 | done, pushed |
+
+## Resume here (2026-11-03) — Stage ENG pushed (schema 21)
+Next: owner runs `ci` with tests (combined desktop job, lint speed and the ENG suites unverified on a runner); APK on the phone; owner checks in STATUS; deferred ENG items (above) only if the owner asks; then M6 live test.
 
 ## Resume here (end of 2026-11-02 evening) — v2 pushed
 Done: F2, UX-C2, CI speed + GO-M6 (d985731 + 13d42c4, merged dcf7804), stage green. Next: owner runs ci with tests (combined desktop job + lint unverified on a runner; lead reads ci-logs with `make ci-log`); APK on the phone when plugged in (`make apk`, then adb install); M6 live test. Unused update* wrappers in core (updateIou, updatePlanned, updateCategory, updateTag) have no app callers: drop in a later core pass.
