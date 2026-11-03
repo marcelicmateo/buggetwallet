@@ -171,6 +171,12 @@ func dispatch(c *run.Ctx, cmd string, rest []string, self string, usage func() i
 	case cmd == "live" && native:
 		return live.Container(c, rest)
 	}
+	if name := cmd; c.Getenv("BW_RUN_DIR") == "" && (cmd != "emulator" || len(rest) > 0) {
+		if cmd == "emulator" {
+			name = "emulator-" + rest[0]
+		}
+		c.MarkIncomplete(name) // a usage error, kill or crash must not leave the previous result readable as green
+	}
 	h := host.New(c, self, usage)
 	if d.HostSetup != nil {
 		d.HostSetup(h)

@@ -91,6 +91,7 @@ func (e *hostSide) dispatch(cmd string, args []string) (code int) {
 			c.Eprintf("%v\n", err)
 			return nil, false
 		}
+		d.Cmd = "emulator-" + name // keeps dist/last-failed.emulator-<cmd>.txt apart from make test's
 		return d, true
 	}
 	switch cmd {

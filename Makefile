@@ -31,6 +31,7 @@ $(BIN): FORCE
 	@mkdir -p dist/bin
 	@cd tools/wallet-build && GOTOOLCHAIN=local CGO_ENABLED=0 go build -trimpath -o ../../$(BIN) . > ../../dist/wallet-build-build.log 2>&1 \
 	  || { if [ "$(Q)" = 1 ]; then mkdir -p ../../dist/logs; echo "wallet-build $(CURDIR)/dist/wallet-build-build.log" > ../../dist/logs/last-failed.txt; \
+	       for g in $(MAKECMDGOALS); do echo "wallet-build $(CURDIR)/dist/wallet-build-build.log" > ../../dist/last-failed.$$g.txt; done; \
 	       else cat ../../dist/wallet-build-build.log >&2; echo "wallet-build did not build (see dist/wallet-build-build.log)" >&2; fi; exit 3; }
 FORCE:
 

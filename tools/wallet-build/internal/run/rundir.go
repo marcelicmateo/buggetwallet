@@ -1,9 +1,12 @@
 package run
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -18,6 +21,7 @@ const KeepRuns = 30
 type Dir struct {
 	Path string
 	ID   string
+	Cmd  string
 	c    *Ctx
 }
 
@@ -49,7 +53,7 @@ func (c *Ctx) Begin(cmd string) (*Dir, error) {
 		}
 		dir = fmt.Sprintf("%s-%d", base, n)
 	}
-	d := &Dir{Path: dir, ID: filepath.Base(dir), c: c}
+	d := &Dir{Path: dir, ID: filepath.Base(dir), Cmd: cmd, c: c}
 	if err := os.WriteFile(filepath.Join(dir, ".running"), nil, 0o644); err != nil {
 		return nil, err
 	}
@@ -81,6 +85,13 @@ func (d *Dir) Finish(code int) {
 		return
 	}
 	d.c.WriteLast(d.Path, code)
+	// Per-command copies that a later run (which re-points dist/logs) cannot overwrite; log paths name this run's dir.
+	for _, f := range [][2]string{{"last-failed.txt", "last-failed." + d.Cmd + ".txt"}, {"last.status", "last." + d.Cmd + ".status"}} {
+		if b, err := os.ReadFile(filepath.Join(d.Path, f[0])); err == nil {
+			b = []byte(strings.ReplaceAll(string(b), d.c.Root+"/dist/logs/", d.Path+"/"))
+			_ = os.WriteFile(filepath.Join(d.c.Root, "dist", f[1]), b, 0o644)
+		}
+	}
 	_ = os.Remove(filepath.Join(d.Path, ".running"))
 }
 
@@ -96,6 +107,7 @@ func (c *Ctx) PruneRuns() {
 		return
 	}
 	defer unix.Flock(int(lock.Fd()), unix.LOCK_UN)
+	c.trimHistoryDaily()
 	ents, err := os.ReadDir(filepath.Join(c.Data, "runs"))
 	if err != nil {
 		return
@@ -171,4 +183,107 @@ func (c *Ctx) WriteLast(dir string, code int) {
 	}
 	_ = os.WriteFile(filepath.Join(dir, "last.status"), []byte(last.String()), 0o644)
 	_ = os.WriteFile(filepath.Join(dir, "last-failed.txt"), []byte(failed.String()), 0o644)
+}
+
+// MarkIncomplete writes "<name> incomplete" into the per-command result files at the start of a command; Finish replaces it.
+func (c *Ctx) MarkIncomplete(name string) {
+	_ = os.MkdirAll(filepath.Join(c.Root, "dist"), 0o755)
+	_ = os.WriteFile(filepath.Join(c.Root, "dist", "last-failed."+name+".txt"), []byte(name+" incomplete (no result written: usage error, killed or crashed)\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(c.Root, "dist", "last."+name+".status"), []byte(name+" incomplete 0\n"), 0o644)
+}
+
+// trimHistoryDaily runs TrimHistory at most once a day (stamp file history/.trimmed; the caller holds .prune.lock).
+func (c *Ctx) trimHistoryDaily() {
+	stamp := filepath.Join(c.Data, "history", ".trimmed")
+	if st, err := os.Stat(stamp); err == nil && c.Clock().Sub(st.ModTime()) < 24*time.Hour {
+		return
+	}
+	c.TrimHistory(HistoryDays)
+	_ = os.WriteFile(stamp, nil, 0o644)
+	_ = os.Chtimes(stamp, c.Clock(), c.Clock())
+}
+
+// HistoryDays is how long history rows (and *.bak-* copies) are kept.
+const HistoryDays = 30
+
+// TrimHistory drops rows older than days from history/*.jsonl (rows start {"ts":"<ISO time>"...}; rows without one are kept)
+// and deletes *.bak-* files that old. The new file is built from a snapshot, then, under an exclusive flock that AppendLine
+// also honours, the lines appended meanwhile are copied over before it is renamed in, so no append is lost.
+func (c *Ctx) TrimHistory(days int) {
+	dir := filepath.Join(c.Data, "history")
+	cut := c.Clock().AddDate(0, 0, -days)
+	cutTS := cut.UTC().Format("2006-01-02T15:04:05")
+	stale, _ := filepath.Glob(filepath.Join(dir, ".trim-*")) // left by a crash mid-trim
+	for _, t := range stale {
+		_ = os.Remove(t)
+	}
+	baks, _ := filepath.Glob(filepath.Join(dir, "*.bak-*"))
+	for _, b := range baks {
+		if st, err := os.Stat(b); err == nil && st.ModTime().Before(cut) {
+			_ = os.Remove(b)
+		}
+	}
+	files, _ := filepath.Glob(filepath.Join(dir, "*.jsonl"))
+	for _, p := range files {
+		trimFile(p, cutTS)
+	}
+}
+
+func trimFile(path, cutTS string) {
+	f, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".trim-*")
+	if err != nil {
+		return
+	}
+	defer os.Remove(tmp.Name())
+	defer tmp.Close()
+	w := bufio.NewWriterSize(tmp, 1<<20)
+	r := bufio.NewReaderSize(f, 1<<20)
+	var read int64
+	dropped := false
+	for {
+		line, err := r.ReadBytes('\n')
+		if err != nil {
+			break // a partial last line is left for the tail copy
+		}
+		read += int64(len(line))
+		if rowTime(line) < cutTS && rowTime(line) != "" {
+			dropped = true
+			continue
+		}
+		w.Write(line)
+	}
+	if !dropped {
+		return
+	}
+	if unix.Flock(int(f.Fd()), unix.LOCK_EX) != nil {
+		return
+	}
+	defer unix.Flock(int(f.Fd()), unix.LOCK_UN)
+	if _, err := f.Seek(read, io.SeekStart); err != nil {
+		return
+	}
+	if _, err := io.Copy(w, f); err != nil || w.Flush() != nil {
+		return
+	}
+	if tmp.Close() != nil {
+		return
+	}
+	_ = os.Chmod(tmp.Name(), 0o644)
+	_ = os.Rename(tmp.Name(), path)
+}
+
+var rowTimeRe = regexp.MustCompile(`"(?:ts|time)": ?"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)`)
+
+// rowTime is the first 19 characters of the row's "ts" (steps, tests) or "time" (perf) value, both with or without a space
+// after the colon (PyJSON writes one); "" when the row has none.
+func rowTime(line []byte) string {
+	if m := rowTimeRe.FindSubmatch(line); m != nil {
+		return string(m[1])
+	}
+	return ""
 }
