@@ -542,11 +542,15 @@ void main() {
       await openSheetFor(tester, wc, text);
       expect(find.textContaining('Unsure'), findsWidgets);
       expect(find.byIcon(Icons.help_outline), findsWidgets);
+      // The attention outline (ENG E7b): 2 dp, with the words above; a field that was read from a code keeps the plain border.
+      final outline = tester.widget<TextField>(key('billTotal')).decoration!.enabledBorder as OutlineInputBorder?;
+      expect(outline?.borderSide.width, 2);
       tester.state<NavigatorState>(find.byType(Navigator).first).pop();
       await tester.pumpAndSettle();
       final code = addBill(wc, syntheticBill('c1'));
       await openSheetFor(tester, wc, code);
       expect(find.textContaining('Unsure'), findsNothing);
+      expect(tester.widget<TextField>(key('billTotal')).decoration!.enabledBorder, isNull);
     });
 
     tw('Confirm without a total says so and keeps the sheet; with one it confirms and says so', (tester) async {

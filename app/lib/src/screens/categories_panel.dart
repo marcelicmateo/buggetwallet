@@ -1,4 +1,4 @@
-// Budget › Tags (main tags) (P1, T1): the built-in categories and the owner's own, grouped by kind. A main tag decides the money (budgets, plan,
+// Settings › Tags and rules (main tags) (P1, T1): the built-in categories and the owner's own, grouped by kind. A main tag decides the money (budgets, plan,
 // safe-to-spend); the extra tags for tracking are in tags_panel.dart. Add / rename / hide / move / delete with Undo. The rules (unique
 // names, at most 200) are core's; its `ArgumentError` text is shown under the field or in a toast.
 import 'package:flutter/material.dart';

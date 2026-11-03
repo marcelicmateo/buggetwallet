@@ -111,7 +111,7 @@ void main() {
     await t.enterText(inSheet(AddExpenseSheet, field('Note')), 'Headphones synthetic');
     await tapVisible(t, sheetButton('Add expense'));
     await t.pumpAndSettle();
-    expect(find.text('Over 50\u00A0€: wishlist first?'), findsOneWidget);
+    expect(find.text('Over 50\u00A0€: wait 72 hours first?'), findsOneWidget);
     expect(wc.txs, isEmpty);
     await tapVisible(t, find.text('Put on wishlist'));
     await t.pumpAndSettle();
@@ -127,8 +127,8 @@ void main() {
     await pickCategory(t, 'Groceries');
     await tapVisible(t, sheetButton('Add expense'));
     await t.pumpAndSettle();
-    expect(find.text('Over 50\u00A0€: wishlist first?'), findsOneWidget);
-    await tapVisible(t, sheetButton('Add expense')); // "If you already paid, tap Add expense again."
+    expect(find.text('Over 50\u00A0€: wait 72 hours first?'), findsOneWidget);
+    await tapVisible(t, sheetButton('Add expense')); // the second tap adds it (so does Add anyway)
     await t.pumpAndSettle();
     expect(find.byType(AddExpenseSheet), findsNothing);
     expect(wc.txs.single.amount, -7510);

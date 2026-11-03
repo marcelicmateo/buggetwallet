@@ -105,7 +105,10 @@ class _ScanBillScreenState extends State<ScanBillScreen> {
           child: Stack(children: [
             widget.wc.billInputs.camera.view(onCode: _onCode),
             if (_busy)
-              const Positioned.fill(child: ColoredBox(color: Color(0x66000000), child: Center(child: CircularProgressIndicator()))),
+              Positioned.fill(
+                  child: ColoredBox(
+                      color: Theme.of(context).colorScheme.scrim.withValues(alpha: 0.4),
+                      child: const Center(child: CircularProgressIndicator()))),
           ]),
         ),
         Padding(

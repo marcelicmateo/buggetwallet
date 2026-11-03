@@ -223,6 +223,8 @@ void main() {
       await t.tap(find.text('open'));
       await t.pumpAndSettle();
       await tapKey(t, 'txCategory');
+      // The picker sits high on the sheet now, so the menu is clipped above the selected item: scroll it down to the pick.
+      if (k('pick:$pick').evaluate().isEmpty) await t.dragUntilVisible(k('pick:$pick'), find.byType(Scrollable).last, const Offset(0, 100));
       await t.tap(k('pick:$pick').last);
       await t.pumpAndSettle();
       if (!always) {
@@ -329,7 +331,7 @@ void main() {
       expect(wc.takeRuleOffer(), isNull);
     });
 
-    testWidgets('Budget › Tags › Recommendations lists the payee; Accept makes the rule with an Undo', (t) async {
+    testWidgets('Settings › Tags and rules › Recommendations lists the payee; Accept makes the rule with an Undo', (t) async {
       final wc = konzumWallet(chosen: 3);
       addTearDown(wc.dispose);
       await pumpApp(t, tagsWindow(wc));

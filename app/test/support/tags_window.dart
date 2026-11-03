@@ -3,8 +3,8 @@ import 'package:budget_wallet/src/screens/tags_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Budget › Tags as one page (recommendations, main tags, tags, rules and the Add button); rebuilds with the controller.
-Widget tagsWindow(WalletController wc) => Scaffold(body: TagsWindow(wc: wc, switcher: const SizedBox.shrink()));
+/// Settings › Tags and rules on its own (recommendations, main tags, tags, rules and the Add button); rebuilds with the controller.
+Widget tagsWindow(WalletController wc) => Scaffold(body: SingleChildScrollView(child: TagsWindow(wc: wc)));
 
 /// One panel of the Tags window on its own, with the window's add flow (same `tagsAdd` key, same `openTagsAdd`) above it, so a test
 /// of a panel's rows is not confused by the other two panels.

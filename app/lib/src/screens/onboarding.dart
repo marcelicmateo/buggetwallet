@@ -56,6 +56,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     return GatePage(children: [
+      if (!joining && _passphraseFor == null)
+        const Text('Know what you can spend today.', key: ValueKey('welcomeLine'), style: BwType.title),
       Muted(
           isWeb
               ? 'Your money, kept in this browser. It syncs only with your own relay, encrypted with a key only your devices have. Save a backup file from Settings now and then.'

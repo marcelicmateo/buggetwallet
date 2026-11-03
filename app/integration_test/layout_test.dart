@@ -126,7 +126,7 @@ void main() {
         await tapVisible(t, find.descendant(of: find.byType(AddExpenseSheet), matching: find.widgetWithText(ChoiceChip, 'Groceries')));
         await t.pumpAndSettle();
         await tapVisible(t, find.descendant(of: find.byType(AddExpenseSheet), matching: find.text('Add expense')).last);
-        expect(find.text('Over 50\u00A0€: wishlist first?'), findsOneWidget);
+        expect(find.text('Over 50\u00A0€: wait 72 hours first?'), findsOneWidget);
         await Harness.shot(t, '$name-sheet-add-expense');
         await closeSheet(t, AddExpenseSheet);
 

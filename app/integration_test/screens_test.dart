@@ -15,9 +15,9 @@ import 'package:budget_wallet/src/screens/budget.dart' show BudgetScreen;
 import 'package:budget_wallet/src/screens/import_preview_sheet.dart';
 import 'package:budget_wallet/src/screens/key_backup.dart';
 import 'package:budget_wallet/src/screens/plan_screen.dart' show PlanScreen;
+import 'package:budget_wallet/src/screens/project.dart' show openProject;
 import 'package:budget_wallet/src/screens/review.dart';
 import 'package:budget_wallet/src/screens/settings.dart';
-import 'package:budget_wallet/src/screens/tag_detail.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/tabs.dart';
 import 'package:flutter/material.dart';
@@ -366,7 +366,7 @@ void main() {
     for (final x in newest.take(5)) {
       await wc.setPaymentTag(x.tx.id, tag, true);
     }
-    unawaited(openTag(tester.element(find.byType(Scaffold).first), wc, tag));
+    unawaited(openProject(tester.element(find.byType(Scaffold).first), wc, tag));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('projectTotal')), findsOneWidget);
     await binding.takeScreenshot('9-project');

@@ -9,7 +9,7 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import 'suggest_budgets_dialog.dart';
 
-/// Plan › "Budgets per category": one amount field per category (empty = no budget), a button that fills the empty
+/// Plan › "Budgets per main tag": one amount field per category (empty = no budget), a button that fills the empty
 /// fields from the last 6 months, and Save. Only fields the user edited are saved, on top of the latest saved budgets.
 class BudgetsPanel extends StatefulWidget {
   final WalletController wc;
@@ -183,8 +183,7 @@ class _BudgetsPanelState extends State<BudgetsPanel> {
   Widget build(BuildContext context) {
     final sym = currencySymbol(widget.wc.currency);
     return Panel(children: [
-      const SectionHead('Budgets per category'),
-      Explainer(widget.wc, 'budgets', 'A limit for each month. Leave a field empty for no budget.'),
+      const SectionHead('Budgets per main tag'),
       Rows(children: [
         for (final k in _cats)
           Container(

@@ -36,19 +36,22 @@ Future<void> _showPlan(WidgetTester t, WalletController wc, {Size size = const S
 
 void main() {
   group('RX4 the switch', () {
-    test('budgetView keeps explore, spending and tags; anything else falls back to explore', () {
+    test('budgetView keeps explore and spending; anything else (also the old tags) falls back to explore', () {
       final wc = budgetWallet();
       addTearDown(wc.dispose);
-      wc.setBudgetView('tags');
-      expect(wc.budgetView, 'tags');
-      expect(wc.repo.localValue('budgetView'), 'tags');
+      wc.setBudgetView('spending');
+      expect(wc.budgetView, 'spending');
+      expect(wc.repo.localValue('budgetView'), 'spending');
       wc.setBudgetView('bogus');
-      expect(wc.budgetView, 'tags', reason: 'an unknown view is ignored');
+      wc.setBudgetView('tags');
+      expect(wc.budgetView, 'spending', reason: 'an unknown view is ignored; Tags moved to Settings');
+      wc.repo.setLocalValue('budgetView', 'tags');
+      expect(wc.budgetView, 'explore', reason: 'an old stored tags value reads as the default');
       wc.repo.setLocalValue('budgetView', 'old');
       expect(wc.budgetView, 'explore', reason: 'an unknown stored value reads as the default');
     });
 
-    tw('Explore opens on Explore, Spending and Tags are one tap away and the choice is remembered on the device', (t) async {
+    tw('Explore opens on Explore, Spending is one tap away and the choice is remembered on the device', (t) async {
       final wc = budgetWallet();
       addTearDown(wc.dispose);
       expect(wc.budgetView, 'explore');
@@ -60,17 +63,10 @@ void main() {
       expect(_key('budgetPlan'), findsNothing, reason: 'the plan moved to Plan');
       expect(t.widget<SegmentedButton<String>>(_key('budgetSwitch')).selected, {'spending'});
 
-      await t.ensureVisible(_key('budgetTags')); // the switch scrolls sideways when the labels do not fit
-      await t.tap(_key('budgetTags'));
-      await t.pump(const Duration(milliseconds: 300));
-      expect(wc.budgetView, 'tags');
-      expect(wc.repo.localValue('budgetView'), 'tags', reason: 'device-local, not a synced setting');
-      expect(_key('outTile'), findsNothing);
-
       // A new screen (an app restart) opens where the owner left it.
       await t.pumpWidget(const SizedBox());
       await _show(t, wc, spending: false);
-      expect(t.widget<SegmentedButton<String>>(_key('budgetSwitch')).selected, {'tags'});
+      expect(t.widget<SegmentedButton<String>>(_key('budgetSwitch')).selected, {'spending'});
 
       await t.tap(_key('budgetSpending'));
       await t.pump(const Duration(milliseconds: 300));
@@ -118,7 +114,7 @@ void main() {
     });
 
     tw('a search request (Ctrl+F, the app bar) lands on Explore', (t) async {
-      final wc = budgetWallet()..setBudgetView('tags');
+      final wc = budgetWallet()..setBudgetView('spending');
       addTearDown(wc.dispose);
       final request = ValueNotifier<int>(0);
       addTearDown(request.dispose);
@@ -147,7 +143,6 @@ void main() {
           size: const Size(400, 3000));
 
       // Spending first (the budget line), then Plan (the held line has no own opener here, so it uses the plan link).
-      wc.setBudgetView('tags');
       wc.setPlanView('saving');
       await today();
       await t.ensureVisible(_key('budgetLine'));
