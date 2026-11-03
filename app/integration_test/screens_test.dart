@@ -88,12 +88,19 @@ void main() {
     await binding.takeScreenshot('1-today-key');
     Navigator.of(tester.element(find.byType(KeyBackupSheet))).pop();
     await tester.pumpAndSettle();
-    // Hide the setup panel (it becomes one line) so the next shots show Today as it is after setup.
-    await tester.ensureVisible(find.byKey(const ValueKey('setupHide')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('setupHide')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('setupLine')), findsOneWidget);
+    // Needs you (ENG E7a): the first-run steps are cards in the queue, one tile on Overview; from 1280 dp the queue is the right pane.
+    final pane = find.byKey(const ValueKey('needsYouPane')).evaluate().isNotEmpty;
+    if (!pane) {
+      expect(find.byKey(const ValueKey('needsYouTile')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('overviewNeedsYou')));
+      await tester.pumpAndSettle();
+    }
+    expect(find.byKey(const ValueKey('needs:wizard')), findsOneWidget);
+    await binding.takeScreenshot('1-needs-you');
+    if (!pane) {
+      await tester.tap(find.byKey(const ValueKey('sheetClose')));
+      await tester.pumpAndSettle();
+    }
 
     // Today's Coming up and heads-up lines, then the Upcoming screen (F3).
     await tester.scrollUntilVisible(find.byKey(const ValueKey('comingUpLine')), 200, scrollable: find.byType(Scrollable).first);
@@ -193,6 +200,8 @@ void main() {
     // Bills tab (B4, P5): Coming up, To review, Expected bills, then the bills database: To review, Unpaid and Paid, and the sheet of the
     // one waiting for review.
     await goTab(tester, 'Bills');
+    await tester.tap(find.byKey(const ValueKey('billsOpen')));
+    await tester.pumpAndSettle();
     final bills = find.descendant(of: find.byType(BillsScreen), matching: find.byType(Scrollable)).first;
     await tester.scrollUntilVisible(find.text('Import bill file'), 300, scrollable: bills);
     await tester.pumpAndSettle();
@@ -202,9 +211,10 @@ void main() {
     await tester.scrollUntilVisible(reviewRow, 300, scrollable: bills, duration: const Duration(milliseconds: 50));
     await tester.pumpAndSettle();
     // The "To review" heading must be in the shot: put it near the top, the rows are right under it.
-    await Scrollable.ensureVisible(tester.element(find.text('TO REVIEW')), alignment: 0.1);
+    final toReview = find.textContaining('To review (');
+    await Scrollable.ensureVisible(tester.element(toReview), alignment: 0.1);
     await tester.pumpAndSettle();
-    expect(find.text('TO REVIEW'), findsOneWidget);
+    expect(toReview, findsOneWidget);
     await binding.takeScreenshot('3-bills-rows');
     // The row must be on screen before the tap (Android's taller bars hid it once), then wait (bounded) until the sheet is up.
     await tester.ensureVisible(reviewRow);
@@ -313,22 +323,36 @@ void main() {
     expect(find.byKey(const ValueKey('forecastChart')), findsOneWidget);
     await binding.takeScreenshot('2-budget-forecast');
 
-    // The weekly review (M4): the Today card opens it; one row is confirmed, then it closes and Done is left for the real flow.
+    // The weekly review (M4): its Needs-you card (the Overview badge opens the queue, from 1280 dp it is the pane) opens it; one row is
+    // confirmed, then it closes and Done is left for the real flow.
     await goTab(tester, 'Today');
-    await tester.scrollUntilVisible(find.text('Start review'), 300,
-        scrollable: find.descendant(of: find.byType(TodayScreen), matching: find.byType(Scrollable)).first);
-    await tester.ensureVisible(find.text('Start review'));
+    final queuePane = find.byKey(const ValueKey('needsYouPane')).evaluate().isNotEmpty;
+    if (!queuePane) {
+      await tester.scrollUntilVisible(find.byKey(const ValueKey('overviewNeedsYou')), -300,
+          scrollable: find.descendant(of: find.byType(TodayScreen), matching: find.byType(Scrollable)).first);
+      await tester.tap(find.byKey(const ValueKey('overviewNeedsYou')));
+      await tester.pumpAndSettle();
+    }
+    expect(find.byKey(const ValueKey('needsYouReview')), findsOneWidget, reason: 'import, decide, pace, done');
+    await binding.takeScreenshot('7-needs-you-review');
+    await tester.scrollUntilVisible(find.byKey(const ValueKey('needsPrimary:review')), 300,
+        scrollable: find.descendant(of: find.byKey(const ValueKey('needsYouList')), matching: find.byType(Scrollable)).first);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Start review'));
+    await tester.tap(find.byKey(const ValueKey('needsPrimary:review')));
     await tester.pumpAndSettle();
     expect(find.byType(ReviewScreen), findsOneWidget);
     await binding.takeScreenshot('7-review');
-    if (find.text('Looks right').evaluate().isNotEmpty) {
-      await tester.tap(find.text('Looks right').first);
+    final looksRight = find.descendant(of: find.byType(ReviewScreen), matching: find.text('Looks right')); // not the pane's salary card
+    if (looksRight.evaluate().isNotEmpty) {
+      await tester.tap(looksRight.first);
       await tester.pumpAndSettle();
     }
-    await tester.tap(find.byTooltip('Close'));
+    await tester.tap(find.byTooltip('Close').last);
     await tester.pumpAndSettle();
+    if (!queuePane) {
+      await tester.tap(find.byKey(const ValueKey('sheetClose')));
+      await tester.pumpAndSettle();
+    }
 
     // The Pay-period report (RX7): the chip in the app bar (phone) or the badge in the rail opens it; one step back to a finished period.
     final chip = find.byKey(const ValueKey('periodChip')), badge = find.byKey(const ValueKey('periodBadgeTap'));

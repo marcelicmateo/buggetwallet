@@ -351,6 +351,8 @@ void main() {
         NormalizedBill(source: BillSource.manual, externalId: 'gym-slip', date: on(2), total: 3050, payee: 'POS SYNTHGYM ZAGREB'));
     wc.reload();
     await goTab(t, 'Bills');
+    await tapVisible(t, find.byKey(const ValueKey('billsOpen')));
+    await t.pumpAndSettle();
     await scrollTo(t, find.byKey(ValueKey('billHistory_${bill.id}')), BillsScreen);
     await Harness.shot(t, 'plan-bill-row');
     await tapVisible(t, find.byKey(ValueKey('billHistory_${bill.id}')));

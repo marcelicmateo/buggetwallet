@@ -123,66 +123,72 @@ void main() {
   });
 
   group('I1: the first-run setup panel', () {
-    // demoWallet: key not saved, salary not confirmed, a new payday waiting: three open steps.
-    Future<void> pumpDemo(WidgetTester tester, WalletController wc) => pumpApp(
-        tester,
-        Scaffold(
-            body: ListenableBuilder(
-                listenable: wc, builder: (_, __) => TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => wc.now))),
-        size: const Size(400, 3000));
+    // demoWallet: key not saved, salary not confirmed, a new payday waiting: three open steps. Since ENG E7a each step is a card in Needs you
+    // (the one first-run panel and its Hide / one-line state are gone: the queue is the one place, Overview has one tile).
+    Future<void> pumpDemo(WidgetTester tester, WalletController wc) =>
+        pumpApp(tester, ListenableBuilder(listenable: wc, builder: (_, __) => needsYouOf(wc)), size: const Size(400, 3000));
 
-    testWidgets('three open steps are ONE panel listing all of them', (tester) async {
-      await pumpDemo(tester, demoWallet());
-      final panel = find.byKey(const ValueKey('setupPanel'));
-      expect(panel, findsOneWidget);
-      for (final part in ['Save your wallet key', 'Planning on', 'Salary landed on']) {
-        expect(find.descendant(of: panel, matching: find.textContaining(part)), findsOneWidget, reason: part);
+    testWidgets('three open steps are three cards in the one queue, none on Overview', (tester) async {
+      final wc = demoWallet();
+      await pumpDemo(tester, wc);
+      for (final id in ['keyBackup', 'salary', 'newPayday']) {
+        expect(find.byKey(ValueKey('needs:$id')), findsOneWidget, reason: id);
       }
-      expect(find.byKey(const ValueKey('setupLine')), findsNothing);
-      // not three separate panels: the steps are not found outside the panel
-      expect(find.textContaining('Save your wallet key'), findsOneWidget);
+      for (final part in ['Save your wallet key', 'Planning on', 'Salary landed on']) {
+        expect(find.textContaining(part), findsOneWidget, reason: part);
+      }
+      await _pumpToday(tester, wc);
+      for (final gone in ['setupPanel', 'setupLine', 'keyBackupRow']) {
+        expect(find.byKey(ValueKey(gone)), findsNothing, reason: gone);
+      }
+      expect(find.byKey(const ValueKey('needsYouTile')), findsOneWidget);
     }, skip: _skipSetup);
 
-    testWidgets('after the owner dismisses it, one collapsed line; tapping the line opens the panel again', (tester) async {
+    testWidgets('answering one step leaves the others', (tester) async {
       final wc = demoWallet();
       await pumpDemo(tester, wc);
-      // Assumption (not in the spec): the dismiss control is the panel's own Hide button (key setupHide).
-      await tester.tap(find.descendant(of: find.byKey(const ValueKey('setupPanel')), matching: find.byKey(const ValueKey('setupHide'))));
-      await tester.pump();
-      expect(find.byKey(const ValueKey('setupPanel')), findsNothing);
-      expect(find.byKey(const ValueKey('setupLine')), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('setupLine')));
-      await tester.pump();
-      expect(find.byKey(const ValueKey('setupPanel')), findsOneWidget);
-      expect(find.byKey(const ValueKey('setupLine')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('needsAlt:keyBackup')));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(const ValueKey('needs:keyBackup')), findsNothing);
+      expect(find.byKey(const ValueKey('needs:salary')), findsOneWidget);
+      expect(find.byKey(const ValueKey('needs:newPayday')), findsOneWidget);
+      await tester.pump(const Duration(seconds: 4));
     }, skip: _skipSetup);
 
-    testWidgets('the collapsed state is device-local and survives a restart of the controller', (tester) async {
+    testWidgets('putting the key prompt off is device-local and survives a restart of the controller', (tester) async {
       final wc = demoWallet();
       await pumpDemo(tester, wc);
-      await tester.tap(find.descendant(of: find.byKey(const ValueKey('setupPanel')), matching: find.byKey(const ValueKey('setupHide'))));
-      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('needsAlt:keyBackup')));
+      await tester.pump(const Duration(milliseconds: 400));
       await tester.pumpWidget(const SizedBox.shrink());
       final again = WalletController.forTest(wc.repo, key: wc.key);
       await pumpDemo(tester, again);
-      expect(find.byKey(const ValueKey('setupLine')), findsOneWidget);
-      expect(find.byKey(const ValueKey('setupPanel')), findsNothing);
+      expect(find.byKey(const ValueKey('needs:keyBackup')), findsNothing);
+      expect(find.byKey(const ValueKey('needs:salary')), findsOneWidget);
+      await tester.pump(const Duration(seconds: 4));
     }, skip: _skipSetup);
 
-    testWidgets('nothing open: neither the panel nor the line', (tester) async {
+    testWidgets('nothing open: no card and no tile', (tester) async {
       final wc = _wallet(confirmed: true); // no key, salary confirmed, no new payday
+      wc.snoozeKeyBackup();
+      wc.markReviewDone();
       await _pumpToday(tester, wc);
       expect(find.byKey(const ValueKey('setupPanel')), findsNothing);
-      expect(find.byKey(const ValueKey('setupLine')), findsNothing);
+      expect(find.byKey(const ValueKey('needsYouTile')), findsNothing);
+      expect(wc.needsYouItems(), isEmpty);
+      await tester.pump(const Duration(seconds: 4));
     }, skip: _skipSetup);
 
-    testWidgets('only one step open (salary): the panel lists just that step', (tester) async {
+    testWidgets('only one step open (salary): one card', (tester) async {
       final wc = _wallet(confirmed: false);
-      await _pumpToday(tester, wc);
-      final panel = find.byKey(const ValueKey('setupPanel'));
-      expect(panel, findsOneWidget);
-      expect(find.descendant(of: panel, matching: find.textContaining('Planning on')), findsOneWidget);
-      expect(find.descendant(of: panel, matching: find.textContaining('Save your wallet key')), findsNothing);
+      wc.snoozeKeyBackup();
+      wc.markReviewDone();
+      await pumpDemo(tester, wc);
+      expect(find.byKey(const ValueKey('needs:salary')), findsOneWidget);
+      expect(find.textContaining('Planning on'), findsOneWidget);
+      expect(find.textContaining('Save your wallet key'), findsNothing);
+      expect(wc.needsYouItems(), hasLength(1));
+      await tester.pump(const Duration(seconds: 4));
     }, skip: _skipSetup);
   });
 

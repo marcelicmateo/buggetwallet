@@ -353,7 +353,7 @@ void main() {
       ('1280 x 2.0', Size(1280, 800), 2.0),
       ('1920 x 2.0', Size(1920, 1080), 2.0),
     ]) {
-      testWidgets('$name: Today, Spending, Plan, Bills, Save and the period report keep their order, overlap nothing, overflow nothing',
+      testWidgets('$name: Today, Spending, Plan, Money, Save and the period report keep their order, overlap nothing, overflow nothing',
           (tester) async {
         overflowing.clear();
         await withErrors((errors) async {
@@ -373,7 +373,8 @@ void main() {
           for (final tab in const ['Budget', 'Bills', 'Save']) {
             await tapTab(tester, tab);
             await pumpIdle(tester);
-            check(tab);
+            // Money is a timeline (ENG E7a), not a tile grid: it is scrolled through for overflow, the grids have the others.
+            if (tab != 'Bills') check(tab);
             await scrollThrough(tester);
           }
           await tapTab(tester, 'Plan');
@@ -416,8 +417,11 @@ void main() {
       for (final day in [DateTime(2026, 10, 29), DateTime(2026, 10, 31), DateTime(2026, 11, 2), DateTime(2026, 11, 3)]) {
         await pumpFull(tester, _demo(DateTime(day.year, day.month, day.day, 12)), 1.0, size: const Size(1280, 800));
         await pumpIdle(tester);
-        _expectOrdered(_boxes(tester), tester.getSize(find.byType(DashGrid)).width, 'Today on ${isoDate(day)}');
-        _expectNoHoles(tester, 1.0, 'Today on ${isoDate(day)}');
+        // Beside the Needs-you pane the Overview is one column of content (two grids: hero and attention, then the numbers).
+        for (var i = 0; i < find.byType(DashGrid).evaluate().length; i++) {
+          _expectOrdered(_boxes(tester, i), tester.getSize(find.byType(DashGrid).at(i)).width, 'Today on ${isoDate(day)} grid $i');
+          _expectNoHoles(tester, 1.0, 'Today on ${isoDate(day)} grid $i', i);
+        }
         await tester.pumpWidget(const SizedBox());
       }
     }, timeout: _quick);

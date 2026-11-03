@@ -109,6 +109,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         if (s != s.nav) scrollToKey(_scroll, _keys[s]!, alive: () => mounted);
       });
     } else {
+      // Kept for the layout that turns into two panes a moment later (a hidden page is laid out narrower beside Overview's pane).
+      selected = s.nav;
       scrollToKey(_scroll, _keys[s]!, alive: () => mounted);
     }
   }

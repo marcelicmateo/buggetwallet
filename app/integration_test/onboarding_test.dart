@@ -48,7 +48,7 @@ void main() {
     await t.pumpAndSettle();
     expect(find.byType(KeyBackupSheet), findsNothing);
     expect(wc.keyBackupConfirmed, isTrue);
-    expect(find.byKey(const ValueKey('keyBackupRow')), findsNothing);
+    expect(wc.needsYouItems().map((i) => i.id), isNot(contains('keyBackup')), reason: 'the key card leaves the queue once confirmed');
 
     // Then the "Set up my wallet" wizard: a screenshot per step, cash on hand in step 2, everything else skipped (nothing is written).
     expect(find.byType(SetupWizard), findsOneWidget);
@@ -82,17 +82,29 @@ void main() {
     expect(wc.goals.map((g) => g.name), ['Emergency fund', 'Yearly costs']);
     expect(wc.goals.map((g) => g.monthly), [10000, 10000]);
 
-    // No salary yet: the banner asks for it and links to Plan.
-    expect(find.text('Planning on 0\u00A0€ a month'), findsOneWidget);
+    // No salary yet: the Needs-you card asks for it and links to Plan (opened from the Overview badge; from 1280 dp it is the pane).
+    if (find.byKey(const ValueKey('needsYouPane')).evaluate().isEmpty) {
+      await t.tap(find.byKey(const ValueKey('overviewNeedsYou')));
+      await t.pumpAndSettle();
+    }
+    expect(find.text('Your salary is not set'), findsOneWidget);
     expect(find.textContaining('Enter your monthly salary in Plan'), findsOneWidget);
     await t.tap(find.text('Open Plan'));
     await t.pumpAndSettle();
     expect(find.text('PAYDAY PLAN'), findsOneWidget);
     await goTab(t, 'Today');
+    if (find.byKey(const ValueKey('needsYouPane')).evaluate().isEmpty) {
+      await t.tap(find.byKey(const ValueKey('overviewNeedsYou')));
+      await t.pumpAndSettle();
+    }
     await t.tap(find.text('Looks right'));
     await t.pumpAndSettle();
     expect(wc.settings.salaryConfirmed, isTrue);
-    expect(find.text('Planning on 0\u00A0€ a month'), findsNothing);
+    expect(find.text('Your salary is not set'), findsNothing);
+    if (find.byKey(const ValueKey('needsYouPane')).evaluate().isEmpty) {
+      await t.tap(find.byKey(const ValueKey('sheetClose')));
+      await t.pumpAndSettle();
+    }
 
     await scrollTo(t, find.textContaining('No transactions yet'), TodayScreen);
     expect(find.text('PBZ none · Revolut none'), findsOneWidget);

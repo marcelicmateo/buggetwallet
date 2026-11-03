@@ -407,7 +407,7 @@ void main() {
   });
 
   group('resume and again', () {
-    testWidgets('closing at step 4 keeps it: Today says Finish setting up and reopens step 4; Done removes the line', (t) async {
+    testWidgets('closing at step 4 keeps it: Needs you says Finish setting up and reopens step 4; Done removes the line', (t) async {
       final wc = setupWallet();
       wc.repo.setLocalValue('setupWizard', 'pending');
       await openWizard(t, wc, restart: false);
@@ -417,17 +417,10 @@ void main() {
       await tapKey(t, 'sheetClose');
       expect(find.byKey(const ValueKey('setupWizard')), findsNothing);
       expect(wc.setupWizardState, 'step:4');
-      await pumpApp(
-          t,
-          Scaffold(
-              body: ListenableBuilder(
-                  listenable: wc,
-                  builder: (c, _) =>
-                      TodayScreen(key: ValueKey(wc.dataVersion), view: TodayView(wc), openPlan: () {}, clock: () => budgetToday))),
-          size: const Size(400, 2400));
-      expect(find.byKey(const ValueKey('wizardRow')), findsOneWidget);
+      await pumpApp(t, ListenableBuilder(listenable: wc, builder: (c, _) => needsYouOf(wc)), size: const Size(400, 2400));
+      expect(find.byKey(const ValueKey('needs:wizard')), findsOneWidget);
       expect(find.text('Step 4 of 8. Every step can be skipped.'), findsOneWidget);
-      await tapKey(t, 'wizardResume');
+      await tapKey(t, 'needsPrimary:wizard');
       expect(onStep(4), isTrue);
       for (var i = 0; i < 4; i++) {
         await tapKey(t, 'setupSkip');
@@ -435,17 +428,16 @@ void main() {
       await tapKey(t, 'setupDone');
       await t.pump(const Duration(milliseconds: 100));
       expect(wc.setupWizardState, 'done');
-      expect(find.byKey(const ValueKey('wizardRow')), findsNothing);
+      expect(find.byKey(const ValueKey('needs:wizard')), findsNothing);
       await settle(t);
     });
 
-    testWidgets('"No thanks" on Today ends the offer', (t) async {
+    testWidgets('"No thanks" in Needs you ends the offer', (t) async {
       final wc = setupWallet();
       wc.repo.setLocalValue('setupWizard', 'step:3');
       wc.reload();
-      await pumpApp(t, Scaffold(body: TodayScreen(view: TodayView(wc), openPlan: () {}, clock: () => budgetToday)),
-          size: const Size(400, 2400));
-      await tapKey(t, 'wizardDecline');
+      await pumpApp(t, needsYouOf(wc), size: const Size(400, 2400));
+      await tapKey(t, 'needsAlt:wizard');
       expect(wc.setupWizardState, 'skipped');
       expect(wc.setupWizardOpen, isFalse);
       await settle(t);

@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:budget_wallet/src/calendar_source.dart';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/nudges.dart';
+import 'package:budget_wallet/src/screens/needs_you.dart';
 import 'package:budget_wallet/src/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -24,6 +25,9 @@ NormalizedTransaction _n(String date, int cents, String type, String desc, {Stri
 
 /// One synthetic bank row (for wallets whose dates are fixed by a test clock).
 NormalizedTransaction syntheticTx(String date, int cents, String type, String desc) => _n(date, cents, type, desc);
+
+/// The Needs-you page as a test body (ENG E7a): every source of the queue is a card on it.
+Widget needsYouOf(WalletController wc) => Scaffold(body: NeedsYouScreen(wc: wc));
 
 /// An empty in-memory wallet with a key (no sync folder, no timers).
 WalletController emptyWallet({bool withKey = true}) => seamedController(WalletRepo.inMemory(), key: withKey ? VaultKey.generate() : null);

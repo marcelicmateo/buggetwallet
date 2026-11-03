@@ -30,6 +30,10 @@ class TodayView implements Listenable {
   @override
   void removeListener(VoidCallback listener) => _wc.removeListener(listener);
 
+  /// The controller, for the Needs-you queue (its cards run the controller's own actions).
+  WalletController get controller => _wc;
+  int needsYouCount() => _wc.needsYouCount();
+
   /// Picks the page (`'plan'` = Plan › Payday plan, or `'spending'` = Explore › Spending) before Overview switches to it.
   void showBudgetView(String view) => view == 'plan' ? _wc.setPlanView('payday') : _wc.setBudgetView(view);
 
@@ -72,7 +76,6 @@ class TodayView implements Listenable {
   bool isMatchedBank(String bankId) => _wc.isMatchedBank(bankId);
   int splitCount(String txId) => _wc.splitCount(txId);
   bool splitIsBroken(String txId) => _wc.splitIsBroken(txId);
-  bool setupCollapsedFor(List<String> steps) => _wc.setupCollapsedFor(steps);
 
   // ---------- Overview (E2) ----------
   /// The € | hours switch: Overview listens to it, so a toggle rebuilds Overview only.
@@ -102,7 +105,6 @@ class TodayView implements Listenable {
   // ---------- actions ----------
   void startNewMonth(String date) => _wc.startNewMonth(date);
   void updateSettings(Map<String, Object?> changes) => _wc.updateSettings(changes);
-  void setSetupCollapsed(bool v, List<String> steps) => _wc.setSetupCollapsed(v, steps);
   void snoozeKeyBackup() => _wc.snoozeKeyBackup();
   void declineSetupWizard() => _wc.declineSetupWizard();
   void openCurrencies() => _wc.openCurrencies();

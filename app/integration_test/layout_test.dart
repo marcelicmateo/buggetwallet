@@ -5,11 +5,12 @@ import 'dart:math';
 
 import 'package:budget_wallet/src/platform.dart';
 import 'package:budget_wallet/src/screens/accounts_panel.dart';
-import 'package:budget_wallet/src/screens/bills_tab.dart';
 import 'package:budget_wallet/src/screens/category_detail.dart';
 import 'package:budget_wallet/src/screens/explore.dart';
 import 'package:budget_wallet/src/screens/insights.dart';
 import 'package:budget_wallet/src/screens/key_backup.dart';
+import 'package:budget_wallet/src/screens/money.dart';
+import 'package:budget_wallet/src/screens/needs_you.dart';
 import 'package:budget_wallet/src/screens/onboarding.dart';
 import 'package:budget_wallet/src/screens/plan_screen.dart';
 import 'package:budget_wallet/src/screens/save.dart';
@@ -132,7 +133,7 @@ void main() {
 
         for (final (tab, screen) in [
           ('Budget', SpendingScreen),
-          ('Bills', BillsScreen),
+          ('Bills', MoneyScreen),
           ('Plan', PlanScreen),
           ('Save', SaveScreen),
           ('Settings', SettingsScreen)
@@ -216,10 +217,18 @@ void main() {
         where = 'key-sheet';
         debugPrint('layout $name: $where');
         await goTab(t, 'Today');
-        await scrollTo(t, find.text('Save now'), TodayScreen, delta: -250);
-        await tapVisible(t, find.text('Save now'));
+        // The key prompt is a Needs-you card: in the pane from 1280 dp, else on the page the Overview badge opens.
+        final pane = find.byKey(const ValueKey('needsYouPane')).evaluate().isNotEmpty;
+        if (!pane) {
+          await scrollTo(t, find.byKey(const ValueKey('overviewNeedsYou')), TodayScreen, delta: -250);
+          await tapVisible(t, find.byKey(const ValueKey('overviewNeedsYou')));
+        }
+        await t.pumpAndSettle();
+        await Harness.shot(t, '$name-needs-you');
+        await tapVisible(t, find.byKey(const ValueKey('needsPrimary:keyBackup')));
         await Harness.shot(t, '$name-sheet-key');
         await closeSheet(t, KeyBackupSheet);
+        if (!pane) await closeSheet(t, NeedsYouScreen);
         expect(t.takeException(), isNull);
       } finally {
         FlutterError.onError = prev;

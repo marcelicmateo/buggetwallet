@@ -72,6 +72,8 @@ part 'controller_warmup.dart';
 part 'controller_explore.dart';
 part 'controller_goals_loans.dart';
 part 'controller_overview.dart';
+part 'controller_needs_you.dart';
+part 'controller_money.dart';
 
 final _log = Logger('bw.app');
 final _sync = Logger('bw.sync');
@@ -359,6 +361,15 @@ class WalletController extends ChangeNotifier {
   /// The idle warm-up of the derived values the tabs need (see `controller_warmup.dart`).
   final WarmUp warmUp = WarmUp();
   final Map<MemoKey, Object?> _memo = {};
+
+  /// Counts every [notifyListeners]: the Needs-you queue reads device-local values and the sync state, which change without a new data
+  /// version, so it is kept per (data version, day, this count).
+  int notifyCount = 0;
+
+  /// The Overview badge, while the Needs-you pane stands beside Overview: the pane scrolls to its top and takes focus.
+  final needsYouFocus = ValueNotifier<int>(0);
+  (int, int, String)? _needsKey;
+  List<NeedsYouItem>? _needsVal;
 
   bool _disposed = false;
 
@@ -833,6 +844,7 @@ class WalletController extends ChangeNotifier {
   @override
   void notifyListeners() {
     if (_disposed) return; // a sync run that was still awaiting the device key or relay when the screen went away
+    notifyCount++;
     numberStyle = _numberStyle; // before the screens rebuild; read from the repo only on load, reload and change
     walletCurrencyCode = settings.currency;
     super.notifyListeners();
@@ -1399,6 +1411,7 @@ class WalletController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     hoursMode.dispose();
+    needsYouFocus.dispose();
     warmUp.cancel();
     logEvent(_log, Level.FINE, 'wc.dispose');
     _syncTimer?.cancel();

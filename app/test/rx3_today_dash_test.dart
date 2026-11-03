@@ -147,8 +147,9 @@ void main() {
       await _pump(tester, wc, now: now);
       expect(_k('periodEnded'), findsOneWidget);
       expect(find.text('Pay period ended'), findsOneWidget);
-      expect(_k('periodEndedPanel'), findsOneWidget);
-      expect(_k('startNewPeriod'), findsOneWidget);
+      expect(_k('periodEndedPanel'), findsNothing, reason: 'the Start button is a Needs-you card (ENG E7a), Overview counts it');
+      expect(_k('needsYouTile'), findsOneWidget);
+      expect(wc.needsYouItems().map((i) => i.id), contains('periodEnded'));
       expect(find.text('LEFT THIS PAY PERIOD'), findsOneWidget, reason: 'the hero says what is left');
       expect(_k('leftTile'), findsNothing);
       expect(_k('paydayTile'), findsNothing);
@@ -200,16 +201,15 @@ void main() {
       expect(find.textContaining('No transactions yet'), findsOneWidget);
     });
 
-    testWidgets('setup pending: one attention tile with the steps; hide collapses it to a line', (tester) async {
-      await _pump(tester, _wallet(confirmed: false));
-      expect(_k('setupPanel'), findsOneWidget);
-      final tile = tester.widget<Tile>(_k('setupPanel'));
-      expect(tile.attention, isTrue);
-      expect(find.text('Looks right'), findsOneWidget);
-      await tester.tap(_k('setupHide'));
-      await tester.pump();
-      expect(_k('setupLine'), findsOneWidget);
+    testWidgets('setup pending: one attention tile that says how many; the steps are cards in Needs you', (tester) async {
+      final wc = _wallet(confirmed: false);
+      await _pump(tester, wc);
       expect(_k('setupPanel'), findsNothing);
+      final tile = tester.widget<Tile>(find.descendant(of: _k('needsYouTile'), matching: find.byType(Tile)));
+      expect(tile.attention, isTrue);
+      expect(find.text('Looks right'), findsNothing, reason: 'the answer is on the card');
+      await pumpApp(tester, needsYouOf(wc), size: const Size(400, 3000));
+      expect(find.text('Looks right'), findsOneWidget);
     });
 
     testWidgets('Before payday is one tile with core\'s number and count', (tester) async {

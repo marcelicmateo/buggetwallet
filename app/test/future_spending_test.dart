@@ -412,16 +412,19 @@ void main() {
   });
 
   group('Today', () {
-    tw('shows the Before payday tile and a heads-up tile for the big cost', (tester) async {
+    tw('shows the Before payday tile; the heads-up for the big cost is a Needs-you card, not a tile', (tester) async {
       final wc = fw();
       await pumpApp(tester, todayOf(wc), size: const Size(400, 1400));
       final tile = key('comingUpLine');
       expect(find.descendant(of: tile, matching: find.text('BEFORE PAYDAY')), findsOneWidget);
       expect(find.descendant(of: tile, matching: find.text(eur('420 €'))), findsOneWidget);
       expect(find.descendant(of: tile, matching: find.text('2 costs')), findsOneWidget);
-      final head = find.byWidgetPredicate((w) => w.key is ValueKey && (w.key as ValueKey).value.toString().startsWith('headsUp:'));
+      Finder heads() => find.byWidgetPredicate((w) => w.key is ValueKey && (w.key as ValueKey).value.toString().startsWith('headsUp:'));
+      expect(heads(), findsNothing);
+      await pumpApp(tester, needsYouOf(wc), size: const Size(400, 1400));
+      final head = find.byWidgetPredicate((w) => w.key is ValueKey && (w.key as ValueKey).value.toString().startsWith('needs:headsUp:'));
       expect(head, findsOneWidget);
-      expect(find.descendant(of: head, matching: find.text('CAR INSURANCE')), findsOneWidget);
+      expect(find.descendant(of: head, matching: find.text('Car insurance')), findsOneWidget);
       expect(find.descendant(of: head, matching: find.text(eur('340 €'))), findsOneWidget);
       expect(find.descendant(of: head, matching: find.text('In 3 days')), findsOneWidget);
     });

@@ -10,6 +10,7 @@ import 'package:budget_wallet/src/screens/settings.dart';
 import 'package:budget_wallet/src/screens/spending.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/tabs.dart';
+import 'package:budget_wallet/src/widgets/dash.dart';
 import 'package:budget_wallet/src/widgets/nav.dart';
 import 'package:budget_wallet/src/widgets/sheets.dart';
 import 'package:flutter/material.dart';
@@ -94,9 +95,9 @@ Finder _byName(String n) => find.byWidgetPredicate((w) => w.runtimeType.toString
 
 /// Today is a tile grid: four columns when the hero fills the whole row and a tile under it is a quarter of that width.
 bool _todayWide(WidgetTester tester) {
-  final hero = tester.getRect(find.byKey(const ValueKey('heroTile')));
-  // The two-cell setup tile is half the hero when the hero spans four cells (number tiles can be stretched to fill a row).
-  return tester.getRect(find.byKey(const ValueKey('setupPanel'))).width < hero.width * 0.6;
+  // The grid's columns by the rule it lays out with (the Needs-you tile is not there beside the pane, from 1280 dp).
+  final grid = tester.getSize(find.byType(DashGrid).first);
+  return DashGrid.columnsFor(grid.width, tester.view.physicalSize.width / tester.view.devicePixelRatio) == 4;
 }
 
 Finder _twoColOn(Type screen) =>
@@ -225,7 +226,8 @@ void main() {
         final box = tester.getRect(find.byType(TodayScreen));
         expect(box.width, lessThanOrEqualTo(1040.0));
         final railRight = tester.getRect(_rail).right;
-        expect(box.left - railRight, closeTo(w - box.right, 1.0));
+        // From 1280 dp the Needs-you pane (380 dp) stands right of Overview.
+        expect(box.left - railRight, closeTo(w - box.right - (w >= 1280 ? 380 : 0), 1.0));
       });
     }
     testWidgets('expanded 1920: content is exactly 1040', (tester) async {
@@ -240,7 +242,9 @@ void main() {
       final rail = tester.getSize(_rail).width;
       for (final c in [1039.0, 1040.0, 1041.0]) {
         await _size(tester, rail + c, 900);
-        expect(tester.getSize(find.byType(TodayScreen)).width, closeTo(c > 1040 ? 1040 : c, 1.0), reason: 'content width at $c');
+        // From 1280 dp the Needs-you pane (380 dp) takes its share of the content area.
+        final avail = c - (rail + c >= 1280 ? 380 : 0);
+        expect(tester.getSize(find.byType(TodayScreen)).width, closeTo(avail > 1040 ? 1040 : avail, 1.0), reason: 'content width at $c');
         expect(_todayWide(tester), isTrue, reason: 'Today grid at content $c');
       }
       expect(tester.takeException(), isNull);

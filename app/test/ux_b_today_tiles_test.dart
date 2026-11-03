@@ -121,12 +121,12 @@ void main() {
       expect(_order(t, _numbers).first, 'addExpense');
     });
 
-    testWidgets('the tiles that need action stay first, whatever the order', (t) async {
+    testWidgets('the Needs-you tile stays first, whatever the order', (t) async {
       final wc = _wallet(confirmed: false);
       wc.setTodayTiles(DeviceSettings.todayTileIds.reversed.toList(), {});
       await _today(t, wc);
-      expect(_k('setupPanel'), findsOneWidget);
-      final setup = t.getTopLeft(_k('setupPanel')).dy;
+      expect(_k('needsYouTile'), findsOneWidget);
+      final setup = t.getTopLeft(_k('needsYouTile')).dy;
       for (final k in _numbers) {
         expect(t.getTopLeft(_k(k)).dy, greaterThan(setup), reason: k);
       }

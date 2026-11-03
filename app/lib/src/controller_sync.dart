@@ -198,15 +198,6 @@ extension WalletSync on WalletController {
   /// Logs that the save-key screen was shown.
   void keyBackupShown() => logEvent(_key, Level.INFO, 'key.backup', {'action': 'shown'});
 
-  /// Whether the owner hid the first-run panel on Today for exactly these open [steps] (device-local); it is then one line.
-  /// A different set of open steps (a new one appeared, or one was done) shows the panel open again.
-  bool setupCollapsedFor(List<String> steps) => repo.localValue('setupCollapsed') == steps.join(',');
-
-  void setSetupCollapsed(bool v, List<String> steps) {
-    repo.setLocalValue('setupCollapsed', v ? steps.join(',') : null);
-    _keyBackupChanged();
-  }
-
   /// Copies the key; 60 seconds later the clipboard is emptied unless it is readable and holds something else.
   /// (Android 10+ shows a background app an empty clipboard, so "null" counts as "still ours".) If the app is in the
   /// background then, the clear waits for the next resume; disposing the controller clears at once.

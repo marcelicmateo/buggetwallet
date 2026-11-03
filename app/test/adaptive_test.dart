@@ -42,7 +42,8 @@ void main() {
         final box = tester.getRect(find.byType(TodayScreen));
         final railRight = kind == LayoutSize.compact ? 0.0 : tester.getRect(find.byKey(const ValueKey('rail'))).right;
         expect(box.width, lessThanOrEqualTo(maxContentWidth(kind)));
-        expect(box.left - railRight, closeTo(size.width - box.right, 1.0), reason: 'centered');
+        // From 1280 dp the Needs-you pane (380 dp) stands right of Overview.
+        expect(box.left - railRight, closeTo(size.width - box.right - (size.width >= 1280 ? 380 : 0), 1.0), reason: 'centered');
         // The labels are there (perf_test and screens find tabs by label).
         for (final t in ['Overview', 'Money', 'Explore', 'Plan']) {
           expect(find.descendant(of: find.byKey(ValueKey(kind == LayoutSize.compact ? 'navBar' : 'rail')), matching: find.text(t)),
@@ -110,8 +111,8 @@ void main() {
       final hero = rectOf(tester, 'heroTile');
       final tiles = find.byType(Tile);
       final rects = [for (var i = 0; i < tiles.evaluate().length; i++) tester.getRect(tiles.at(i))];
-      // A two-cell tile (setup) is half the hero, which spans four cells. (Number tiles can be stretched to fill a row.)
-      expect(rectOf(tester, 'setupPanel').width, lessThan(hero.width * 0.6), reason: 'four columns');
+      // A two-cell tile (Needs you) is half the hero, which spans four cells. (Number tiles can be stretched to fill a row.)
+      expect(rectOf(tester, 'needsYouTile').width, lessThan(hero.width * 0.6), reason: 'four columns');
       expect(rects.where((r) => r != hero && r.top < hero.bottom - 1), isEmpty, reason: 'nothing beside the hero');
       expect(hero.height, lessThan(hero.width / 3));
     });

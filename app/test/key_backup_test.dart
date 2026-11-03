@@ -4,8 +4,6 @@ import 'package:budget_wallet/main.dart';
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/platform.dart';
 import 'package:budget_wallet/src/screens/key_backup.dart';
-import 'package:budget_wallet/src/screens/today.dart';
-import 'package:budget_wallet/src/screens/today_view.dart';
 import 'package:budget_wallet/src/theme.dart';
 import 'package:budget_wallet/src/widgets/common.dart';
 import 'package:flutter/material.dart';
@@ -36,9 +34,8 @@ WalletController keyed() {
 }
 
 /// Like HomeShell: the page is built again when the data version moves.
-Widget todayOf(WalletController wc) => ListenableBuilder(
-    listenable: wc,
-    builder: (_, __) => Scaffold(body: TodayScreen(key: ValueKey(wc.dataVersion), view: TodayView(wc), openPlan: () {}, clock: () => day)));
+/// The key prompt is a card in Needs you since ENG E7a (it was a row on Today).
+Widget todayOf(WalletController wc) => ListenableBuilder(listenable: wc, builder: (_, __) => needsYouOf(wc));
 
 Widget opener(WalletController wc) =>
     Scaffold(body: Builder(builder: (c) => TextButton(onPressed: () => openKeyBackup(c, wc), child: const Text('open'))));
@@ -224,42 +221,42 @@ void main() {
       await t.pump(const Duration(milliseconds: 500));
       expect(f.wc.keyBackupConfirmed, isTrue);
       expect(find.byKey(const ValueKey('keyText')), findsNothing);
-      expect(find.byKey(const ValueKey('keyBackupRow')), findsNothing);
+      expect(find.byKey(const ValueKey('needs:keyBackup')), findsNothing);
       await t.pump(const Duration(seconds: 4));
     });
 
-    testWidgets('Later in the prompt snoozes; Today shows no row for 7 days', (t) async {
+    testWidgets('Later in the prompt snoozes; Needs you shows no card for 7 days', (t) async {
       final f = fresh();
       await f.wc.createWallet();
       await pumpApp(t, todayOf(f.wc));
-      expect(find.byKey(const ValueKey('keyBackupRow')), findsOneWidget);
-      await t.tap(find.byKey(const ValueKey('keySaveNow')));
+      expect(find.byKey(const ValueKey('needs:keyBackup')), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('needsPrimary:keyBackup')));
       await t.pump();
       await t.pump(const Duration(milliseconds: 500));
       await t.tap(find.byKey(const ValueKey('keyLater')));
       await t.pump();
       await t.pump(const Duration(milliseconds: 500));
-      expect(find.byKey(const ValueKey('keyBackupRow')), findsNothing);
+      expect(find.byKey(const ValueKey('needs:keyBackup')), findsNothing);
       day = DateTime(2026, 10, 27, 8);
       f.wc.reload();
       await pumpApp(t, todayOf(f.wc));
-      expect(find.byKey(const ValueKey('keyBackupRow')), findsOneWidget);
+      expect(find.byKey(const ValueKey('needs:keyBackup')), findsOneWidget);
       await t.pump(const Duration(seconds: 4));
     });
 
-    testWidgets('Today row: shown for an existing wallet, its own Later, gone once confirmed or on a joined device', (t) async {
+    testWidgets('Needs-you card: shown for an existing wallet, its own Later, gone once confirmed or on a joined device', (t) async {
       final wc = keyed();
       await pumpApp(t, todayOf(wc));
       expect(find.text('Save your wallet key'), findsOneWidget);
-      expect(find.byKey(const ValueKey('keySaveNow')), findsOneWidget);
-      await t.tap(find.byKey(const ValueKey('keyRowLater')));
+      expect(find.byKey(const ValueKey('needsPrimary:keyBackup')), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('needsAlt:keyBackup')));
       await t.pump();
-      expect(find.byKey(const ValueKey('keyBackupRow')), findsNothing);
+      expect(find.byKey(const ValueKey('needs:keyBackup')), findsNothing);
 
       final done = keyed();
       await done.confirmKeyBackup((await done.keyText()).substring((await done.keyText()).length - 4));
       await pumpApp(t, todayOf(done));
-      expect(find.byKey(const ValueKey('keyBackupRow')), findsNothing);
+      expect(find.byKey(const ValueKey('needs:keyBackup')), findsNothing);
       await t.pump(const Duration(seconds: 4));
     });
 
@@ -295,7 +292,7 @@ void main() {
       ('360 dp', const Size(360, 800), 1.0),
       ('wide window', const Size(1280, 800), 1.0),
     ]) {
-      testWidgets('layout: sheet and Today row fit at $name, also while asking for the last 4', (t) async {
+      testWidgets('layout: sheet and Needs-you card fit at $name, also while asking for the last 4', (t) async {
         final wc = keyed();
         await pumpApp(t, opener(wc), size: size, textScale: scale);
         await t.tap(find.text('open'));
@@ -317,7 +314,7 @@ void main() {
 
         final w2 = keyed();
         await pumpApp(t, todayOf(w2), size: size, textScale: scale);
-        expect(find.byKey(const ValueKey('keyBackupRow')), findsOneWidget);
+        expect(find.byKey(const ValueKey('needs:keyBackup')), findsOneWidget);
         expect(t.takeException(), isNull);
         await t.pump(const Duration(seconds: 4));
       });

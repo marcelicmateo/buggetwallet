@@ -2,7 +2,8 @@
 // behind them. All data is SYNTHETIC (habitsWallet: Tuesday 20 Oct 2026).
 import 'package:budget_wallet/src/controller.dart';
 import 'package:budget_wallet/src/file_chooser.dart';
-import 'package:budget_wallet/src/screens/bills_tab.dart';
+import 'package:budget_wallet/src/screens/money.dart';
+import 'package:budget_wallet/src/screens/needs_you.dart';
 import 'package:budget_wallet/src/screens/review.dart';
 import 'package:budget_wallet/src/screens/today.dart';
 import 'package:budget_wallet/src/screens/today_view.dart';
@@ -37,14 +38,9 @@ void tw(String name, Future<void> Function(WidgetTester tester) body) => testWid
 
 String eur(String s) => s.replaceAll(' €', ' €');
 
-Widget today(WalletController wc, {VoidCallback? openBills, VoidCallback? openSpending}) => Scaffold(
+Widget today(WalletController wc, {VoidCallback? openSpending}) => Scaffold(
     body: TodayScreen(
-        view: TodayView(wc),
-        openPlan: () {},
-        openBills: openBills,
-        openSpending: openSpending,
-        clock: () => budgetToday,
-        chooser: const FileChooser()));
+        view: TodayView(wc), openPlan: () {}, openSpending: openSpending, clock: () => budgetToday, chooser: const FileChooser()));
 
 void main() {
   group('controller', () {
@@ -187,9 +183,12 @@ void main() {
     tw('due: the review card lists the steps with work and Start review opens the review', (tester) async {
       final wc = hw();
       await pumpApp(tester, today(wc), size: const Size(400, 3000));
-      expect(find.byKey(const ValueKey('reviewCard')), findsOneWidget);
+      expect(find.byKey(const ValueKey('reviewCard')), findsNothing, reason: 'the review is a Needs-you card, not an Overview tile');
+      await pumpApp(tester, needsYouOf(wc), size: const Size(400, 3000));
+      expect(find.byKey(const ValueKey('needs:review')), findsOneWidget);
+      expect(find.byKey(const ValueKey('needsYouReview')), findsOneWidget, reason: 'import, decide, pace, done');
       expect(find.text('3 main tags to confirm · 2 behind pace · 1 wishlist decision'), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('startReview')));
+      await tester.tap(find.byKey(const ValueKey('needsPrimary:review')));
       await tester.pumpAndSettle();
       expect(find.byType(ReviewScreen), findsOneWidget);
     });
@@ -210,8 +209,8 @@ void main() {
 
     tw('nothing to fix: the card says so', (tester) async {
       final wc = bw(budgets: false);
-      await pumpApp(tester, today(wc), size: const Size(400, 3000));
-      expect(find.byKey(const ValueKey('reviewCard')), findsOneWidget);
+      await pumpApp(tester, needsYouOf(wc), size: const Size(400, 3000));
+      expect(find.byKey(const ValueKey('needs:review')), findsOneWidget);
       expect(find.textContaining('Nothing to fix'), findsOneWidget);
     });
 
@@ -251,16 +250,20 @@ void main() {
       expect(p.reservedBills, 2999 + 4500);
     });
 
-    tw('Today: Before payday leaves out the covered bill; the late one gets an Overdue tile that opens Bills', (tester) async {
-      var taps = 0;
-      await pumpApp(tester, today(wallet(), openBills: () => taps++), size: const Size(400, 3000));
+    tw('Today: Before payday leaves out the covered bill; the late one is a Needs-you card that opens Bills & slips', (tester) async {
+      await pumpApp(tester, today(wallet()), size: const Size(400, 3000));
       final before = find.byKey(const ValueKey('comingUpLine'));
       expect(find.descendant(of: before, matching: find.text(eur('74.99 €'))), findsOneWidget);
       expect(find.descendant(of: before, matching: find.text('2 costs')), findsOneWidget);
-      expect(find.byKey(const ValueKey('billsOverdue')), findsOneWidget);
-      expect(find.descendant(of: find.byKey(const ValueKey('billsLine')), matching: find.text('Overdue')), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('billsLine')));
-      expect(taps, 1);
+      expect(find.byKey(const ValueKey('billsOverdue')), findsNothing, reason: 'the overdue bills are in the queue, not a tile');
+      expect(find.byKey(const ValueKey('needsYouTile')), findsOneWidget);
+      await pumpApp(tester, Scaffold(body: NeedsYouScreen(wc: wallet())), size: const Size(400, 3000));
+      expect(find.byKey(const ValueKey('needs:overdue')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('needs:overdue')), matching: find.text('1 bill is overdue')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('needsPrimary:overdue')));
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byKey(const ValueKey('billsPage')), findsOneWidget);
     });
 
     tw('Plan: covered and overdue are written on the bill rows', (tester) async {
@@ -506,17 +509,17 @@ void main() {
       expect(find.text('Reminders work in the phone app.'), findsOneWidget);
     });
 
-    tw('a link to Expected bills scrolls the Bills tab there', (tester) async {
+    tw('a link to Expected bills opens Bills & slips from Money', (tester) async {
       final wc = hw();
       final request = JumpRequest<BillsAnchor>();
       addTearDown(request.dispose);
-      await pumpApp(tester, Scaffold(body: BillsScreen(wc: wc, request: request)), size: const Size(400, 500));
+      await pumpApp(tester, Scaffold(body: MoneyScreen(wc: wc, request: request)), size: const Size(400, 500));
       request.request(BillsAnchor.expected);
       for (var i = 0; i < 12; i++) {
         await tester.pump(const Duration(milliseconds: 100));
       }
+      expect(find.byKey(const ValueKey('billsPage')), findsOneWidget);
       expect(find.text('EXPECTED BILLS'), findsOneWidget);
-      expect(tester.getTopLeft(find.text('EXPECTED BILLS')).dy, lessThan(300));
       expect(tester.takeException(), isNull);
     });
   });
@@ -528,11 +531,14 @@ void main() {
       ('1280 wide', const Size(1280, 900), 1.0)
     ];
     for (final (name, size, scale) in sizes) {
-      tw('$name: Today with the review card and the bills line', (tester) async {
+      tw('$name: Today with the Needs-you tile, and the queue with the review card and the overdue bill', (tester) async {
         await withErrors((errors) async {
           final wc = hw(confirmBill: true);
           await pumpApp(tester, today(wc), size: size, textScale: scale);
-          expect(find.byKey(const ValueKey('reviewCard')), findsOneWidget);
+          expect(find.byKey(const ValueKey('reviewCard')), findsNothing);
+          await scrollThrough(tester);
+          await pumpApp(tester, needsYouOf(wc), size: size, textScale: scale);
+          expect(wc.needsYouItems().map((i) => i.id), contains('review'));
           await scrollThrough(tester);
           errors.check();
         });

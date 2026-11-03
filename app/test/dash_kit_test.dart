@@ -129,14 +129,6 @@ void main() {
           find.descendant(of: find.ancestor(of: ok, matching: find.byType(Row)).first, matching: find.byIcon(Icons.warning_amber_rounded)),
           findsNothing);
     });
-
-    testWidgets('the calendar key names bill, planned and payday', (tester) async {
-      await _pump(tester, const DashGallery(), size: const Size(1280, 800));
-      for (final w in ['Bill', 'Planned', 'Payday']) {
-        expect(find.text(w), findsNWidgets(2)); // the strip and the weekday calendar
-      }
-      expect(find.byIcon(Icons.flag), findsNWidgets(2)); // the payday cells
-    });
   });
 
   group('DashGrid', () {
@@ -265,12 +257,11 @@ void main() {
       handle.dispose();
     });
 
-    testWidgets('ring, split bar, donut, net bars, calendar and add tile have spoken labels', (tester) async {
+    testWidgets('ring, split bar, donut, net bars and add tile have spoken labels', (tester) async {
       final handle = tester.ensureSemantics();
       await _pump(tester, const DashGallery(), size: const Size(1280, 2800));
       expect(find.bySemanticsLabel(RegExp('Fixed .*, Saved .*, Spending .*')), findsNWidgets(2)); // donut and split bar
       expect(find.bySemanticsLabel(RegExp(r'Oct kept .* so far')), findsOneWidget);
-      expect(find.bySemanticsLabel(RegExp('^Until payday: bills')), findsOneWidget);
       expect(find.bySemanticsLabel('Add Goal'), findsOneWidget);
       expect(find.bySemanticsLabel(RegExp('^Holiday, 62 %')), findsOneWidget);
       expect(find.bySemanticsLabel(RegExp('^Eating out, .*, Over by')), findsOneWidget);
@@ -370,29 +361,6 @@ void main() {
       expect(shape.side.color, WalletColors.light.accent);
       expect(tester.getSemantics(find.byType(Tile)).label, 'Needs action: Laptop goal');
       handle.dispose();
-    });
-
-    testWidgets('CalendarStrip in weekday columns: Monday first, amounts under the number', (tester) async {
-      await _pump(
-        tester,
-        const Padding(
-          padding: EdgeInsets.all(16),
-          child: CalendarStrip(startWeekday: 5, days: [
-            CalDay('30', today: true),
-            CalDay('31', kind: CalKind.bill, amount: '550'),
-            CalDay('1'),
-            CalDay('2', kind: CalKind.bill, amount: '84.20'),
-          ]),
-        ),
-      );
-      expect(find.text('M'), findsOneWidget);
-      expect(find.text('S'), findsNWidgets(2));
-      final friday = tester.getCenter(find.text('30')), sat = tester.getCenter(find.text('31')), mon = tester.getCenter(find.text('2'));
-      expect(sat.dx, greaterThan(friday.dx));
-      expect(mon.dx, lessThan(friday.dx)); // a new row, back at the first column
-      expect(mon.dy, greaterThan(friday.dy));
-      expect(find.text('550'), findsOneWidget);
-      expect(tester.getCenter(find.text('550')).dy, greaterThan(sat.dy));
     });
 
     testWidgets('a short tile fills its row: the painted card is as tall as the tallest tile beside it (UX-B)', (tester) async {
@@ -632,7 +600,6 @@ void main() {
                 BarRow(label: 'b', value: '1', note: 'n', fraction: double.infinity),
               ]),
               PaceMeter(used: double.nan, expected: double.infinity),
-              CalendarStrip(days: [], startWeekday: 3),
             ]),
           ),
         );
@@ -661,7 +628,6 @@ void main() {
               Donut(segments: [DashSegment(label: 'A', value: '0 €', weight: 0, color: Colors.red)]),
               NetBars(bars: []),
               NetBars(bars: [NetBar(label: 'Jan', value: '0 €', cents: 0), NetBar(label: 'Feb', value: '0 €', cents: 0)]),
-              CalendarStrip(days: []),
               DashRows(rows: []),
               BarList(rows: []),
             ]),

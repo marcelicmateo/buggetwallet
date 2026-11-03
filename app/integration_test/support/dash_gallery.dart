@@ -194,56 +194,6 @@ class DashGallery extends StatelessWidget {
                     span: 2,
                     child: Tile(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                        const TileLabel('Until payday'),
-                        const SizedBox(height: 10),
-                        CalendarStrip(
-                          semanticLabel: 'Until payday: bills on the 2nd and 7th, planned cost on the 4th, payday on the 10th',
-                          days: [
-                            for (var d = 30; d <= 31; d++) CalDay('$d', today: d == 30, kind: d == 31 ? CalKind.bill : CalKind.none),
-                            for (var d = 1; d <= 10; d++)
-                              CalDay('$d',
-                                  kind: switch (d) {
-                                    2 || 7 => CalKind.bill,
-                                    4 => CalKind.planned,
-                                    10 => CalKind.payday,
-                                    _ => CalKind.none,
-                                  }),
-                          ],
-                        ),
-                      ]),
-                    ),
-                  ),
-                  const DashItem(
-                    span: 2,
-                    child: Tile(
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                        TileLabel('Bills by day'),
-                        SizedBox(height: 10),
-                        CalendarStrip(
-                          startWeekday: 5, // 30 Oct 2026 is a Friday
-                          semanticLabel: 'Bills by day: 31 Oct 550 €, 2 Nov 84.20 €, payday 10 Nov',
-                          days: [
-                            CalDay('30', today: true),
-                            CalDay('31', kind: CalKind.bill, amount: '550'),
-                            CalDay('1'),
-                            CalDay('2', kind: CalKind.bill, amount: '84.20'),
-                            CalDay('3'),
-                            CalDay('4', kind: CalKind.planned, amount: '60'),
-                            CalDay('5'),
-                            CalDay('6'),
-                            CalDay('7'),
-                            CalDay('8'),
-                            CalDay('9'),
-                            CalDay('10', kind: CalKind.payday),
-                          ],
-                        ),
-                      ]),
-                    ),
-                  ),
-                  DashItem(
-                    span: 2,
-                    child: Tile(
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
                         const TileLabel('Expected bills'),
                         DashRows(rows: [
                           DashRowData(title: 'Rent', amount: _m(55000), chip: const StateChip.date('1 Nov'), onTap: _tap('rent')),
