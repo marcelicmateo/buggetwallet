@@ -113,6 +113,23 @@ entry points). Agents: scout → devops (sonnet/high for the rewrite) + test-wri
 | E6 | big purchases + loans (§5.5/§6.5): core eng-6 merged 53d9b23, loan matching eng-6c merged 8f1a003, helpers eng-6d merged 9680e6f, UI eng-ui-6 merged 459c6ab | core ∥ test-writer, then ui | eng-6* | E1 (ui only) | redo running to the widened §6.5 (any big purchase + loans: loan/loanrate/loancheck entities; spec edits by the design session were swept into fd821fd/96dc998, first build followed the old house-only text) |
 | E7 | E7a Money timeline + Needs you merged 7434135; E7b restyle + Tags → Settings + TagDetailScreen deleted merged 2bf51bf; stage fixes merged 993fb7a | ui-builder ×2 | eng-7a/b | E1–E6 | done, pushed |
 
+## Stage RR: rent threshold → owner rules (owner 2026-11-03)
+No built-in amount rule: `rentCashThreshold` deleted (owner: start clean, no migration); merchant patterns get an optional
+payment type (`MerchantPattern.kind` = any `TxKind`, `RuleView.txKind`, empty text allowed with a kind, tried before the
+built-in kind hints); amount ranges match only wallet-currency rows.
+| # | Item | Agent | Worktree | Depends on | Status |
+|---|---|---|---|---|---|
+| RR-core | threshold out, kind rules, currency ranges, ids `merchantPatternId(p, [kind])`, `removeMerchantPattern(p, {kind})` | core-builder ∥ test-writer (`kind_rules_test.dart`) | agent | – | running |
+| RR-ui | Plan row out; rule form payment-type picker (text optional with a type); delete passes `kind:` | ui-builder | agent | RR-core merged | queued |
+
+## Owner work order 2026-11-03 (after the repo audit)
+0. LOG: build logs cleanup (`tests.jsonl` pruning + quiet-mode `last-failed` per run) — devops, worktree — running.
+1. RR-core, then RR-ui (above) — RR-core running.
+2. Repo cleanup — done: 5 merged worktrees removed, `.claude-flow/` deleted, STATUS hosting = Pi (owner final).
+3. Nice to have: image build lock; Containerfile checksums (cmdline tools, Chrome); `ci publish` exit code; dead code (`cellCents`/`jsRound`, `matchCsvLayout` bytes param, `dueBills()`, `plannedCoveredBy`, `BW_KEEP`) + duplicate helpers (Go `copyFile`/`orDefault`/`quote`/`httpGet`, `pyfmt` vs `report`; importer date/decimal parsers); Python parity layer (owner decides); `merchantKey` 'x' in recurring detection.
+4. Bugs: AUD-A `_ownCutOff` 410/missing → move stream + relay renames an unloadable wallet folder (never deletes) + dated relay backups (`--link-dest`), together; then cash-entry matching same currency, `csvRevive` merge, signing mount only apk/all, export currency column, xls loop caps, file size before `readBytes`.
+5. Bill-upload redesign (replaces the 429 retry item): handshake (which blobs the relay has + its limits), bundles (~8 MiB, stored per blob), resume by skipping stored blobs, backoff on 429, progress, bundled downloads, relay streams to disk, api 6. Waiting for owner answers: size cap, mobile data, background download, progress place, rate limit.
+
 ## Resume here (2026-11-03) — Stage ENG pushed (schema 21)
 Next: owner runs `ci` with tests (combined desktop job, lint speed and the ENG suites unverified on a runner); APK on the phone; owner checks in STATUS; deferred ENG items (above) only if the owner asks; then M6 live test.
 
